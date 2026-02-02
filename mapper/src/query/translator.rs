@@ -564,10 +564,10 @@ impl SparqlToCypher {
     ) -> String {
         let parts: Vec<String> = order_by
             .iter()
-            .filter_map(|cond| {
+            .map(|cond| {
                 // Simplified - just use variable name if available
                 let dir = if cond.descending { " DESC" } else { "" };
-                Some(format!("_{}{}", 0, dir)) // Placeholder
+                format!("_{}{}", 0, dir) // Placeholder
             })
             .collect();
 

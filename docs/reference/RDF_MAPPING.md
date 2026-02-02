@@ -7,10 +7,10 @@ FalkorSemantic bridges the RDF/SPARQL world with FalkorDB's property graph model
 | RDF Concept | Property Graph Mapping |
 |-------------|------------------------|
 | Subject (IRI) | Node with `:Resource` label |
-| Subject (Blank Node) | Node with `:BNode` label |
-| Predicate | Edge label or property key |
+| Subject (Blank Node) | Node with `:BlankNode` label |
+| Predicate | Edge with predicate metadata |
 | Object (IRI) | Node with `:Resource` label |
-| Object (Literal) | Property value on subject node |
+| Object (Literal) | `:Literal` node connected via edge |
 | rdf:type | Additional node label |
 | Named Graph | Graph isolation via FalkorDB graph key |
 
@@ -29,12 +29,12 @@ IRIs become nodes with the `:Resource` label and a `uri` property:
 ```cypher
 MERGE (s:Resource {uri: 'http://example.org/alice'})
 MERGE (o:Resource {uri: 'http://example.org/bob'})
-CREATE (s)-[:knows]->(o)
+MERGE (s)-[:knows{predicate: 'http://xmlns.com/foaf/0.1/knows'}]->(o)
 ```
 
 ### Blank Nodes
 
-Blank nodes become nodes with the `:BNode` label and a generated `id`:
+Blank nodes become nodes with the `:BlankNode` label:
 
 **RDF (Turtle):**
 ```turtle
@@ -43,36 +43,41 @@ _:person1 foaf:name "Unknown Person" .
 
 **Cypher:**
 ```cypher
-MERGE (s:BNode {id: '_:person1'})
-SET s.`foaf:name` = 'Unknown Person'
+MERGE (s:BlankNode {uri: '_:person1', isBlank: true})
+MERGE (l:Literal {value: 'Unknown Person', datatype: 'http://www.w3.org/2001/XMLSchema#string'})
+MERGE (s)-[:name{predicate: 'http://xmlns.com/foaf/0.1/name', value: 'Unknown Person'}]->(l)
 ```
 
-### Literals as Properties
+### Literals as Nodes
 
-When the object is a literal, it becomes a property on the subject node:
+Literals are stored as `:Literal` nodes connected to the subject via edges. The edge contains the predicate URI and value metadata:
 
 **RDF (Turtle):**
 ```turtle
 ex:alice foaf:name "Alice" ;
-         foaf:age 30 ;
-         foaf:homepage <http://alice.example.org/> .
+         foaf:age 30 .
 ```
 
 **Cypher:**
 ```cypher
 MERGE (alice:Resource {uri: 'http://example.org/alice'})
-SET alice.`foaf:name` = 'Alice'
-SET alice.`foaf:age` = 30
-MERGE (homepage:Resource {uri: 'http://alice.example.org/'})
-CREATE (alice)-[:homepage]->(homepage)
+MERGE (name:Literal {value: 'Alice', datatype: 'http://www.w3.org/2001/XMLSchema#string'})
+MERGE (alice)-[:name{predicate: 'http://xmlns.com/foaf/0.1/name', value: 'Alice'}]->(name)
+MERGE (age:Literal {value: 30, datatype: 'http://www.w3.org/2001/XMLSchema#integer'})
+MERGE (alice)-[:age{predicate: 'http://xmlns.com/foaf/0.1/age', value: 30}]->(age)
 ```
+
+This approach:
+- Preserves full RDF semantics (multi-valued properties, datatype information)
+- Enables efficient SPARQL query translation
+- Supports language-tagged literals
 
 ### Typed Literals
 
-Datatype information is preserved in property values:
+Datatype information is preserved in Literal nodes:
 
-| XSD Type | Cypher Type |
-|----------|-------------|
+| XSD Type | Cypher Value Type |
+|----------|-------------------|
 | `xsd:string` | String |
 | `xsd:integer` | Integer |
 | `xsd:decimal` | Float |
@@ -92,14 +97,17 @@ ex:product ex:price "29.99"^^xsd:decimal ;
 **Cypher:**
 ```cypher
 MERGE (p:Resource {uri: 'http://example.org/product'})
-SET p.`ex:price` = 29.99
-SET p.`ex:inStock` = true
-SET p.`ex:quantity` = 100
+MERGE (price:Literal {value: 29.99, datatype: 'http://www.w3.org/2001/XMLSchema#decimal'})
+MERGE (p)-[:price{predicate: 'http://example.org/price', value: 29.99}]->(price)
+MERGE (inStock:Literal {value: true, datatype: 'http://www.w3.org/2001/XMLSchema#boolean'})
+MERGE (p)-[:inStock{predicate: 'http://example.org/inStock', value: true}]->(inStock)
+MERGE (qty:Literal {value: 100, datatype: 'http://www.w3.org/2001/XMLSchema#integer'})
+MERGE (p)-[:quantity{predicate: 'http://example.org/quantity', value: 100}]->(qty)
 ```
 
 ### Language-Tagged Literals
 
-Language tags are preserved using property name suffixes:
+Language tags are preserved in Literal nodes:
 
 **RDF:**
 ```turtle
@@ -111,9 +119,12 @@ ex:paris rdfs:label "Paris"@en ;
 **Cypher:**
 ```cypher
 MERGE (paris:Resource {uri: 'http://example.org/paris'})
-SET paris.`rdfs:label@en` = 'Paris'
-SET paris.`rdfs:label@fr` = 'Paris'
-SET paris.`rdfs:label@ja` = 'パリ'
+MERGE (l1:Literal {value: 'Paris', datatype: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString', language: 'en'})
+MERGE (paris)-[:label{predicate: 'http://www.w3.org/2000/01/rdf-schema#label', value: 'Paris', language: 'en'}]->(l1)
+MERGE (l2:Literal {value: 'Paris', language: 'fr'})
+MERGE (paris)-[:label{predicate: 'http://www.w3.org/2000/01/rdf-schema#label', value: 'Paris', language: 'fr'}]->(l2)
+MERGE (l3:Literal {value: 'パリ', language: 'ja'})
+MERGE (paris)-[:label{predicate: 'http://www.w3.org/2000/01/rdf-schema#label', value: 'パリ', language: 'ja'}]->(l3)
 ```
 
 ### rdf:type Mapping

@@ -67,10 +67,22 @@ impl PatternComponent {
 
         // Literal with language tag: "value"@lang
         if s.starts_with('"') {
-            // Find the closing quote
-            if let Some(quote_end) = s[1..].find('"') {
-                let value = s[1..quote_end + 1].to_string();
-                let rest = &s[quote_end + 2..];
+            // Find the closing quote, handling escaped quotes
+            let mut quote_end = None;
+            let mut chars = s[1..].char_indices();
+            while let Some((i, c)) = chars.next() {
+                if c == '\\' {
+                    // Skip the next character (escaped)
+                    chars.next();
+                } else if c == '"' {
+                    quote_end = Some(i);
+                    break;
+                }
+            }
+
+            if let Some(end_pos) = quote_end {
+                let value = s[1..end_pos + 1].to_string();
+                let rest = &s[end_pos + 2..];
 
                 if rest.starts_with('@') {
                     let lang = rest[1..].to_string();
@@ -566,7 +578,7 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
 
 /// Generate query to delete orphaned nodes
 fn generate_orphan_cleanup_query() -> &'static str {
-    "MATCH (n) WHERE NOT EXISTS { (n)-[]-() } AND NOT EXISTS { ()-[]->(n) } DELETE n"
+    "MATCH (n) WHERE NOT EXISTS { (n)-[]-() } DELETE n"
 }
 
 /// Extract deletion statistics from FalkorDB result
@@ -751,5 +763,31 @@ mod tests {
     fn test_is_wildcard() {
         assert!(PatternComponent::Wildcard.is_wildcard());
         assert!(!PatternComponent::Iri("test".to_string()).is_wildcard());
+    }
+
+    #[test]
+    fn test_pattern_component_escaped_quotes() {
+        // Test literal with escaped quote
+        assert_eq!(
+            PatternComponent::parse(r#""hello \"world\"""#).unwrap(),
+            PatternComponent::Literal {
+                value: r#"hello \"world\"#.to_string(),
+                language: None,
+                datatype: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_pattern_component_escaped_backslash() {
+        // Test literal with escaped backslash
+        assert_eq!(
+            PatternComponent::parse(r#""path\\to\\file""#).unwrap(),
+            PatternComponent::Literal {
+                value: r#"path\\to\\file"#.to_string(),
+                language: None,
+                datatype: None,
+            }
+        );
     }
 }

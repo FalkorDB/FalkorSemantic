@@ -1035,39 +1035,36 @@ mod export_benchmarks {
 #[test]
 #[ignore]
 fn bench_summary() {
-    println!(
-        "
-========================================
-FalkorSemantic Performance Benchmarks
-========================================
-
-Available benchmark tests:
-
-BULK INSERT:
-  - bench_insert_100k_triples    : Insert 100,000 triples
-  - bench_insert_1m_triples      : Insert 1,000,000 triples
-  - bench_insert_10m_triples     : Insert 10,000,000 triples
-  - bench_insert_100m_triples    : Insert 100,000,000 triples
-  - bench_insert_batch_sizes     : Compare different batch sizes
-
-QUERY PERFORMANCE:
-  - bench_simple_select          : Simple SELECT queries
-  - bench_join_queries           : 2-4 way JOIN queries
-  - bench_property_path_queries  : Property path queries (*, +, {{n,m}})
-  - bench_aggregate_queries      : COUNT, AVG, MAX, MIN, GROUP BY
-
-COMPARISON:
-  - bench_sparql_vs_cypher       : Compare SPARQL with native Cypher
-
-EXPORT:
-  - bench_export_formats         : Compare N-Triples, Turtle, JSON-LD export
-  - bench_roundtrip              : Full import/export cycle
-
-Run with:
-  TEST_REDIS_PORT=6399 cargo test --test benchmarks -- --ignored --nocapture --test-threads=1
-
-For specific benchmarks:
-  cargo test --test benchmarks bench_insert_1m_triples -- --ignored --nocapture
-"
-    );
+    println!();
+    println!("========================================");
+    println!("FalkorSemantic Performance Benchmarks");
+    println!("========================================");
+    println!();
+    println!("Available benchmark tests:");
+    println!();
+    println!("BULK INSERT:");
+    println!("  - bench_insert_100k_triples    : Insert 100,000 triples");
+    println!("  - bench_insert_1m_triples      : Insert 1,000,000 triples");
+    println!("  - bench_insert_10m_triples     : Insert 10,000,000 triples");
+    println!("  - bench_insert_100m_triples    : Insert 100,000,000 triples");
+    println!("  - bench_insert_batch_sizes     : Compare different batch sizes");
+    println!();
+    println!("QUERY PERFORMANCE:");
+    println!("  - bench_simple_select          : Simple SELECT queries");
+    println!("  - bench_join_queries           : 2-4 way JOIN queries");
+    println!("  - bench_property_path_queries  : Property path queries (*, +, {{n,m}})");
+    println!("  - bench_aggregate_queries      : COUNT, AVG, MAX, MIN, GROUP BY");
+    println!();
+    println!("COMPARISON:");
+    println!("  - bench_sparql_vs_cypher       : Compare SPARQL with native Cypher");
+    println!();
+    println!("EXPORT:");
+    println!("  - bench_export_formats         : Compare N-Triples, Turtle, JSON-LD export");
+    println!("  - bench_roundtrip              : Full import/export cycle");
+    println!();
+    println!("Run with:");
+    println!("  TEST_REDIS_PORT=6399 cargo test --test benchmarks -- --ignored --nocapture --test-threads=1");
+    println!();
+    println!("For specific benchmarks:");
+    println!("  cargo test --test benchmarks bench_insert_1m_triples -- --ignored --nocapture");
 }

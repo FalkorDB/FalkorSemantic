@@ -153,8 +153,8 @@ impl CypherValue {
                 // Check if it's a URI
                 if s.starts_with("http://") || s.starts_with("https://") || s.starts_with("urn:") {
                     Some(Term::iri(s.clone()))
-                } else if s.starts_with("_:") {
-                    Some(Term::blank_node(&s[2..]))
+                } else if let Some(stripped) = s.strip_prefix("_:") {
+                    Some(Term::blank_node(stripped))
                 } else {
                     Some(Term::literal(s.clone()))
                 }
@@ -162,8 +162,8 @@ impl CypherValue {
             CypherValue::Node(props) => {
                 // Extract URI from node properties
                 if let Some(CypherValue::String(uri)) = props.get("uri") {
-                    if uri.starts_with("_:") {
-                        Some(Term::blank_node(&uri[2..]))
+                    if let Some(stripped) = uri.strip_prefix("_:") {
+                        Some(Term::blank_node(stripped))
                     } else {
                         Some(Term::iri(uri.clone()))
                     }

@@ -311,10 +311,7 @@ pub fn run_sparql_update_tests() -> ComplianceReport {
 
     for (op, _desc) in update_operations {
         report.add_skipped(
-            format!(
-                "update-{}",
-                op.to_lowercase().replace(' ', "-").replace('/', "-")
-            ),
+            format!("update-{}", op.to_lowercase().replace([' ', '/'], "-")),
             format!("SPARQL Update ({}) not implemented", op),
         );
     }

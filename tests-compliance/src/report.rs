@@ -27,7 +27,7 @@ pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
         ));
     }
 
-    md.push_str("\n");
+    md.push('\n');
 
     // Detailed results per suite
     for report in reports {
@@ -45,7 +45,7 @@ pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
                     result.error.as_deref().unwrap_or("Unknown error")
                 ));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         // Compliance gaps
@@ -63,7 +63,7 @@ pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
                     md.push_str(&format!("  - Spec: {}\n", spec));
                 }
             }
-            md.push_str("\n");
+            md.push('\n');
         }
     }
 
@@ -74,7 +74,7 @@ pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
     md.push_str("- [RDF 1.1 N-Quads](https://www.w3.org/TR/n-quads/)\n");
     md.push_str("- [SPARQL 1.1 Query Language](https://www.w3.org/TR/sparql11-query/)\n");
     md.push_str("- [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/)\n");
-    md.push_str("\n");
+    md.push('\n');
 
     // Test suite references
     md.push_str("## W3C Test Suites\n\n");
