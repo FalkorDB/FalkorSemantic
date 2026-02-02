@@ -1,0 +1,26 @@
+[package]
+name = "falkorsemantic-module"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+# Disable doc tests for cdylib as they require Redis runtime
+doctest = false
+
+[dependencies]
+falkorsemantic-parser = { path = "../parser" }
+falkorsemantic-mapper = { path = "../mapper" }
+redis-module.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+env_logger.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
