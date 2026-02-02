@@ -2,9 +2,9 @@
 //!
 //! Represents variable bindings and result sets from query execution.
 
-use std::collections::HashMap;
 use super::Term;
 use crate::rdf::Triple;
+use std::collections::HashMap;
 
 /// A single variable binding in a result
 pub type Binding = HashMap<String, Term>;

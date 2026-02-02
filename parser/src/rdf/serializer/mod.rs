@@ -8,17 +8,17 @@
 //! - JSON-LD: JSON-based linked data format
 
 mod error;
+mod jsonld;
 mod nquads;
 mod ntriples;
 mod traits;
 mod trig;
 mod turtle;
-mod jsonld;
 
 pub use error::{SerializerError, SerializerResult};
+pub use jsonld::JsonLdSerializer;
 pub use nquads::NQuadsSerializer;
 pub use ntriples::NTriplesSerializer;
-pub use traits::{QuadSerializer, TripleSerializer, GraphSerializer};
+pub use traits::{GraphSerializer, QuadSerializer, TripleSerializer};
 pub use trig::TriGSerializer;
 pub use turtle::TurtleSerializer;
-pub use jsonld::JsonLdSerializer;

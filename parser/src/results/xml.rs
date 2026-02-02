@@ -3,8 +3,8 @@
 //! Implements the SPARQL Query Results XML Format as per:
 //! https://www.w3.org/TR/rdf-sparql-XMLres/
 
-use std::io::Write;
 use super::{AskResult, ResultsError, ResultsResult, ResultsWriter, SelectResults, Term};
+use std::io::Write;
 
 /// Writer for SPARQL XML Results Format
 #[derive(Debug, Clone, Default)]
@@ -286,7 +286,10 @@ mod tests {
         let mut results = SelectResults::with_variables(vec!["x".to_string()]);
 
         let mut binding = Binding::new();
-        binding.insert("x".to_string(), Term::literal("<script>alert('xss')</script>"));
+        binding.insert(
+            "x".to_string(),
+            Term::literal("<script>alert('xss')</script>"),
+        );
         results.add_binding(binding);
 
         let xml = select_to_xml(&results).unwrap();

@@ -37,14 +37,12 @@ impl NamespaceMapping {
 
     /// Serialize to JSON
     pub fn to_json(&self) -> Result<String, StorageError> {
-        serde_json::to_string(self)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))
+        serde_json::to_string(self).map_err(|e| StorageError::SerializationError(e.to_string()))
     }
 
     /// Deserialize from JSON
     pub fn from_json(json: &str) -> Result<Self, StorageError> {
-        serde_json::from_str(json)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))
+        serde_json::from_str(json).map_err(|e| StorageError::SerializationError(e.to_string()))
     }
 }
 
@@ -122,14 +120,8 @@ mod tests {
         let mapping = NamespaceMapping::from_registry(&registry);
         let restored = mapping.to_registry();
 
-        assert_eq!(
-            restored.get_namespace("ex"),
-            Some("http://example.org/")
-        );
-        assert_eq!(
-            restored.get_namespace("test"),
-            Some("http://test.org/")
-        );
+        assert_eq!(restored.get_namespace("ex"), Some("http://example.org/"));
+        assert_eq!(restored.get_namespace("test"), Some("http://test.org/"));
     }
 
     #[test]

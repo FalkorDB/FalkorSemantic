@@ -186,7 +186,8 @@ impl TestRedisServer {
         };
 
         // MODULE LIST returns an array of arrays with key-value pairs
-        let result: RedisResult<Vec<redis::Value>> = redis::cmd("MODULE").arg("LIST").query(&mut con);
+        let result: RedisResult<Vec<redis::Value>> =
+            redis::cmd("MODULE").arg("LIST").query(&mut con);
         match result {
             Ok(modules) => {
                 for module in modules {
@@ -333,9 +334,8 @@ mod semantic_parse_command {
     fn test_parse_returns_ok() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
-        let result: RedisResult<String> = redis::cmd("RDF.PARSE")
-            .arg("test data")
-            .query(ctx.conn());
+        let result: RedisResult<String> =
+            redis::cmd("RDF.PARSE").arg("test data").query(ctx.conn());
 
         assert!(result.is_ok(), "RDF.PARSE should succeed");
         assert_eq!(result.unwrap(), "OK");
@@ -348,8 +348,7 @@ mod semantic_parse_command {
 
         let ntriples = r#"<http://example.org/subject> <http://example.org/predicate> <http://example.org/object> ."#;
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(result.is_ok(), "RDF.PARSE with N-Triples should succeed");
         assert_eq!(result.unwrap(), "OK");
@@ -362,8 +361,7 @@ mod semantic_parse_command {
 
         let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "John Doe" ."#;
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(result.is_ok(), "RDF.PARSE with literal should succeed");
     }
@@ -375,8 +373,7 @@ mod semantic_parse_command {
 
         let ntriples = r#"<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
@@ -389,15 +386,12 @@ mod semantic_parse_command {
     fn test_parse_with_language_tag() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
-        let ntriples = r#"<http://example.org/book/1> <http://example.org/title> "Le Petit Prince"@fr ."#;
+        let ntriples =
+            r#"<http://example.org/book/1> <http://example.org/title> "Le Petit Prince"@fr ."#;
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
-        assert!(
-            result.is_ok(),
-            "RDF.PARSE with language tag should succeed"
-        );
+        assert!(result.is_ok(), "RDF.PARSE with language tag should succeed");
     }
 
     #[test]
@@ -409,8 +403,7 @@ mod semantic_parse_command {
 <http://example.org/s2> <http://example.org/p> <http://example.org/o2> .
 <http://example.org/s3> <http://example.org/p> "value" ."#;
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
@@ -426,13 +419,9 @@ mod semantic_parse_command {
         let ntriples = r#"_:b1 <http://example.org/p> _:b2 .
 _:b2 <http://example.org/p> <http://example.org/o> ."#;
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
-        assert!(
-            result.is_ok(),
-            "RDF.PARSE with blank nodes should succeed"
-        );
+        assert!(result.is_ok(), "RDF.PARSE with blank nodes should succeed");
     }
 
     #[test]
@@ -442,10 +431,7 @@ _:b2 <http://example.org/p> <http://example.org/o> ."#;
 
         let result: RedisResult<String> = redis::cmd("RDF.PARSE").query(ctx.conn());
 
-        assert!(
-            result.is_err(),
-            "RDF.PARSE without arguments should fail"
-        );
+        assert!(result.is_err(), "RDF.PARSE without arguments should fail");
     }
 
     #[test]
@@ -466,13 +452,9 @@ _:b2 <http://example.org/p> <http://example.org/o> ."#;
 
         let ntriples = r#"<http://example.org/s> <http://example.org/p> "日本語テスト" ."#;
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
-        assert!(
-            result.is_ok(),
-            "RDF.PARSE with unicode should succeed"
-        );
+        assert!(result.is_ok(), "RDF.PARSE with unicode should succeed");
     }
 }
 
@@ -485,11 +467,13 @@ mod command_help {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
         // Check that RDF.PARSE is a known command
-        let result: RedisResult<Vec<redis::Value>> =
-            redis::cmd("COMMAND").arg("INFO").arg("RDF.PARSE").query(ctx.conn());
+        let result: RedisResult<Vec<redis::Value>> = redis::cmd("COMMAND")
+            .arg("INFO")
+            .arg("RDF.PARSE")
+            .query(ctx.conn());
 
         assert!(result.is_ok(), "COMMAND INFO RDF.PARSE should succeed");
-        
+
         let info = result.unwrap();
         assert!(!info.is_empty(), "RDF.PARSE should be a registered command");
     }
@@ -554,8 +538,7 @@ mod large_data {
 
         let ntriples = triples.join("\n");
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(&ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(&ntriples).query(ctx.conn());
 
         assert!(result.is_ok(), "RDF.PARSE with 1000 triples should succeed");
     }
@@ -572,8 +555,7 @@ mod large_data {
             large_text
         );
 
-        let result: RedisResult<String> =
-            redis::cmd("RDF.PARSE").arg(&ntriples).query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg(&ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
@@ -609,7 +591,11 @@ mod rdf_insert {
             .arg("ntriples")
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.INSERT should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -631,7 +617,11 @@ ex:person/1 rdf:type ex:Person ;
             .arg("turtle")
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.INSERT with Turtle should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with Turtle should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -647,7 +637,11 @@ ex:person/1 rdf:type ex:Person ;
             .arg(ntriples)
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.INSERT with auto-detect should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with auto-detect should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -664,7 +658,11 @@ _:b2 <http://example.org/name> "Secret Friend" ."#;
             .arg(ntriples)
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.INSERT with blank nodes should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with blank nodes should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -681,7 +679,11 @@ _:b2 <http://example.org/name> "Secret Friend" ."#;
             .arg(ntriples)
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.INSERT with language tags should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with language tags should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -698,7 +700,11 @@ _:b2 <http://example.org/name> "Secret Friend" ."#;
             .arg("ATOMIC")
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.INSERT with ATOMIC should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with ATOMIC should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -706,8 +712,7 @@ _:b2 <http://example.org/name> "Secret Friend" ."#;
     fn test_insert_missing_graph_key() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
-        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
-            .query(ctx.conn());
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT").query(ctx.conn());
 
         assert!(result.is_err(), "RDF.INSERT without graph key should fail");
     }
@@ -724,7 +729,10 @@ _:b2 <http://example.org/name> "Secret Friend" ."#;
             .arg("invalid_format")
             .query(ctx.conn());
 
-        assert!(result.is_err(), "RDF.INSERT with invalid format should fail");
+        assert!(
+            result.is_err(),
+            "RDF.INSERT with invalid format should fail"
+        );
     }
 }
 
@@ -745,7 +753,8 @@ mod rdf_bulk_insert {
             .map(|i| {
                 format!(
                     "<http://example.org/item/{}> <http://example.org/value> \"{}\" .",
-                    i, i * 10
+                    i,
+                    i * 10
                 )
             })
             .collect();
@@ -759,8 +768,12 @@ mod rdf_bulk_insert {
             .query(ctx.conn());
 
         let elapsed = start.elapsed();
-        
-        assert!(result.is_ok(), "RDF.INSERT with 1000 triples should succeed: {:?}", result.err());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with 1000 triples should succeed: {:?}",
+            result.err()
+        );
         println!("Inserted 1000 triples in {:?}", elapsed);
     }
 
@@ -788,8 +801,12 @@ mod rdf_bulk_insert {
             .query(ctx.conn());
 
         let elapsed = start.elapsed();
-        
-        assert!(result.is_ok(), "RDF.INSERT with 10000 triples should succeed: {:?}", result.err());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with 10000 triples should succeed: {:?}",
+            result.err()
+        );
         println!("Inserted 10000 triples in {:?}", elapsed);
     }
 
@@ -837,9 +854,17 @@ mod rdf_bulk_insert {
             .query(ctx.conn());
 
         let elapsed = start.elapsed();
-        
-        assert!(result.is_ok(), "RDF.INSERT with complex graph should succeed: {:?}", result.err());
-        println!("Inserted {} triples (complex graph) in {:?}", triples.len(), elapsed);
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT with complex graph should succeed: {:?}",
+            result.err()
+        );
+        println!(
+            "Inserted {} triples (complex graph) in {:?}",
+            triples.len(),
+            elapsed
+        );
     }
 }
 
@@ -862,7 +887,11 @@ mod rdf_namespaces {
             .arg("http://example.org/")
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.NAMESPACES ADD should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.NAMESPACES ADD should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -886,7 +915,12 @@ mod rdf_namespaces {
                 .arg(uri)
                 .query(ctx.conn());
 
-            assert!(result.is_ok(), "RDF.NAMESPACES ADD {} should succeed: {:?}", prefix, result.err());
+            assert!(
+                result.is_ok(),
+                "RDF.NAMESPACES ADD {} should succeed: {:?}",
+                prefix,
+                result.err()
+            );
         }
     }
 
@@ -916,7 +950,11 @@ mod rdf_namespaces {
             .arg("LIST")
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.NAMESPACES LIST should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.NAMESPACES LIST should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -939,7 +977,11 @@ mod rdf_namespaces {
             .arg("temp")
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "RDF.NAMESPACES REMOVE should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RDF.NAMESPACES REMOVE should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -955,7 +997,10 @@ mod rdf_namespaces {
             .arg("http://example.org/")
             .query(ctx.conn());
 
-        assert!(result.is_err(), "RDF.NAMESPACES with invalid prefix should fail");
+        assert!(
+            result.is_err(),
+            "RDF.NAMESPACES with invalid prefix should fail"
+        );
     }
 
     #[test]
@@ -971,7 +1016,10 @@ mod rdf_namespaces {
             .arg("not-a-valid-uri")
             .query(ctx.conn());
 
-        assert!(result.is_err(), "RDF.NAMESPACES with invalid URI should fail");
+        assert!(
+            result.is_err(),
+            "RDF.NAMESPACES with invalid URI should fail"
+        );
     }
 
     #[test]
@@ -994,10 +1042,334 @@ mod rdf_namespaces {
             .query(ctx.conn());
 
         assert!(result.is_ok(), "RDF.NAMESPACES LIST should succeed");
-        
+
         // Verify the namespace is present (implementation-specific check)
         let values = result.unwrap();
-        assert!(!values.is_empty(), "Namespace list should not be empty after adding");
+        assert!(
+            !values.is_empty(),
+            "Namespace list should not be empty after adding"
+        );
+    }
+}
+
+// ============================================================================
+// RDF.DELETE Command Tests
+// ============================================================================
+
+mod rdf_delete {
+    use super::*;
+
+    /// Helper to setup test data
+    fn setup_test_data(ctx: &mut TestContext, graph: &str) {
+        // Create the graph
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        // Insert test data
+        let turtle_data = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+            
+            ex:alice a foaf:Person ;
+                foaf:name "Alice" ;
+                foaf:age "30" ;
+                foaf:knows ex:bob, ex:charlie .
+            
+            ex:bob a foaf:Person ;
+                foaf:name "Bob" ;
+                foaf:knows ex:charlie .
+            
+            ex:charlie a foaf:Person ;
+                foaf:name "Charlie" .
+        "#;
+
+        let _ = redis::cmd("RDF.INSERT")
+            .arg(graph)
+            .arg(turtle_data)
+            .query::<redis::Value>(ctx.conn());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_specific_triple() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_specific";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete Alice's age
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/alice>")
+            .arg("<http://xmlns.com/foaf/0.1/age>")
+            .arg("\"30\"")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE should succeed: {:?}",
+            result.err()
+        );
+        let deleted = result.unwrap();
+        assert!(
+            deleted >= 0,
+            "Should return number of deleted relationships"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_by_subject_wildcard() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_subject";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all triples about Alice
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/alice>")
+            .arg("*")
+            .arg("*")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE should succeed: {:?}",
+            result.err()
+        );
+        let deleted = result.unwrap();
+        assert!(
+            deleted > 0,
+            "Should delete multiple relationships for alice"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_by_predicate_wildcard() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_predicate";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all "knows" relationships
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("*")
+            .arg("<http://xmlns.com/foaf/0.1/knows>")
+            .arg("*")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE should succeed: {:?}",
+            result.err()
+        );
+        let deleted = result.unwrap();
+        assert!(deleted >= 3, "Should delete all knows relationships");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_by_object_wildcard() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_object";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all relationships pointing to Charlie
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("*")
+            .arg("*")
+            .arg("<http://example.org/charlie>")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE should succeed: {:?}",
+            result.err()
+        );
+        let deleted = result.unwrap();
+        assert!(
+            deleted >= 2,
+            "Should delete relationships pointing to charlie"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_with_orphans() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_orphans";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all relationships, keeping orphaned nodes
+        let result: RedisResult<Vec<i64>> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("*")
+            .arg("*")
+            .arg("*")
+            .arg("ORPHANS")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE with ORPHANS should succeed: {:?}",
+            result.err()
+        );
+        let stats = result.unwrap();
+        assert_eq!(
+            stats.len(),
+            2,
+            "Should return [rels_deleted, nodes_deleted]"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_literal_with_language() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_lang";
+
+        // Create graph and insert data with language tags
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        let turtle_data = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            
+            ex:paris rdfs:label "Paris"@en ;
+                     rdfs:label "Paris"@fr .
+        "#;
+
+        let _ = redis::cmd("RDF.INSERT")
+            .arg(graph)
+            .arg(turtle_data)
+            .query::<redis::Value>(ctx.conn());
+
+        // Delete only the English label
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/paris>")
+            .arg("<http://www.w3.org/2000/01/rdf-schema#label>")
+            .arg("\"Paris\"@en")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE with language tag should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_typed_literal() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_typed";
+
+        // Create graph and insert data with typed literals
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        let turtle_data = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+            
+            ex:product1 ex:price "29.99"^^xsd:decimal ;
+                        ex:quantity "100"^^xsd:integer .
+        "#;
+
+        let _ = redis::cmd("RDF.INSERT")
+            .arg(graph)
+            .arg(turtle_data)
+            .query::<redis::Value>(ctx.conn());
+
+        // Delete the price
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/product1>")
+            .arg("<http://example.org/price>")
+            .arg("\"29.99\"^^<http://www.w3.org/2001/XMLSchema#decimal>")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE with typed literal should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_nonexistent_graph() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg("nonexistent_graph_delete")
+            .arg("<http://example.org/s>")
+            .arg("<http://example.org/p>")
+            .arg("<http://example.org/o>")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_err(),
+            "RDF.DELETE on nonexistent graph should fail"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_invalid_pattern() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_invalid";
+
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        // Invalid URI format
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("invalid-uri")
+            .arg("<http://example.org/p>")
+            .arg("<http://example.org/o>")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_err(),
+            "RDF.DELETE with invalid pattern should fail"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_no_matches() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_nomatch";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete a triple that doesn't exist
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/nonexistent>")
+            .arg("<http://example.org/nonexistent>")
+            .arg("<http://example.org/nonexistent>")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.DELETE with no matches should succeed: {:?}",
+            result.err()
+        );
+        let deleted = result.unwrap();
+        assert_eq!(deleted, 0, "Should delete 0 relationships when no match");
     }
 }
 
@@ -1011,8 +1383,12 @@ mod rdf_namespaces {
 fn test_infrastructure_works() {
     // This test just verifies we can start Redis and connect
     let ctx = TestContext::new();
-    assert!(ctx.is_ok(), "Should be able to create test context: {:?}", ctx.err());
-    
+    assert!(
+        ctx.is_ok(),
+        "Should be able to create test context: {:?}",
+        ctx.err()
+    );
+
     let mut ctx = ctx.unwrap();
     let pong: RedisResult<String> = redis::cmd("PING").query(ctx.conn());
     assert_eq!(pong.unwrap(), "PONG");

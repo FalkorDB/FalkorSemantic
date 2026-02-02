@@ -44,18 +44,12 @@ impl Mapper {
     }
 
     /// Map a triple to Cypher statements
-    pub fn map_triple(
-        &self,
-        triple: &falkorsemantic_parser::rdf::Triple,
-    ) -> Result<Vec<String>> {
+    pub fn map_triple(&self, triple: &falkorsemantic_parser::rdf::Triple) -> Result<Vec<String>> {
         self.cypher_gen.generate_triple(triple)
     }
 
     /// Map a quad to Cypher statements
-    pub fn map_quad(
-        &self,
-        quad: &falkorsemantic_parser::rdf::Quad,
-    ) -> Result<Vec<String>> {
+    pub fn map_quad(&self, quad: &falkorsemantic_parser::rdf::Quad) -> Result<Vec<String>> {
         self.cypher_gen.generate_quad(quad)
     }
 
@@ -81,7 +75,8 @@ impl Mapper {
         pattern: &falkorsemantic_parser::rdf::TriplePattern,
         graph_scope: falkorsemantic_parser::rdf::GraphScope,
     ) -> Result<Vec<String>> {
-        self.delete_gen.generate_delete_pattern(pattern, graph_scope)
+        self.delete_gen
+            .generate_delete_pattern(pattern, graph_scope)
     }
 
     /// Generate DELETE Cypher for a quad pattern
@@ -178,9 +173,7 @@ mod tests {
 
     #[test]
     fn test_mapper_with_delete_options() {
-        let mapper = Mapper::with_delete_options(
-            graph::DeleteOptions::new().with_cascade_all()
-        );
+        let mapper = Mapper::with_delete_options(graph::DeleteOptions::new().with_cascade_all());
         let pattern = TriplePattern::with_subject(test_iri("http://example.org/s"));
         let result = mapper.delete_pattern(&pattern, GraphScope::Default);
         assert!(result.is_ok());

@@ -65,8 +65,8 @@ impl SparqlParser {
     fn parse_impl(&self, query: &str, base: Option<&str>) -> SparqlResult<Query> {
         // Parse with spargebra using the new API
         let spargebra_query = if let Some(base_str) = base {
-            let base_iri =
-                Iri::parse(base_str).map_err(|e| SparqlError::parse(format!("Invalid base IRI: {}", e)))?;
+            let base_iri = Iri::parse(base_str)
+                .map_err(|e| SparqlError::parse(format!("Invalid base IRI: {}", e)))?;
             spargebra::SparqlParser::new()
                 .with_base_iri(base_iri.as_str())
                 .map_err(|e| SparqlError::parse(format!("Invalid base IRI: {}", e)))?
@@ -165,8 +165,17 @@ fn convert_query(query: spargebra::Query) -> SparqlResult<Query> {
             dataset,
             base_iri: _,
         } => {
-            let (projection, distinct, reduced, order_by, limit, offset, group_by, having, inner_pattern) =
-                extract_select_modifiers(pattern);
+            let (
+                projection,
+                distinct,
+                reduced,
+                order_by,
+                limit,
+                offset,
+                group_by,
+                having,
+                inner_pattern,
+            ) = extract_select_modifiers(pattern);
 
             Ok(Query::Select(SelectQuery {
                 inner: query.clone(),
@@ -257,7 +266,12 @@ fn extract_select_modifiers(pattern: &spargebra::algebra::GraphPattern) -> Selec
     loop {
         match &current {
             GP::Project { inner, variables } => {
-                projection = Some(variables.iter().map(|v| Variable::from(v.clone())).collect());
+                projection = Some(
+                    variables
+                        .iter()
+                        .map(|v| Variable::from(v.clone()))
+                        .collect(),
+                );
                 current = (**inner).clone();
             }
             GP::Distinct { inner } => {
@@ -302,7 +316,12 @@ fn extract_select_modifiers(pattern: &spargebra::algebra::GraphPattern) -> Selec
                 variables,
                 aggregates,
             } => {
-                group_by = Some(variables.iter().map(|v| Variable::from(v.clone())).collect());
+                group_by = Some(
+                    variables
+                        .iter()
+                        .map(|v| Variable::from(v.clone()))
+                        .collect(),
+                );
                 // Check for HAVING (would be in aggregates)
                 let _ = aggregates; // TODO: extract HAVING clause
                 current = (**inner).clone();
@@ -367,7 +386,9 @@ fn convert_term_pattern(tp: &spargebra::term::TermPattern) -> TermPattern {
         spargebra::term::TermPattern::NamedNode(n) => {
             TermPattern::NamedNode(NamedNode::from(n.clone()))
         }
-        spargebra::term::TermPattern::BlankNode(b) => TermPattern::BlankNode(b.as_str().to_string()),
+        spargebra::term::TermPattern::BlankNode(b) => {
+            TermPattern::BlankNode(b.as_str().to_string())
+        }
         spargebra::term::TermPattern::Literal(l) => TermPattern::Literal(l.to_string()),
     }
 }
@@ -555,10 +576,22 @@ mod tests {
 
     #[test]
     fn test_query_type_detection() {
-        assert_eq!(SparqlParser::query_type("SELECT ?s WHERE { ?s ?p ?o }"), Some(QueryType::Select));
-        assert_eq!(SparqlParser::query_type("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"), Some(QueryType::Construct));
-        assert_eq!(SparqlParser::query_type("ASK { ?s ?p ?o }"), Some(QueryType::Ask));
-        assert_eq!(SparqlParser::query_type("DESCRIBE ?s WHERE { ?s ?p ?o }"), Some(QueryType::Describe));
+        assert_eq!(
+            SparqlParser::query_type("SELECT ?s WHERE { ?s ?p ?o }"),
+            Some(QueryType::Select)
+        );
+        assert_eq!(
+            SparqlParser::query_type("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"),
+            Some(QueryType::Construct)
+        );
+        assert_eq!(
+            SparqlParser::query_type("ASK { ?s ?p ?o }"),
+            Some(QueryType::Ask)
+        );
+        assert_eq!(
+            SparqlParser::query_type("DESCRIBE ?s WHERE { ?s ?p ?o }"),
+            Some(QueryType::Describe)
+        );
         assert_eq!(SparqlParser::query_type("invalid query"), None);
     }
 

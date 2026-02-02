@@ -60,15 +60,11 @@ impl JsonLdParser {
     /// The result is an array of expanded node objects.
     pub fn expand(&mut self, document: &Value) -> JsonLdResult<Value> {
         // Extract and resolve context
-        let context = document
-            .get("@context")
-            .cloned()
-            .unwrap_or(Value::Null);
-        
-        let resolved_context = self.context_resolver.resolve(
-            &context,
-            self.base_iri.as_deref(),
-        )?;
+        let context = document.get("@context").cloned().unwrap_or(Value::Null);
+
+        let resolved_context = self
+            .context_resolver
+            .resolve(&context, self.base_iri.as_deref())?;
 
         // Expand the document
         let expanded = self.expand_value(document, &resolved_context)?;
@@ -86,10 +82,8 @@ impl JsonLdParser {
         match value {
             Value::Object(obj) => self.expand_object(obj, context),
             Value::Array(arr) => {
-                let expanded: Result<Vec<_>, _> = arr
-                    .iter()
-                    .map(|v| self.expand_value(v, context))
-                    .collect();
+                let expanded: Result<Vec<_>, _> =
+                    arr.iter().map(|v| self.expand_value(v, context)).collect();
                 Ok(Value::Array(expanded?))
             }
             _ => Ok(value.clone()),
@@ -105,10 +99,9 @@ impl JsonLdParser {
         // Check for local @context
         let context = if let Some(local_ctx) = obj.get("@context") {
             let mut merged = parent_context.clone();
-            let local_resolved = self.context_resolver.resolve(
-                local_ctx,
-                parent_context.base.as_deref(),
-            )?;
+            let local_resolved = self
+                .context_resolver
+                .resolve(local_ctx, parent_context.base.as_deref())?;
             merged.terms.extend(local_resolved.terms);
             if local_resolved.base.is_some() {
                 merged.base = local_resolved.base;
@@ -283,7 +276,10 @@ impl JsonLdParser {
             }
             Value::Object(obj) => {
                 // Check if this is already a value object or node reference
-                if obj.contains_key("@value") || obj.contains_key("@id") || obj.contains_key("@list") {
+                if obj.contains_key("@value")
+                    || obj.contains_key("@id")
+                    || obj.contains_key("@list")
+                {
                     self.expand_object(obj, context)
                 } else {
                     // Nested node
@@ -299,22 +295,20 @@ impl JsonLdParser {
                     // Plain literal
                     let mut obj = serde_json::Map::new();
                     obj.insert("@value".to_string(), Value::String(s.clone()));
-                    
+
                     // Apply language from term or context
                     let lang = term_def
                         .and_then(|t| t.language.as_ref())
                         .or(context.language.as_ref());
-                    
+
                     if let Some(lang) = lang {
                         obj.insert("@language".to_string(), Value::String(lang.clone()));
                     }
-                    
+
                     Ok(json!([Value::Object(obj)]))
                 }
             }
-            Value::Number(_) | Value::Bool(_) => {
-                Ok(json!([{"@value": value}]))
-            }
+            Value::Number(_) | Value::Bool(_) => Ok(json!([{"@value": value}])),
             Value::Null => Ok(Value::Null),
         }
     }
@@ -323,10 +317,9 @@ impl JsonLdParser {
     ///
     /// Compaction applies a context to replace IRIs with prefixed names and terms.
     pub fn compact(&mut self, expanded: &Value, context: &Value) -> JsonLdResult<Value> {
-        let resolved_context = self.context_resolver.resolve(
-            context,
-            self.base_iri.as_deref(),
-        )?;
+        let resolved_context = self
+            .context_resolver
+            .resolve(context, self.base_iri.as_deref())?;
 
         // Build reverse mapping from IRIs to terms
         let iri_to_term: HashMap<String, String> = resolved_context
@@ -500,7 +493,7 @@ impl JsonLdParser {
     pub fn frame(&mut self, document: &Value, frame: &Value) -> JsonLdResult<Value> {
         // First expand both document and frame
         let expanded_doc = self.expand(document)?;
-        
+
         let frame_obj = frame
             .as_object()
             .ok_or_else(|| JsonLdError::framing("Frame must be an object"))?;
@@ -640,13 +633,13 @@ mod tests {
         });
 
         let expanded = parser.expand(&doc).unwrap();
-        
+
         // Should be an array
         assert!(expanded.is_array());
-        
+
         let arr = expanded.as_array().unwrap();
         assert_eq!(arr.len(), 1);
-        
+
         let obj = arr[0].as_object().unwrap();
         assert!(obj.contains_key("http://schema.org/name"));
     }
@@ -753,7 +746,7 @@ mod tests {
 
         let triples = parser.to_rdf(&doc).unwrap();
         assert!(!triples.is_empty());
-        
+
         // Should have at least type and name triples
         assert!(triples.len() >= 2);
     }
@@ -775,7 +768,7 @@ mod tests {
         let expanded = parser.expand(&doc).unwrap();
         let obj = expanded.as_array().unwrap()[0].as_object().unwrap();
         let knows = obj.get("http://xmlns.com/foaf/0.1/knows").unwrap();
-        
+
         // Should be expanded to an @id reference
         let knows_arr = knows.as_array().unwrap();
         assert!(knows_arr[0].as_object().unwrap().contains_key("@id"));

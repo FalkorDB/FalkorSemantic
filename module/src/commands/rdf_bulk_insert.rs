@@ -245,7 +245,9 @@ where
             Err(e) => {
                 stats.errors += 1;
                 stats.failed_triples.push(line_number);
-                stats.error_messages.push(format!("Parse error at line {}: {}", line_number, e));
+                stats
+                    .error_messages
+                    .push(format!("Parse error at line {}: {}", line_number, e));
             }
         }
     }
@@ -313,8 +315,8 @@ fn load_complete_file(
     format: RdfFormat,
     batch_size: usize,
 ) -> Result<BulkInsertStats, String> {
-    let content = std::fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        std::fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let triples = match format {
         RdfFormat::Turtle => {
@@ -442,7 +444,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                     result
                 },
             )
-            .map_err(|e| RedisError::String(e))?
+            .map_err(RedisError::String)?
         }
         RdfFormat::Turtle | RdfFormat::JsonLd => {
             // Load complete file for formats requiring full context
@@ -453,7 +455,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                 format,
                 parsed_args.batch_size,
             )
-            .map_err(|e| RedisError::String(e))?
+            .map_err(RedisError::String)?
         }
     };
 
@@ -515,10 +517,22 @@ mod tests {
     fn test_stream_ntriples_parsing() {
         // Create a temp file with N-Triples
         let mut file = NamedTempFile::new().unwrap();
-        writeln!(file, "<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .").unwrap();
-        writeln!(file, "<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .").unwrap();
+        writeln!(
+            file,
+            "<http://example.org/s1> <http://example.org/p> <http://example.org/o1> ."
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "<http://example.org/s2> <http://example.org/p> <http://example.org/o2> ."
+        )
+        .unwrap();
         writeln!(file, "# This is a comment").unwrap();
-        writeln!(file, "<http://example.org/s3> <http://example.org/p> <http://example.org/o3> .").unwrap();
+        writeln!(
+            file,
+            "<http://example.org/s3> <http://example.org/p> <http://example.org/o3> ."
+        )
+        .unwrap();
         file.flush().unwrap();
 
         let reader = BufReader::new(File::open(file.path()).unwrap());
@@ -540,17 +554,26 @@ mod tests {
     #[test]
     fn test_stream_with_skip_lines() {
         let mut file = NamedTempFile::new().unwrap();
-        writeln!(file, "<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .").unwrap();
-        writeln!(file, "<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .").unwrap();
-        writeln!(file, "<http://example.org/s3> <http://example.org/p> <http://example.org/o3> .").unwrap();
+        writeln!(
+            file,
+            "<http://example.org/s1> <http://example.org/p> <http://example.org/o1> ."
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "<http://example.org/s2> <http://example.org/p> <http://example.org/o2> ."
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "<http://example.org/s3> <http://example.org/p> <http://example.org/o3> ."
+        )
+        .unwrap();
         file.flush().unwrap();
 
         let reader = BufReader::new(File::open(file.path()).unwrap());
 
-        let stats = stream_ntriples(reader, 1, 10, |triples, _| {
-            Ok((triples.len(), 0))
-        })
-        .unwrap();
+        let stats = stream_ntriples(reader, 1, 10, |triples, _| Ok((triples.len(), 0))).unwrap();
 
         // Should skip first line
         assert_eq!(stats.triples_parsed, 2);

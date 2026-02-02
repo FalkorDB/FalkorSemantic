@@ -17,8 +17,9 @@ pub use jsonld::{ContextResolver, JsonLdError, JsonLdParser, JsonLdToRdf};
 pub use literal::{xsd, Literal, RDF_LANG_STRING};
 pub use namespace::{well_known, NamespaceRegistry, PrefixedName};
 pub use serializer::{
-    GraphSerializer, JsonLdSerializer, NQuadsSerializer, NTriplesSerializer,
-    QuadSerializer, SerializerError, SerializerResult, TriGSerializer,
-    TripleSerializer, TurtleSerializer,
+    GraphSerializer, JsonLdSerializer, NQuadsSerializer, NTriplesSerializer, QuadSerializer,
+    SerializerError, SerializerResult, TriGSerializer, TripleSerializer, TurtleSerializer,
 };
-pub use triple::{GraphName, GraphScope, Object, Predicate, Quad, QuadPattern, Subject, Triple, TriplePattern};
+pub use triple::{
+    GraphName, GraphScope, Object, Predicate, Quad, QuadPattern, Subject, Triple, TriplePattern,
+};

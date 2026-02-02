@@ -58,14 +58,14 @@ impl NTriplesReader {
         let converter = self.converter();
 
         while !parser.is_end() {
-            if let Err(e) = parser.parse_step(&mut |rio_triple| {
-                match converter.convert_triple(rio_triple) {
-                    Ok(triple) => {
-                        triples.push(triple);
-                        Ok(())
-                    }
-                    Err(e) => Err(parser_error_to_turtle_error(e)),
+            if let Err(e) = parser.parse_step(&mut |rio_triple| match converter
+                .convert_triple(rio_triple)
+            {
+                Ok(triple) => {
+                    triples.push(triple);
+                    Ok(())
                 }
+                Err(e) => Err(parser_error_to_turtle_error(e)),
             }) {
                 return Err(ParseErrorInfo::new(e.to_string()));
             }
@@ -140,15 +140,15 @@ impl<R: BufRead> Iterator for TripleCollector<R> {
         let pending = &mut self.pending;
         let converter = &self.converter;
 
-        match self.parser.parse_step(&mut |rio_triple| {
-            match converter.convert_triple(rio_triple) {
+        match self.parser.parse_step(
+            &mut |rio_triple| match converter.convert_triple(rio_triple) {
                 Ok(triple) => {
                     pending.push(triple);
                     Ok(())
                 }
                 Err(e) => Err(parser_error_to_turtle_error(e)),
-            }
-        }) {
+            },
+        ) {
             Ok(()) => {
                 if !self.pending.is_empty() {
                     Some(Ok(self.pending.remove(0)))

@@ -101,7 +101,7 @@ impl Query {
             Query::Describe(q) => q.dataset.as_ref(),
         }
     }
-    
+
     /// Get the original spargebra query
     pub fn inner(&self) -> spargebra::Query {
         match self {
@@ -423,7 +423,9 @@ fn extract_variables(pattern: &spargebra::algebra::GraphPattern) -> HashSet<Vari
         GP::Filter { inner, .. } | GP::Graph { inner, .. } => {
             vars.extend(extract_variables(inner));
         }
-        GP::Extend { inner, variable, .. } => {
+        GP::Extend {
+            inner, variable, ..
+        } => {
             vars.extend(extract_variables(inner));
             vars.insert(Variable::from(variable.clone()));
         }

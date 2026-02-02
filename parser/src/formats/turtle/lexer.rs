@@ -265,9 +265,7 @@ impl<'a> Lexer<'a> {
                 }
                 Some(c) => iri.push(c),
                 None => {
-                    return Err(ParserError::ParseError(
-                        "Unterminated IRI reference".into(),
-                    ));
+                    return Err(ParserError::ParseError("Unterminated IRI reference".into()));
                 }
             }
         }
@@ -499,19 +497,19 @@ impl<'a> Lexer<'a> {
         }
 
         if has_exponent {
-            let val: f64 = num_str.parse().map_err(|_| {
-                ParserError::ParseError(format!("Invalid double: {}", num_str))
-            })?;
+            let val: f64 = num_str
+                .parse()
+                .map_err(|_| ParserError::ParseError(format!("Invalid double: {}", num_str)))?;
             Ok(TokenKind::Double(val))
         } else if has_dot {
-            let val: f64 = num_str.parse().map_err(|_| {
-                ParserError::ParseError(format!("Invalid decimal: {}", num_str))
-            })?;
+            let val: f64 = num_str
+                .parse()
+                .map_err(|_| ParserError::ParseError(format!("Invalid decimal: {}", num_str)))?;
             Ok(TokenKind::Decimal(val))
         } else {
-            let val: i64 = num_str.parse().map_err(|_| {
-                ParserError::ParseError(format!("Invalid integer: {}", num_str))
-            })?;
+            let val: i64 = num_str
+                .parse()
+                .map_err(|_| ParserError::ParseError(format!("Invalid integer: {}", num_str)))?;
             Ok(TokenKind::Integer(val))
         }
     }
@@ -584,7 +582,11 @@ impl<'a> Lexer<'a> {
                 if c == '.' {
                     // Dot allowed inside but not at end
                     local.push(self.advance().unwrap());
-                    if self.peek().map(|c| !self.is_pn_chars(c) && c != ':').unwrap_or(true) {
+                    if self
+                        .peek()
+                        .map(|c| !self.is_pn_chars(c) && c != ':')
+                        .unwrap_or(true)
+                    {
                         local.pop();
                         break;
                     }
@@ -678,7 +680,10 @@ mod tests {
                 local: "".into()
             }
         );
-        assert_eq!(tokens[2].kind, TokenKind::IriRef("http://example.org/".into()));
+        assert_eq!(
+            tokens[2].kind,
+            TokenKind::IriRef("http://example.org/".into())
+        );
         assert_eq!(tokens[3].kind, TokenKind::Dot);
     }
 

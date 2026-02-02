@@ -59,7 +59,11 @@ impl NTriplesSerializer {
 }
 
 impl TripleSerializer for NTriplesSerializer {
-    fn serialize_triple<W: Write>(&mut self, triple: &Triple, writer: &mut W) -> SerializerResult<()> {
+    fn serialize_triple<W: Write>(
+        &mut self,
+        triple: &Triple,
+        writer: &mut W,
+    ) -> SerializerResult<()> {
         self.write_subject(&triple.subject, writer)?;
         write!(writer, " ")?;
         write!(writer, "<{}>", triple.predicate.as_str())?;
@@ -203,7 +207,9 @@ mod tests {
         ];
 
         let mut output = Vec::new();
-        serializer.serialize_triples(triples.iter(), &mut output).unwrap();
+        serializer
+            .serialize_triples(triples.iter(), &mut output)
+            .unwrap();
 
         let result = String::from_utf8(output).unwrap();
         let lines: Vec<_> = result.lines().collect();

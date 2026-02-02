@@ -2,10 +2,10 @@
 //!
 //! Serializes RDF triples from CONSTRUCT/DESCRIBE query results.
 
+use super::{ConstructResults, RdfResultsWriter, ResultsResult};
+use crate::rdf::{Object, Subject, Triple};
 use std::collections::HashMap;
 use std::io::Write;
-use crate::rdf::{Object, Subject, Triple};
-use super::{ConstructResults, RdfResultsWriter, ResultsResult};
 
 /// Writer for Turtle format (CONSTRUCT/DESCRIBE results)
 #[derive(Debug, Clone, Default)]
@@ -364,7 +364,10 @@ mod tests {
         results.add_triple(Triple::new(
             Subject::Iri(Iri::new_unchecked("http://example.org/s")),
             Predicate::new_unchecked("http://example.org/p"),
-            Object::Literal(Literal::with_datatype("42", Iri::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"))),
+            Object::Literal(Literal::with_datatype(
+                "42",
+                Iri::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
+            )),
         ));
 
         let ttl = construct_to_turtle(&results).unwrap();
@@ -455,7 +458,10 @@ mod tests {
         results.add_triple(Triple::new(
             Subject::Iri(Iri::new_unchecked("http://example.org/s")),
             Predicate::new_unchecked("http://example.org/p"),
-            Object::Literal(Literal::with_datatype("42", Iri::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"))),
+            Object::Literal(Literal::with_datatype(
+                "42",
+                Iri::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
+            )),
         ));
 
         let json = construct_to_rdf_json(&results).unwrap();

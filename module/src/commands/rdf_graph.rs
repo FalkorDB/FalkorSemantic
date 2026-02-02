@@ -77,7 +77,7 @@ fn create_graph(ctx: &Context, graph_name: &str) -> RedisResult {
     // This ensures the graph exists in FalkorDB
     let init_query = "CREATE (n:__RDF_INIT__) DELETE n";
     let query_result = ctx.call("GRAPH.QUERY", &[graph_name, init_query]);
-    
+
     if let Err(e) = query_result {
         log::warn!("Failed to initialize graph in FalkorDB: {:?}", e);
         // Continue anyway - the graph tracking is the important part
@@ -109,7 +109,7 @@ fn drop_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 
     // Delete the graph from FalkorDB
     let delete_result = ctx.call("GRAPH.DELETE", &[graph_name]);
-    
+
     if let Err(e) = delete_result {
         log::warn!("Failed to delete graph from FalkorDB: {:?}", e);
         // Continue to remove from tracking anyway
@@ -121,7 +121,7 @@ fn drop_graph(ctx: &Context, graph_name: &str) -> RedisResult {
     // Also clean up any namespace mappings for this graph
     let ns_pattern = format!("rdf:ns:{}:*", graph_name);
     let keys_result = ctx.call("KEYS", &[&ns_pattern]);
-    
+
     if let Ok(RedisValue::Array(keys)) = keys_result {
         for key in keys {
             if let RedisValue::SimpleString(key_str) = key {
@@ -138,18 +138,18 @@ fn drop_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 /// List all RDF graphs
 fn list_graphs(ctx: &Context) -> RedisResult {
     let members_result = ctx.call("SMEMBERS", &[RDF_GRAPHS_SET])?;
-    
+
     match members_result {
         RedisValue::Array(arr) => {
             // Return graph names with additional info
             let mut graphs: Vec<RedisValue> = Vec::new();
-            
+
             for member in arr {
                 if let RedisValue::SimpleString(graph_name) = member {
                     // Try to get node count from FalkorDB
                     let count_query = "MATCH (n) RETURN count(n) as count";
                     let count_result = ctx.call("GRAPH.QUERY", &[graph_name.as_str(), count_query]);
-                    
+
                     let node_count = match count_result {
                         Ok(RedisValue::Array(ref result_arr)) if result_arr.len() >= 2 => {
                             // Result format: [headers, [data rows], stats]
@@ -176,7 +176,7 @@ fn list_graphs(ctx: &Context) -> RedisResult {
                     ]));
                 }
             }
-            
+
             Ok(RedisValue::Array(graphs))
         }
         _ => Ok(RedisValue::Array(vec![])),
@@ -203,13 +203,13 @@ fn clear_graph(ctx: &Context, graph_name: &str) -> RedisResult {
     // Using MATCH (n) DETACH DELETE n to remove everything
     let clear_query = "MATCH (n) DETACH DELETE n";
     let result = ctx.call("GRAPH.QUERY", &[graph_name, clear_query]);
-    
+
     match result {
         Ok(RedisValue::Array(ref arr)) => {
             // Try to extract the number of deleted nodes from stats
             let mut deleted_nodes = 0i64;
             let mut deleted_relationships = 0i64;
-            
+
             // Stats are typically the last element in the result array
             if let Some(RedisValue::Array(stats)) = arr.last() {
                 for stat in stats {
@@ -226,12 +226,14 @@ fn clear_graph(ctx: &Context, graph_name: &str) -> RedisResult {
                     }
                 }
             }
-            
+
             log::info!(
                 "Cleared RDF graph '{}': {} nodes, {} relationships deleted",
-                graph_name, deleted_nodes, deleted_relationships
+                graph_name,
+                deleted_nodes,
+                deleted_relationships
             );
-            
+
             Ok(RedisValue::Array(vec![
                 RedisValue::Integer(deleted_nodes),
                 RedisValue::Integer(deleted_relationships),
@@ -244,12 +246,10 @@ fn clear_graph(ctx: &Context, graph_name: &str) -> RedisResult {
                 RedisValue::Integer(0),
             ]))
         }
-        Err(e) => {
-            Err(RedisError::String(format!(
-                "Failed to clear graph '{}': {:?}",
-                graph_name, e
-            )))
-        }
+        Err(e) => Err(RedisError::String(format!(
+            "Failed to clear graph '{}': {:?}",
+            graph_name, e
+        ))),
     }
 }
 

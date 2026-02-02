@@ -11,7 +11,7 @@ use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, 
 fn init(_ctx: &Context, _args: &[RedisString]) -> Status {
     // Try to initialize logging, ignore if it fails
     let _ = env_logger::try_init();
-    
+
     Status::Ok
 }
 
@@ -39,6 +39,7 @@ redis_module! {
         ["rdf.parse", rdf_parse, "write", 1, 1, 1],
         ["rdf.insert", commands::rdf_insert, "write", 2, -1, 1],
         ["rdf.bulk_insert", commands::rdf_bulk_insert, "write", 2, -1, 1],
+        ["rdf.delete", commands::rdf_delete, "write", 2, -1, 1],
         ["rdf.namespaces", commands::rdf_namespaces, "write", 2, -1, 1],
         ["rdf.graph", commands::rdf_graph, "write", 1, -1, 1],
         ["rdf.query", commands::rdf_query, "readonly", 2, -1, 1],

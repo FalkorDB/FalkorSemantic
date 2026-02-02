@@ -54,7 +54,11 @@ impl JsonLdToRdf {
     }
 
     /// Process a node object and generate quads
-    fn process_node(&mut self, node: &Value, quads: &mut Vec<Quad>) -> JsonLdResult<Option<Subject>> {
+    fn process_node(
+        &mut self,
+        node: &Value,
+        quads: &mut Vec<Quad>,
+    ) -> JsonLdResult<Option<Subject>> {
         let obj = match node.as_object() {
             Some(o) => o,
             None => return Ok(None),
@@ -96,11 +100,8 @@ impl JsonLdToRdf {
                 Value::String(type_iri) => {
                     let type_iri = Iri::new(type_iri)
                         .map_err(|e| JsonLdError::rdf_conversion(e.to_string()))?;
-                    let triple = Triple::new(
-                        subject.clone(),
-                        rdf_type.clone(),
-                        Object::Iri(type_iri),
-                    );
+                    let triple =
+                        Triple::new(subject.clone(), rdf_type.clone(), Object::Iri(type_iri));
                     quads.push(Quad::in_default_graph(triple));
                 }
                 _ => {}
@@ -114,8 +115,9 @@ impl JsonLdToRdf {
                 continue;
             }
 
-            let predicate = Iri::new(key)
-                .map_err(|e| JsonLdError::rdf_conversion(format!("Invalid predicate IRI '{}': {}", key, e)))?;
+            let predicate = Iri::new(key).map_err(|e| {
+                JsonLdError::rdf_conversion(format!("Invalid predicate IRI '{}': {}", key, e))
+            })?;
 
             self.process_property(&subject, &predicate, value, quads)?;
         }
@@ -133,8 +135,8 @@ impl JsonLdToRdf {
                     Ok(Subject::BlankNode(bn))
                 } else {
                     // IRI
-                    let iri = Iri::new(id_str)
-                        .map_err(|e| JsonLdError::rdf_conversion(e.to_string()))?;
+                    let iri =
+                        Iri::new(id_str).map_err(|e| JsonLdError::rdf_conversion(e.to_string()))?;
                     Ok(Subject::Iri(iri))
                 }
             } else {
@@ -177,7 +179,7 @@ impl JsonLdToRdf {
         quads: &mut Vec<Quad>,
     ) -> JsonLdResult<()> {
         let object = self.value_to_object(value, quads)?;
-        
+
         if let Some(obj) = object {
             let triple = Triple::new(subject.clone(), predicate.clone(), obj);
             quads.push(Quad::in_default_graph(triple));
@@ -187,7 +189,11 @@ impl JsonLdToRdf {
     }
 
     /// Convert a JSON-LD value to an RDF object
-    fn value_to_object(&mut self, value: &Value, quads: &mut Vec<Quad>) -> JsonLdResult<Option<Object>> {
+    fn value_to_object(
+        &mut self,
+        value: &Value,
+        quads: &mut Vec<Quad>,
+    ) -> JsonLdResult<Option<Object>> {
         match value {
             Value::Object(obj) => {
                 if obj.contains_key("@value") {
@@ -246,7 +252,9 @@ impl JsonLdToRdf {
             Value::Null => Ok(None),
             Value::Array(_) => {
                 // Arrays should be handled at the property level
-                Err(JsonLdError::rdf_conversion("Unexpected array in value position"))
+                Err(JsonLdError::rdf_conversion(
+                    "Unexpected array in value position",
+                ))
             }
         }
     }
@@ -283,8 +291,8 @@ impl JsonLdToRdf {
         // Check for datatype
         if let Some(datatype) = obj.get("@type") {
             if let Some(dt_str) = datatype.as_str() {
-                let dt_iri = Iri::new(dt_str)
-                    .map_err(|e| JsonLdError::rdf_conversion(e.to_string()))?;
+                let dt_iri =
+                    Iri::new(dt_str).map_err(|e| JsonLdError::rdf_conversion(e.to_string()))?;
                 let lit = Literal::with_datatype(&value_str, dt_iri);
                 return Ok(Some(Object::Literal(lit)));
             }
@@ -328,7 +336,7 @@ impl JsonLdToRdf {
 
         for item in items {
             let current_node = self.blank_node_scope.next();
-            
+
             if list_head.is_none() {
                 list_head = Some(current_node.clone());
             }
@@ -358,11 +366,7 @@ impl JsonLdToRdf {
 
         // Terminate list with rdf:nil
         if let Some(last) = prev_node {
-            let triple = Triple::new(
-                Subject::BlankNode(last),
-                rdf_rest,
-                Object::Iri(rdf_nil),
-            );
+            let triple = Triple::new(Subject::BlankNode(last), rdf_rest, Object::Iri(rdf_nil));
             quads.push(Quad::in_default_graph(triple));
         }
 
@@ -435,7 +439,7 @@ mod tests {
 
         let quads = converter.convert(&expanded).unwrap();
         assert_eq!(quads.len(), 1);
-        
+
         if let Object::Literal(lit) = quads[0].object() {
             assert_eq!(lit.value(), "42");
             assert!(lit.datatype().as_str().contains("integer"));
@@ -457,7 +461,7 @@ mod tests {
 
         let quads = converter.convert(&expanded).unwrap();
         assert_eq!(quads.len(), 1);
-        
+
         if let Object::Literal(lit) = quads[0].object() {
             assert_eq!(lit.value(), "Bonjour");
             assert_eq!(lit.language(), Some("fr"));
@@ -481,11 +485,11 @@ mod tests {
         // Should have at least: knows relation
         // The nested node (person/2) and its name property should also be processed
         assert!(!quads.is_empty());
-        
+
         // Check that we have a knows relation
-        let has_knows = quads.iter().any(|q| {
-            q.predicate().as_str().contains("knows")
-        });
+        let has_knows = quads
+            .iter()
+            .any(|q| q.predicate().as_str().contains("knows"));
         assert!(has_knows, "Expected a 'knows' relation");
     }
 

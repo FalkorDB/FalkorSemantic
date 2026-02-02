@@ -7,12 +7,12 @@
 //! - Basic framing support
 //! - Conversion to RDF triples
 
-mod parser;
-mod error;
 mod context;
 mod conversion;
+mod error;
+mod parser;
 
-pub use error::JsonLdError;
-pub use parser::JsonLdParser;
 pub use context::ContextResolver;
 pub use conversion::JsonLdToRdf;
+pub use error::JsonLdError;
+pub use parser::JsonLdParser;

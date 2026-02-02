@@ -6,8 +6,7 @@ use std::collections::HashMap;
 
 use super::lexer::{Lexer, Token, TokenKind};
 use crate::rdf::{
-    BlankNode, BlankNodeScope, Iri, Literal, NamespaceRegistry, Object, Predicate,
-    Subject, Triple,
+    BlankNode, BlankNodeScope, Iri, Literal, NamespaceRegistry, Object, Predicate, Subject, Triple,
 };
 use crate::{ParserError, Result};
 
@@ -142,7 +141,12 @@ impl TurtleParser {
     }
 
     /// Parse triples statement
-    fn parse_triples(&mut self, tokens: &[Token], pos: usize, triples: &mut Vec<Triple>) -> Result<usize> {
+    fn parse_triples(
+        &mut self,
+        tokens: &[Token],
+        pos: usize,
+        triples: &mut Vec<Triple>,
+    ) -> Result<usize> {
         // Parse subject
         let (subject, mut pos) = self.parse_subject(tokens, pos, triples)?;
 
@@ -179,7 +183,8 @@ impl TurtleParser {
             }
             TokenKind::OpenBracket => {
                 // Blank node with properties
-                let (bn, new_pos) = self.parse_blank_node_property_list(tokens, pos + 1, triples)?;
+                let (bn, new_pos) =
+                    self.parse_blank_node_property_list(tokens, pos + 1, triples)?;
                 Ok((Subject::BlankNode(bn), new_pos))
             }
             TokenKind::OpenParen => {
@@ -237,7 +242,8 @@ impl TurtleParser {
                 Ok((Object::BlankNode(bn), pos + 1))
             }
             TokenKind::OpenBracket => {
-                let (bn, new_pos) = self.parse_blank_node_property_list(tokens, pos + 1, triples)?;
+                let (bn, new_pos) =
+                    self.parse_blank_node_property_list(tokens, pos + 1, triples)?;
                 Ok((Object::BlankNode(bn), new_pos))
             }
             TokenKind::OpenParen => {
@@ -248,9 +254,7 @@ impl TurtleParser {
                 };
                 Ok((object, new_pos))
             }
-            TokenKind::StringLiteral(value) => {
-                self.parse_literal(tokens, pos, value.clone())
-            }
+            TokenKind::StringLiteral(value) => self.parse_literal(tokens, pos, value.clone()),
             TokenKind::Integer(n) => {
                 let lit = Literal::integer(*n);
                 Ok((Object::Literal(lit), pos + 1))
@@ -498,9 +502,10 @@ impl TurtleParser {
 
     /// Expand a prefixed name to a full IRI
     fn expand_prefixed_name(&self, prefix: &str, local: &str) -> Result<Iri> {
-        let namespace = self.namespaces.get_namespace(prefix).ok_or_else(|| {
-            ParserError::InvalidInput(format!("Unknown prefix: {}", prefix))
-        })?;
+        let namespace = self
+            .namespaces
+            .get_namespace(prefix)
+            .ok_or_else(|| ParserError::InvalidInput(format!("Unknown prefix: {}", prefix)))?;
         Iri::new(format!("{}{}", namespace, local))
     }
 
@@ -681,7 +686,10 @@ mod tests {
         let triples = parser.parse(input).unwrap();
 
         assert_eq!(triples.len(), 3);
-        assert_eq!(triples[0].object().as_literal().unwrap().as_integer(), Some(42));
+        assert_eq!(
+            triples[0].object().as_literal().unwrap().as_integer(),
+            Some(42)
+        );
     }
 
     #[test]
@@ -694,7 +702,10 @@ mod tests {
         let triples = parser.parse(input).unwrap();
 
         assert_eq!(triples.len(), 1);
-        assert_eq!(triples[0].object().as_literal().unwrap().as_bool(), Some(true));
+        assert_eq!(
+            triples[0].object().as_literal().unwrap().as_bool(),
+            Some(true)
+        );
     }
 
     #[test]
@@ -740,10 +751,7 @@ mod tests {
                 triple.subject().as_iri().unwrap().as_str(),
                 "http://example.org/subject"
             );
-            assert_eq!(
-                triple.predicate().as_str(),
-                "http://example.org/values"
-            );
+            assert_eq!(triple.predicate().as_str(), "http://example.org/values");
         }
     }
 
@@ -809,10 +817,7 @@ mod tests {
         let triples = parser.parse(input).unwrap();
 
         assert_eq!(triples.len(), 1);
-        assert_eq!(
-            triples[0].object().as_iri().unwrap().as_str(),
-            RDF_NIL
-        );
+        assert_eq!(triples[0].object().as_iri().unwrap().as_str(), RDF_NIL);
     }
 
     #[test]

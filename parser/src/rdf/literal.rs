@@ -108,7 +108,10 @@ impl Literal {
     }
 
     /// Create a language-tagged literal
-    pub fn with_language(value: impl Into<String>, language: impl Into<String>) -> Result<Self, ParserError> {
+    pub fn with_language(
+        value: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Result<Self, ParserError> {
         let language = language.into();
         Self::validate_language_tag(&language)?;
         Ok(Self {
@@ -121,7 +124,9 @@ impl Literal {
     /// Validate a language tag (basic BCP 47 validation)
     fn validate_language_tag(tag: &str) -> Result<(), ParserError> {
         if tag.is_empty() {
-            return Err(ParserError::InvalidInput("Language tag cannot be empty".into()));
+            return Err(ParserError::InvalidInput(
+                "Language tag cannot be empty".into(),
+            ));
         }
 
         // Basic validation: alphanumeric and hyphens, starts with letter
@@ -203,7 +208,8 @@ impl Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Escape the value for N-Triples format
-        let escaped = self.value
+        let escaped = self
+            .value
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
             .replace('\n', "\\n")
@@ -278,7 +284,10 @@ mod tests {
     fn test_boolean_literal() {
         let lit = Literal::boolean(true);
         assert_eq!(lit.as_bool(), Some(true));
-        assert_eq!(format!("{}", lit), "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+        assert_eq!(
+            format!("{}", lit),
+            "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"
+        );
     }
 
     #[test]
@@ -290,7 +299,10 @@ mod tests {
         assert_eq!(format!("{}", lang), "\"bonjour\"@fr");
 
         let typed = Literal::integer(42);
-        assert_eq!(format!("{}", typed), "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>");
+        assert_eq!(
+            format!("{}", typed),
+            "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>"
+        );
     }
 
     #[test]

@@ -8,15 +8,15 @@
 //!
 //! All serializers support streaming output for efficient handling of large graphs.
 
-mod ntriples;
-mod nquads;
-mod turtle;
 mod jsonld;
+mod nquads;
+mod ntriples;
+mod turtle;
 
-pub use ntriples::{NTriplesWriter, write_ntriples, write_ntriples_streaming};
-pub use nquads::{NQuadsWriter, write_nquads, write_nquads_streaming};
-pub use turtle::{TurtleWriter, write_turtle};
-pub use jsonld::{JsonLdWriter, write_jsonld};
+pub use jsonld::{write_jsonld, JsonLdWriter};
+pub use nquads::{write_nquads, write_nquads_streaming, NQuadsWriter};
+pub use ntriples::{write_ntriples, write_ntriples_streaming, NTriplesWriter};
+pub use turtle::{write_turtle, TurtleWriter};
 
 use std::io::Write;
 use thiserror::Error;
@@ -38,8 +38,12 @@ pub type ExportResult<T> = std::result::Result<T, ExportError>;
 /// Trait for RDF triple serializers
 pub trait TripleWriter {
     /// Write a single triple
-    fn write_triple<W: Write>(&self, triple: &crate::rdf::Triple, writer: &mut W) -> ExportResult<()>;
-    
+    fn write_triple<W: Write>(
+        &self,
+        triple: &crate::rdf::Triple,
+        writer: &mut W,
+    ) -> ExportResult<()>;
+
     /// Write multiple triples
     fn write_triples<'a, W, I>(&self, triples: I, writer: &mut W) -> ExportResult<()>
     where
@@ -57,7 +61,7 @@ pub trait TripleWriter {
 pub trait QuadWriter {
     /// Write a single quad
     fn write_quad<W: Write>(&self, quad: &crate::rdf::Quad, writer: &mut W) -> ExportResult<()>;
-    
+
     /// Write multiple quads
     fn write_quads<'a, W, I>(&self, quads: I, writer: &mut W) -> ExportResult<()>
     where

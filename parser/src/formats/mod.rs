@@ -12,8 +12,7 @@ pub use common::{ParseErrorInfo, ParserConfig, QuadParser, RioConverter, TripleP
 
 // N-Quads parser
 pub use nquads::{
-    parse_nquads, parse_nquads_reader, NQuadsIterator, NQuadsReader, ParseQuadResult,
-    QuadCollector,
+    parse_nquads, parse_nquads_reader, NQuadsIterator, NQuadsReader, ParseQuadResult, QuadCollector,
 };
 
 // N-Triples parser

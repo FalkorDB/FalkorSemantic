@@ -2,8 +2,8 @@
 //!
 //! Represents values that can appear in query results.
 
-use std::fmt;
 use crate::rdf::{BlankNode, Iri, Literal};
+use std::fmt;
 
 /// A term in SPARQL results
 ///

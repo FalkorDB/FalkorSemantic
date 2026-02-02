@@ -155,10 +155,9 @@ impl<'a> RedisCypherExecutor<'a> {
                 // Second element is data rows
                 let rows = if arr.len() > 1 {
                     match &arr[1] {
-                        RedisValue::Array(data_rows) => data_rows
-                            .iter()
-                            .map(|row| self.parse_row(row))
-                            .collect(),
+                        RedisValue::Array(data_rows) => {
+                            data_rows.iter().map(|row| self.parse_row(row)).collect()
+                        }
                         _ => vec![],
                     }
                 } else {
@@ -198,15 +197,13 @@ impl<'a> RedisCypherExecutor<'a> {
             RedisValue::Array(arr) => {
                 // Could be a node, relationship, or list
                 // Check for node/relationship structure (type indicator at index 0)
-                if let Some(first) = arr.first() {
-                    if let RedisValue::Integer(type_id) = first {
-                        // FalkorDB type indicators:
-                        // 1 = Node, 2 = Relationship, 3 = Scalar, etc.
-                        match type_id {
-                            1 => return self.parse_node(arr),
-                            2 => return self.parse_relationship(arr),
-                            _ => {}
-                        }
+                if let Some(RedisValue::Integer(type_id)) = arr.first() {
+                    // FalkorDB type indicators:
+                    // 1 = Node, 2 = Relationship, 3 = Scalar, etc.
+                    match type_id {
+                        1 => return self.parse_node(arr),
+                        2 => return self.parse_relationship(arr),
+                        _ => {}
                     }
                 }
                 // Default: parse as list
@@ -222,14 +219,14 @@ impl<'a> RedisCypherExecutor<'a> {
         let mut props = std::collections::HashMap::new();
 
         // Extract properties (usually at index 3)
-        if arr.len() > 3 {
-            if let RedisValue::Array(prop_arr) = &arr[3] {
-                for chunk in prop_arr.chunks(2) {
-                    if let (Some(key), Some(value)) = (chunk.first(), chunk.get(1)) {
-                        if let RedisValue::SimpleString(k) | RedisValue::BulkString(k) = key {
-                            props.insert(k.clone(), self.parse_value(value));
-                        }
-                    }
+        if let Some(RedisValue::Array(prop_arr)) = arr.get(3) {
+            for chunk in prop_arr.chunks(2) {
+                if let (
+                    Some(RedisValue::SimpleString(k) | RedisValue::BulkString(k)),
+                    Some(value),
+                ) = (chunk.first(), chunk.get(1))
+                {
+                    props.insert(k.clone(), self.parse_value(value));
                 }
             }
         }
@@ -243,21 +240,24 @@ impl<'a> RedisCypherExecutor<'a> {
         let mut props = std::collections::HashMap::new();
 
         // Extract relationship type (index 2)
-        if arr.len() > 2 {
-            if let RedisValue::SimpleString(rel_type) | RedisValue::BulkString(rel_type) = &arr[2] {
-                props.insert("predicate".to_string(), CypherValue::String(rel_type.clone()));
-            }
+        if let Some(RedisValue::SimpleString(rel_type) | RedisValue::BulkString(rel_type)) =
+            arr.get(2)
+        {
+            props.insert(
+                "predicate".to_string(),
+                CypherValue::String(rel_type.clone()),
+            );
         }
 
         // Extract properties (usually at index 5)
-        if arr.len() > 5 {
-            if let RedisValue::Array(prop_arr) = &arr[5] {
-                for chunk in prop_arr.chunks(2) {
-                    if let (Some(key), Some(value)) = (chunk.first(), chunk.get(1)) {
-                        if let RedisValue::SimpleString(k) | RedisValue::BulkString(k) = key {
-                            props.insert(k.clone(), self.parse_value(value));
-                        }
-                    }
+        if let Some(RedisValue::Array(prop_arr)) = arr.get(5) {
+            for chunk in prop_arr.chunks(2) {
+                if let (
+                    Some(RedisValue::SimpleString(k) | RedisValue::BulkString(k)),
+                    Some(value),
+                ) = (chunk.first(), chunk.get(1))
+                {
+                    props.insert(k.clone(), self.parse_value(value));
                 }
             }
         }
@@ -407,13 +407,7 @@ mod tests {
 
     #[test]
     fn test_output_format_to_result_format() {
-        assert_eq!(
-            OutputFormat::Json.to_result_format(),
-            ResultFormat::Json
-        );
-        assert_eq!(
-            OutputFormat::Xml.to_result_format(),
-            ResultFormat::Xml
-        );
+        assert_eq!(OutputFormat::Json.to_result_format(), ResultFormat::Json);
+        assert_eq!(OutputFormat::Xml.to_result_format(), ResultFormat::Xml);
     }
 }

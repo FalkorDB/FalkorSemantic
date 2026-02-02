@@ -9,18 +9,22 @@
 //! - Turtle for CONSTRUCT results
 
 mod binding;
+mod csv;
 mod json;
 mod term;
-mod xml;
-mod csv;
 mod turtle;
+mod xml;
 
-pub use binding::{Binding, ResultSet, SelectResults, AskResult, ConstructResults};
+pub use binding::{AskResult, Binding, ConstructResults, ResultSet, SelectResults};
+pub use csv::{
+    ask_to_csv, ask_to_tsv, select_to_csv, select_to_tsv, CsvResultsWriter, TsvResultsWriter,
+};
+pub use json::{ask_to_json, select_to_json, JsonResultsWriter};
 pub use term::Term;
-pub use json::{JsonResultsWriter, select_to_json, ask_to_json};
-pub use xml::{XmlResultsWriter, select_to_xml, ask_to_xml};
-pub use csv::{CsvResultsWriter, TsvResultsWriter, select_to_csv, select_to_tsv, ask_to_csv, ask_to_tsv};
-pub use turtle::{TurtleResultsWriter, RdfJsonResultsWriter, construct_to_turtle, construct_to_rdf_json};
+pub use turtle::{
+    construct_to_rdf_json, construct_to_turtle, RdfJsonResultsWriter, TurtleResultsWriter,
+};
+pub use xml::{ask_to_xml, select_to_xml, XmlResultsWriter};
 
 use std::io::Write;
 use thiserror::Error;
@@ -43,7 +47,7 @@ pub type ResultsResult<T> = std::result::Result<T, ResultsError>;
 pub trait ResultsWriter {
     /// Write SELECT query results
     fn write_select<W: Write>(&self, results: &SelectResults, writer: W) -> ResultsResult<()>;
-    
+
     /// Write ASK query result
     fn write_ask<W: Write>(&self, result: &AskResult, writer: W) -> ResultsResult<()>;
 }

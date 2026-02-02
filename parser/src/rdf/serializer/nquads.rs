@@ -29,14 +29,14 @@ impl NQuadsSerializer {
             crate::rdf::Subject::Iri(iri) => write!(writer, "<{}>", iri.as_str())?,
             crate::rdf::Subject::BlankNode(bn) => write!(writer, "_:{}", bn.label())?,
         }
-        
+
         write!(writer, " ")?;
-        
+
         // Write predicate
         write!(writer, "<{}>", quad.triple.predicate.as_str())?;
-        
+
         write!(writer, " ")?;
-        
+
         // Write object
         match &quad.triple.object {
             crate::rdf::Object::Iri(iri) => write!(writer, "<{}>", iri.as_str())?,
@@ -53,7 +53,7 @@ impl NQuadsSerializer {
                 }
             }
         }
-        
+
         // Write graph name if present
         if let Some(graph) = &quad.graph {
             write!(writer, " ")?;
@@ -62,7 +62,7 @@ impl NQuadsSerializer {
                 GraphName::BlankNode(bn) => write!(writer, "_:{}", bn.label())?,
             }
         }
-        
+
         writeln!(writer, " .")?;
         Ok(())
     }

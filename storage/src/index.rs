@@ -36,10 +36,7 @@ impl NamespaceIndex {
     pub fn add(&self, id: IriId, namespace: &str) {
         {
             let mut ns_map = self.namespace_to_ids.write().unwrap();
-            ns_map
-                .entry(namespace.to_string())
-                .or_default()
-                .insert(id);
+            ns_map.entry(namespace.to_string()).or_default().insert(id);
         }
         {
             let mut id_map = self.id_to_namespace.write().unwrap();
@@ -440,7 +437,10 @@ pub enum IndexHint {
     /// Use type index for rdf:type pattern
     UseTypeIndex { type_id: IriId },
     /// Use predicate index
-    UsePredicateIndex { predicate_id: IriId, selectivity: f64 },
+    UsePredicateIndex {
+        predicate_id: IriId,
+        selectivity: f64,
+    },
     /// Use namespace index
     UseNamespaceIndex { namespace: String },
     /// No index available, use full scan
@@ -502,7 +502,8 @@ impl IndexManager {
         }
 
         // Index predicate
-        self.predicate_index.add(predicate_id, subject_id, object_id);
+        self.predicate_index
+            .add(predicate_id, subject_id, object_id);
 
         // Index type assertion
         if is_type_assertion && object_id != UNKNOWN_IRI_ID {
@@ -668,8 +669,8 @@ mod tests {
 
         // Index a type triple: Alice rdf:type Person
         manager.index_triple(
-            1,  // subject: Alice
-            10, // predicate: rdf:type
+            1,   // subject: Alice
+            10,  // predicate: rdf:type
             100, // object: Person
             Some("http://example.org/"),
             Some("Alice"),
@@ -677,8 +678,14 @@ mod tests {
         );
 
         // Check indexes
-        assert!(manager.namespace_index.get_by_namespace("http://example.org/").contains(&1));
-        assert!(manager.local_name_index.get_by_local_name("Alice").contains(&1));
+        assert!(manager
+            .namespace_index
+            .get_by_namespace("http://example.org/")
+            .contains(&1));
+        assert!(manager
+            .local_name_index
+            .get_by_local_name("Alice")
+            .contains(&1));
         assert!(manager.type_index.has_type(1, 100));
         assert_eq!(manager.predicate_index.predicate_count(10), 1);
     }

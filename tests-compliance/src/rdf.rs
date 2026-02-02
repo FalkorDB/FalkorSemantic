@@ -40,7 +40,7 @@ pub fn run_turtle_tests() -> ComplianceReport {
     for (name, input) in positive_tests {
         let mut parser = TurtleParser::new();
         let result = parser.parse(input);
-        
+
         report.add_result(TestResult {
             name: name.to_string(),
             passed: result.is_ok(),
@@ -56,15 +56,24 @@ pub fn run_turtle_tests() -> ComplianceReport {
         ("turtle-syntax-bad-base-01", "@base ."),
         ("turtle-syntax-bad-base-02", "@base http://example.org/ ."),
         ("turtle-syntax-bad-prefix-01", "@prefix ."),
-        ("turtle-syntax-bad-uri-01", "<http://example .org/> <http://example.org/p> <http://example.org/o> ."),
-        ("turtle-syntax-bad-string-01", "<http://example.org/s> <http://example.org/p> \"unterminated ."),
-        ("turtle-syntax-bad-num-01", "<http://example.org/s> <http://example.org/p> 123abc ."),
+        (
+            "turtle-syntax-bad-uri-01",
+            "<http://example .org/> <http://example.org/p> <http://example.org/o> .",
+        ),
+        (
+            "turtle-syntax-bad-string-01",
+            "<http://example.org/s> <http://example.org/p> \"unterminated .",
+        ),
+        (
+            "turtle-syntax-bad-num-01",
+            "<http://example.org/s> <http://example.org/p> 123abc .",
+        ),
     ];
 
     for (name, input) in negative_tests {
         let mut parser = TurtleParser::new();
         let result = parser.parse(input);
-        
+
         report.add_result(TestResult {
             name: name.to_string(),
             passed: result.is_err(),
@@ -82,14 +91,16 @@ pub fn run_turtle_tests() -> ComplianceReport {
     // Document known compliance gaps
     report.add_gap(ComplianceGap {
         feature: "Unicode escape sequences (\\uXXXX, \\UXXXXXXXX)".to_string(),
-        reason: "Partial support - basic escapes work, full Unicode escapes need enhancement".to_string(),
+        reason: "Partial support - basic escapes work, full Unicode escapes need enhancement"
+            .to_string(),
         severity: GapSeverity::Low,
         spec_reference: Some("Turtle 1.1 Section 6.1".to_string()),
     });
 
     report.add_gap(ComplianceGap {
         feature: "Long literals with embedded quotes".to_string(),
-        reason: "Edge cases with triple-quoted strings containing quotes may not parse correctly".to_string(),
+        reason: "Edge cases with triple-quoted strings containing quotes may not parse correctly"
+            .to_string(),
         severity: GapSeverity::Low,
         spec_reference: Some("Turtle 1.1 Section 2.5.2".to_string()),
     });
@@ -122,7 +133,7 @@ pub fn run_ntriples_tests() -> ComplianceReport {
 
     for (name, input) in positive_tests {
         let result = reader.parse_all_str(input);
-        
+
         report.add_result(TestResult {
             name: name.to_string(),
             passed: result.is_ok(),
@@ -135,16 +146,31 @@ pub fn run_ntriples_tests() -> ComplianceReport {
 
     // Negative tests
     let negative_tests = vec![
-        ("nt-syntax-bad-uri-01", "http://example.org/s> <http://example.org/p> <http://example.org/o> ."),
-        ("nt-syntax-bad-uri-02", "<http://example.org/s <http://example.org/p> <http://example.org/o> ."),
-        ("nt-syntax-bad-string-01", "<http://example.org/s> <http://example.org/p> unterminated ."),
-        ("nt-syntax-bad-esc-01", "<http://example.org/s> <http://example.org/p> \"bad\\escape\" ."),
-        ("nt-syntax-bad-lang-01", "<http://example.org/s> <http://example.org/p> \"string\"@ ."),
+        (
+            "nt-syntax-bad-uri-01",
+            "http://example.org/s> <http://example.org/p> <http://example.org/o> .",
+        ),
+        (
+            "nt-syntax-bad-uri-02",
+            "<http://example.org/s <http://example.org/p> <http://example.org/o> .",
+        ),
+        (
+            "nt-syntax-bad-string-01",
+            "<http://example.org/s> <http://example.org/p> unterminated .",
+        ),
+        (
+            "nt-syntax-bad-esc-01",
+            "<http://example.org/s> <http://example.org/p> \"bad\\escape\" .",
+        ),
+        (
+            "nt-syntax-bad-lang-01",
+            "<http://example.org/s> <http://example.org/p> \"string\"@ .",
+        ),
     ];
 
     for (name, input) in negative_tests {
         let result = reader.parse_all_str(input);
-        
+
         report.add_result(TestResult {
             name: name.to_string(),
             passed: result.is_err(),
@@ -179,7 +205,7 @@ pub fn run_nquads_tests() -> ComplianceReport {
 
     for (name, input) in positive_tests {
         let result = reader.parse_all_str(input);
-        
+
         report.add_result(TestResult {
             name: name.to_string(),
             passed: result.is_ok(),
@@ -209,17 +235,17 @@ mod tests {
     fn test_turtle_compliance() {
         let report = run_turtle_tests();
         println!("\n{}", report.summary());
-        
+
         for result in &report.results {
             if !result.passed {
                 println!("  FAILED: {} - {:?}", result.name, result.error);
             }
         }
-        
+
         for gap in &report.gaps {
             println!("  GAP: {} ({:?})", gap.feature, gap.severity);
         }
-        
+
         // Assert high compliance rate
         assert!(
             report.compliance_percentage() >= 80.0,
@@ -232,13 +258,13 @@ mod tests {
     fn test_ntriples_compliance() {
         let report = run_ntriples_tests();
         println!("\n{}", report.summary());
-        
+
         for result in &report.results {
             if !result.passed {
                 println!("  FAILED: {} - {:?}", result.name, result.error);
             }
         }
-        
+
         assert!(
             report.compliance_percentage() >= 80.0,
             "N-Triples compliance too low: {:.1}%",
@@ -250,13 +276,13 @@ mod tests {
     fn test_nquads_compliance() {
         let report = run_nquads_tests();
         println!("\n{}", report.summary());
-        
+
         for result in &report.results {
             if !result.passed {
                 println!("  FAILED: {} - {:?}", result.name, result.error);
             }
         }
-        
+
         for gap in &report.gaps {
             println!("  GAP: {} ({:?})", gap.feature, gap.severity);
         }

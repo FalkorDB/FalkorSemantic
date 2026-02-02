@@ -1,7 +1,7 @@
 //! Serializer error types
 
-use thiserror::Error;
 use std::io;
+use thiserror::Error;
 
 /// Errors that can occur during RDF serialization
 #[derive(Debug, Error)]

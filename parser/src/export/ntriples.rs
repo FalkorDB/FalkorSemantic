@@ -5,9 +5,9 @@
 //!
 //! N-Triples is a line-based, plain text format for encoding RDF graphs.
 
-use std::io::Write;
-use crate::rdf::{BlankNode, Iri, Literal, Object, Subject, Triple};
 use super::{ExportResult, TripleWriter};
+use crate::rdf::{BlankNode, Iri, Literal, Object, Subject, Triple};
+use std::io::Write;
 
 /// Writer for N-Triples format
 #[derive(Debug, Clone, Default)]
@@ -290,8 +290,16 @@ mod tests {
     #[test]
     fn test_multiple_triples() {
         let triples = vec![
-            make_triple("http://example.org/s1", "http://example.org/p", "http://example.org/o1"),
-            make_triple("http://example.org/s2", "http://example.org/p", "http://example.org/o2"),
+            make_triple(
+                "http://example.org/s1",
+                "http://example.org/p",
+                "http://example.org/o1",
+            ),
+            make_triple(
+                "http://example.org/s2",
+                "http://example.org/p",
+                "http://example.org/o2",
+            ),
         ];
         let nt = write_ntriples(&triples).unwrap();
         let lines: Vec<_> = nt.lines().collect();
@@ -301,14 +309,26 @@ mod tests {
     #[test]
     fn test_streaming_writer() {
         let triples = vec![
-            make_triple("http://example.org/s1", "http://example.org/p", "http://example.org/o1"),
-            make_triple("http://example.org/s2", "http://example.org/p", "http://example.org/o2"),
-            make_triple("http://example.org/s3", "http://example.org/p", "http://example.org/o3"),
+            make_triple(
+                "http://example.org/s1",
+                "http://example.org/p",
+                "http://example.org/o1",
+            ),
+            make_triple(
+                "http://example.org/s2",
+                "http://example.org/p",
+                "http://example.org/o2",
+            ),
+            make_triple(
+                "http://example.org/s3",
+                "http://example.org/p",
+                "http://example.org/o3",
+            ),
         ];
-        
+
         let mut buf = Vec::new();
         let count = write_ntriples_streaming(&mut buf, &triples).unwrap();
-        
+
         assert_eq!(count, 3);
         let output = String::from_utf8_lossy(&buf);
         assert_eq!(output.lines().count(), 3);

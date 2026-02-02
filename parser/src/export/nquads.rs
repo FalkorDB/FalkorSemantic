@@ -5,10 +5,10 @@
 //!
 //! N-Quads extends N-Triples to support named graphs.
 
-use std::io::Write;
-use crate::rdf::{GraphName, Quad, Triple};
-use super::{ExportResult, QuadWriter, TripleWriter};
 use super::ntriples::NTriplesWriter;
+use super::{ExportResult, QuadWriter, TripleWriter};
+use crate::rdf::{GraphName, Quad, Triple};
+use std::io::Write;
 
 /// Writer for N-Quads format
 #[derive(Debug, Clone, Default)]
@@ -64,8 +64,14 @@ impl NQuadsWriter {
 impl QuadWriter for NQuadsWriter {
     fn write_quad<W: Write>(&self, quad: &Quad, writer: &mut W) -> ExportResult<()> {
         // Write subject, predicate, object using N-Triples logic
-        self.nt_writer.write_triple(&quad.triple, &mut TempWriter { inner: writer, stopped: false })?;
-        
+        self.nt_writer.write_triple(
+            &quad.triple,
+            &mut TempWriter {
+                inner: writer,
+                stopped: false,
+            },
+        )?;
+
         // The N-Triples writer writes " .\n", we need to intercept that for quads with graphs
         Ok(())
     }
@@ -326,9 +332,24 @@ mod tests {
     #[test]
     fn test_multiple_quads() {
         let quads = vec![
-            make_quad("http://example.org/s1", "http://example.org/p", "http://example.org/o1", Some("http://example.org/g1")),
-            make_quad("http://example.org/s2", "http://example.org/p", "http://example.org/o2", Some("http://example.org/g2")),
-            make_quad("http://example.org/s3", "http://example.org/p", "http://example.org/o3", None),
+            make_quad(
+                "http://example.org/s1",
+                "http://example.org/p",
+                "http://example.org/o1",
+                Some("http://example.org/g1"),
+            ),
+            make_quad(
+                "http://example.org/s2",
+                "http://example.org/p",
+                "http://example.org/o2",
+                Some("http://example.org/g2"),
+            ),
+            make_quad(
+                "http://example.org/s3",
+                "http://example.org/p",
+                "http://example.org/o3",
+                None,
+            ),
         ];
         let nq = write_nquads(&quads).unwrap();
         let lines: Vec<_> = nq.lines().collect();
@@ -338,13 +359,23 @@ mod tests {
     #[test]
     fn test_streaming_quads() {
         let quads = vec![
-            make_quad("http://example.org/s1", "http://example.org/p", "http://example.org/o1", Some("http://example.org/g")),
-            make_quad("http://example.org/s2", "http://example.org/p", "http://example.org/o2", Some("http://example.org/g")),
+            make_quad(
+                "http://example.org/s1",
+                "http://example.org/p",
+                "http://example.org/o1",
+                Some("http://example.org/g"),
+            ),
+            make_quad(
+                "http://example.org/s2",
+                "http://example.org/p",
+                "http://example.org/o2",
+                Some("http://example.org/g"),
+            ),
         ];
-        
+
         let mut buf = Vec::new();
         let count = write_nquads_streaming(&mut buf, &quads).unwrap();
-        
+
         assert_eq!(count, 2);
     }
 }
