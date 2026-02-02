@@ -25,7 +25,7 @@ pub enum RdfFormat {
 
 impl RdfFormat {
     /// Parse format from string
-    fn from_str(s: &str) -> Option<Self> {
+    pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "turtle" | "ttl" => Some(RdfFormat::Turtle),
             "ntriples" | "nt" => Some(RdfFormat::NTriples),
