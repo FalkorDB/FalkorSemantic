@@ -2,13 +2,16 @@
 //!
 //! This crate provides parsing functionality for semantic data,
 //! including core RDF data types (IRIs, literals, triples, etc.)
-//! and parsers for RDF serialization formats (N-Triples, Turtle, etc.).
+//! and parsers for RDF serialization formats (N-Triples, Turtle, etc.),
+//! as well as SPARQL query parsing.
 
 pub mod formats;
 pub mod rdf;
+pub mod sparql;
 
 // Re-export commonly used types
 pub use formats::turtle::TurtleParser;
+pub use sparql::{parse_sparql, Query, SparqlParser};
 
 use thiserror::Error;
 

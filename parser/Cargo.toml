@@ -23,5 +23,9 @@ contextual.workspace = true
 rio_api = "0.8"
 rio_turtle = "0.8"
 
+# SPARQL parsing
+spargebra = "0.4"
+oxiri = "0.2"
+
 [dev-dependencies]
 mockall.workspace = true
