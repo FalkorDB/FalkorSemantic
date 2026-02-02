@@ -68,32 +68,129 @@ redis-cli SHUTDOWN NOSAVE && \
 echo "All checks passed!"
 ```
 
-### After Completing Any Task
+### Committing and Creating Pull Requests
 
-**IMPORTANT: After completing a task and passing all validation checks, always suggest committing and pushing the changes to the remote repository.**
-
-This ensures changes are properly saved and shared with the team.
+**CRITICAL: Never commit directly to main. Always create a feature branch, commit there, and open a Pull Request.**
 
 #### Implementation
-When a task is completed:
-1. Run the pre-commit validation steps above
-2. Show the user what files were changed with `git status`
-3. Suggest staging the changes with `git add`
-4. Suggest committing with a descriptive message
-5. Suggest pushing to the remote repository
+When ready to commit changes:
 
-#### Example
+1. **Fetch and rebase with main** - Ensure your changes are on top of latest main
+2. **Create a feature branch** - Use descriptive branch names
+3. **Commit changes** - With a clear, descriptive message
+4. **Push to remote** - Push the feature branch
+5. **Create a Pull Request** - Open a PR for review
+
+#### Branch Naming Convention
+Use descriptive branch names with prefixes:
+- `feat/` - New features (e.g., `feat/json-ld-parser`)
+- `fix/` - Bug fixes (e.g., `fix/context-resolution`)
+- `docs/` - Documentation changes (e.g., `docs/update-readme`)
+- `refactor/` - Code refactoring (e.g., `refactor/parser-cleanup`)
+
+#### Step-by-Step Workflow
 ```bash
-# After completing a task
-git status
+# 1. Ensure main is up to date
+git checkout main
+git pull origin main
+
+# 2. Create and switch to a feature branch
+git checkout -b feat/your-feature-name
+
+# 3. Make your changes, then stage and commit
 git add .
-git commit -m "descriptive commit message"
-git push
+git commit -m "feat: descriptive commit message"
+
+# 4. Fetch latest main and rebase to resolve conflicts
+git fetch origin main
+git rebase origin/main
+
+# 5. If conflicts occur, resolve them:
+#    - Edit conflicting files
+#    - git add <resolved-files>
+#    - git rebase --continue
+
+# 6. Push the feature branch to remote
+git push -u origin feat/your-feature-name
+
+# 7. Create a Pull Request using GitHub CLI
+gh pr create --title "Your PR Title" --body "Description of changes"
+```
+
+#### Handling Rebase Conflicts
+When conflicts occur during rebase:
+```bash
+# 1. Git will pause and show conflicting files
+git status  # Shows files with conflicts
+
+# 2. Edit each conflicting file to resolve conflicts
+#    Look for <<<<<<< HEAD, =======, and >>>>>>> markers
+
+# 3. After resolving, stage the files
+git add <resolved-file>
+
+# 4. Continue the rebase
+git rebase --continue
+
+# 5. If rebase gets too complex, you can abort and try again
+git rebase --abort
+```
+
+#### Creating Pull Request
+```bash
+# Using GitHub CLI (preferred)
+gh pr create --title "feat: add JSON-LD parser" --body "
+## Description
+Brief description of changes
+
+## Changes
+- Change 1
+- Change 2
+
+## Testing
+- [ ] Build passes
+- [ ] Clippy passes
+- [ ] Tests pass
+- [ ] Redis module loads
+- [ ] Sanity tests pass
+"
+
+# Or create PR with auto-fill from commits
+gh pr create --fill
+```
+
+### After Completing Any Task
+
+**IMPORTANT: After completing a task and passing all validation checks, create a feature branch and open a Pull Request.**
+
+#### Complete Workflow Summary
+When a task is completed:
+1. Run the pre-commit validation steps (build, clippy, test, redis module)
+2. Fetch latest main and rebase
+3. Resolve any conflicts
+4. Create a feature branch (if not already on one)
+5. Commit with a descriptive message
+6. Push to remote
+7. Create a Pull Request
+
+#### Example Complete Flow
+```bash
+# After completing work - full workflow
+git checkout main && git pull origin main
+git checkout -b feat/my-feature
+git add .
+git commit -m "feat: descriptive commit message"
+git fetch origin main && git rebase origin/main
+git push -u origin feat/my-feature
+gh pr create --fill
 ```
 
 #### Suggested Prompt
 After completing work, remind the user:
-> "Task complete! Would you like me to commit and push these changes? I can help you with:
-> - `git add .` to stage all changes
-> - `git commit -m 'your message'` to commit
-> - `git push` to push to remote"
+> "Task complete! I'll now:
+> 1. Run validation checks (build, clippy, test, redis module)
+> 2. Create a feature branch
+> 3. Commit and push changes
+> 4. Open a Pull Request
+> 
+> Would you like me to proceed?"
