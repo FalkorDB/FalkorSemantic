@@ -4,6 +4,7 @@
 //! (RDF triples/quads) to FalkorDB graph structures (nodes, edges, Cypher).
 
 pub mod graph;
+pub mod query;
 
 use thiserror::Error;
 
