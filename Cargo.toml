@@ -5,6 +5,7 @@ members = [
     "storage",
     "module",
     "tests-e2e",
+    "tests-compliance",
 ]
 resolver = "2"
 

@@ -1,0 +1,23 @@
+[package]
+name = "falkorsemantic-compliance"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+falkorsemantic-parser = { path = "../parser" }
+falkorsemantic-mapper = { path = "../mapper" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+env_logger.workspace = true
+
+# For walking test directories
+walkdir = "2.4"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
