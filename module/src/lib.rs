@@ -39,6 +39,7 @@ redis_module! {
         ["rdf.parse", rdf_parse, "write", 1, 1, 1],
         ["rdf.insert", commands::rdf_insert, "write", 2, -1, 1],
         ["rdf.bulk_insert", commands::rdf_bulk_insert, "write", 2, -1, 1],
+        ["rdf.delete", commands::rdf_delete, "write", 2, -1, 1],
         ["rdf.namespaces", commands::rdf_namespaces, "write", 2, -1, 1],
         ["rdf.graph", commands::rdf_graph, "write", 1, -1, 1],
     ],

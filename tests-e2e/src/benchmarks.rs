@@ -967,7 +967,7 @@ BULK INSERT:
 QUERY PERFORMANCE:
   - bench_simple_select          : Simple SELECT queries
   - bench_join_queries           : 2-4 way JOIN queries
-  - bench_property_path_queries  : Property path queries (*, +, {n,m})
+  - bench_property_path_queries  : Property path queries (*, +, {{n,m}})
   - bench_aggregate_queries      : COUNT, AVG, MAX, MIN, GROUP BY
 
 COMPARISON:

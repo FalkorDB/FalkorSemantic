@@ -1002,6 +1002,276 @@ mod rdf_namespaces {
 }
 
 // ============================================================================
+// RDF.DELETE Command Tests
+// ============================================================================
+
+mod rdf_delete {
+    use super::*;
+
+    /// Helper to setup test data
+    fn setup_test_data(ctx: &mut TestContext, graph: &str) {
+        // Create the graph
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        // Insert test data
+        let turtle_data = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+            
+            ex:alice a foaf:Person ;
+                foaf:name "Alice" ;
+                foaf:age "30" ;
+                foaf:knows ex:bob, ex:charlie .
+            
+            ex:bob a foaf:Person ;
+                foaf:name "Bob" ;
+                foaf:knows ex:charlie .
+            
+            ex:charlie a foaf:Person ;
+                foaf:name "Charlie" .
+        "#;
+
+        let _ = redis::cmd("RDF.INSERT")
+            .arg(graph)
+            .arg(turtle_data)
+            .query::<redis::Value>(ctx.conn());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_specific_triple() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_specific";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete Alice's age
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/alice>")
+            .arg("<http://xmlns.com/foaf/0.1/age>")
+            .arg("\"30\"")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE should succeed: {:?}", result.err());
+        let deleted = result.unwrap();
+        assert!(deleted >= 0, "Should return number of deleted relationships");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_by_subject_wildcard() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_subject";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all triples about Alice
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/alice>")
+            .arg("*")
+            .arg("*")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE should succeed: {:?}", result.err());
+        let deleted = result.unwrap();
+        assert!(deleted > 0, "Should delete multiple relationships for alice");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_by_predicate_wildcard() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_predicate";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all "knows" relationships
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("*")
+            .arg("<http://xmlns.com/foaf/0.1/knows>")
+            .arg("*")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE should succeed: {:?}", result.err());
+        let deleted = result.unwrap();
+        assert!(deleted >= 3, "Should delete all knows relationships");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_by_object_wildcard() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_object";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all relationships pointing to Charlie
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("*")
+            .arg("*")
+            .arg("<http://example.org/charlie>")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE should succeed: {:?}", result.err());
+        let deleted = result.unwrap();
+        assert!(deleted >= 2, "Should delete relationships pointing to charlie");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_with_orphans() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_orphans";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete all relationships, keeping orphaned nodes
+        let result: RedisResult<Vec<i64>> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("*")
+            .arg("*")
+            .arg("*")
+            .arg("ORPHANS")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE with ORPHANS should succeed: {:?}", result.err());
+        let stats = result.unwrap();
+        assert_eq!(stats.len(), 2, "Should return [rels_deleted, nodes_deleted]");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_literal_with_language() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_lang";
+
+        // Create graph and insert data with language tags
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        let turtle_data = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            
+            ex:paris rdfs:label "Paris"@en ;
+                     rdfs:label "Paris"@fr .
+        "#;
+
+        let _ = redis::cmd("RDF.INSERT")
+            .arg(graph)
+            .arg(turtle_data)
+            .query::<redis::Value>(ctx.conn());
+
+        // Delete only the English label
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/paris>")
+            .arg("<http://www.w3.org/2000/01/rdf-schema#label>")
+            .arg("\"Paris\"@en")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE with language tag should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_typed_literal() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_typed";
+
+        // Create graph and insert data with typed literals
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        let turtle_data = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+            
+            ex:product1 ex:price "29.99"^^xsd:decimal ;
+                        ex:quantity "100"^^xsd:integer .
+        "#;
+
+        let _ = redis::cmd("RDF.INSERT")
+            .arg(graph)
+            .arg(turtle_data)
+            .query::<redis::Value>(ctx.conn());
+
+        // Delete the price
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/product1>")
+            .arg("<http://example.org/price>")
+            .arg("\"29.99\"^^<http://www.w3.org/2001/XMLSchema#decimal>")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE with typed literal should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_nonexistent_graph() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg("nonexistent_graph_delete")
+            .arg("<http://example.org/s>")
+            .arg("<http://example.org/p>")
+            .arg("<http://example.org/o>")
+            .query(ctx.conn());
+
+        assert!(result.is_err(), "RDF.DELETE on nonexistent graph should fail");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_invalid_pattern() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_invalid";
+
+        let _ = redis::cmd("RDF.GRAPH")
+            .arg("CREATE")
+            .arg(graph)
+            .query::<redis::Value>(ctx.conn());
+
+        // Invalid URI format
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("invalid-uri")
+            .arg("<http://example.org/p>")
+            .arg("<http://example.org/o>")
+            .query(ctx.conn());
+
+        assert!(result.is_err(), "RDF.DELETE with invalid pattern should fail");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_delete_no_matches() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph = "test_delete_nomatch";
+        setup_test_data(&mut ctx, graph);
+
+        // Delete a triple that doesn't exist
+        let result: RedisResult<i64> = redis::cmd("RDF.DELETE")
+            .arg(graph)
+            .arg("<http://example.org/nonexistent>")
+            .arg("<http://example.org/nonexistent>")
+            .arg("<http://example.org/nonexistent>")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.DELETE with no matches should succeed: {:?}", result.err());
+        let deleted = result.unwrap();
+        assert_eq!(deleted, 0, "Should delete 0 relationships when no match");
+    }
+}
+
+// ============================================================================
 // Test Runner Helper
 // ============================================================================
 
