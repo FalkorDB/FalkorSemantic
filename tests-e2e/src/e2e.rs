@@ -583,6 +583,425 @@ mod large_data {
 }
 
 // ============================================================================
+// RDF.INSERT Tests
+// ============================================================================
+
+mod rdf_insert {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn test_insert_small_dataset() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Small N-Triples dataset
+        let ntriples = r#"<http://example.org/person/1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/1> <http://example.org/name> "Alice" .
+<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/2> <http://example.org/name> "Bob" .
+<http://example.org/person/2> <http://example.org/knows> <http://example.org/person/1> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("test_graph")
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.INSERT should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_turtle_format() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let turtle = r#"@prefix ex: <http://example.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+ex:person/1 rdf:type ex:Person ;
+            ex:name "Charlie" ;
+            ex:email "charlie@example.org" ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("test_graph_turtle")
+            .arg(turtle)
+            .arg("FORMAT")
+            .arg("turtle")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.INSERT with Turtle should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_format_autodetect() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // N-Triples format should be auto-detected
+        let ntriples = r#"<http://example.org/s> <http://example.org/p> <http://example.org/o> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("test_graph_auto")
+            .arg(ntriples)
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.INSERT with auto-detect should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_with_blank_nodes() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let ntriples = r#"_:b1 <http://example.org/name> "Anonymous" .
+_:b1 <http://example.org/knows> _:b2 .
+_:b2 <http://example.org/name> "Secret Friend" ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("test_graph_blank")
+            .arg(ntriples)
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.INSERT with blank nodes should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_with_language_tags() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let ntriples = r#"<http://example.org/book/1> <http://example.org/title> "The Little Prince"@en .
+<http://example.org/book/1> <http://example.org/title> "Le Petit Prince"@fr .
+<http://example.org/book/1> <http://example.org/title> "Der kleine Prinz"@de ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("test_graph_lang")
+            .arg(ntriples)
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.INSERT with language tags should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_atomic() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let ntriples = r#"<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .
+<http://example.org/s2> <http://example.org/p> <http://example.org/o2> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("test_graph_atomic")
+            .arg(ntriples)
+            .arg("ATOMIC")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.INSERT with ATOMIC should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_missing_graph_key() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .query(ctx.conn());
+
+        assert!(result.is_err(), "RDF.INSERT without graph key should fail");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_invalid_format() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("test_graph")
+            .arg("some data")
+            .arg("FORMAT")
+            .arg("invalid_format")
+            .query(ctx.conn());
+
+        assert!(result.is_err(), "RDF.INSERT with invalid format should fail");
+    }
+}
+
+// ============================================================================
+// RDF.BULK_INSERT Tests (Large Dataset)
+// ============================================================================
+
+mod rdf_bulk_insert {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn test_bulk_insert_1000_triples() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Generate 1000 triples
+        let triples: Vec<String> = (0..1000)
+            .map(|i| {
+                format!(
+                    "<http://example.org/item/{}> <http://example.org/value> \"{}\" .",
+                    i, i * 10
+                )
+            })
+            .collect();
+
+        let ntriples = triples.join("\n");
+
+        let start = std::time::Instant::now();
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("bulk_test_1k")
+            .arg(&ntriples)
+            .query(ctx.conn());
+
+        let elapsed = start.elapsed();
+        
+        assert!(result.is_ok(), "RDF.INSERT with 1000 triples should succeed: {:?}", result.err());
+        println!("Inserted 1000 triples in {:?}", elapsed);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_bulk_insert_10000_triples() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Generate 10000 triples
+        let triples: Vec<String> = (0..10000)
+            .map(|i| {
+                format!(
+                    "<http://example.org/entity/{}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Entity> .",
+                    i
+                )
+            })
+            .collect();
+
+        let ntriples = triples.join("\n");
+
+        let start = std::time::Instant::now();
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("bulk_test_10k")
+            .arg(&ntriples)
+            .query(ctx.conn());
+
+        let elapsed = start.elapsed();
+        
+        assert!(result.is_ok(), "RDF.INSERT with 10000 triples should succeed: {:?}", result.err());
+        println!("Inserted 10000 triples in {:?}", elapsed);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_bulk_insert_complex_graph() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Generate a more complex graph with relationships
+        let mut triples = Vec::new();
+
+        // Create 100 people
+        for i in 0..100 {
+            triples.push(format!(
+                "<http://example.org/person/{}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .",
+                i
+            ));
+            triples.push(format!(
+                "<http://example.org/person/{}> <http://example.org/name> \"Person {}\" .",
+                i, i
+            ));
+            triples.push(format!(
+                "<http://example.org/person/{}> <http://example.org/age> \"{}\"^^<http://www.w3.org/2001/XMLSchema#integer> .",
+                i, 20 + (i % 50)
+            ));
+        }
+
+        // Create knows relationships (each person knows 5 others)
+        for i in 0..100 {
+            for j in 1..=5 {
+                let knows = (i + j * 17) % 100;
+                triples.push(format!(
+                    "<http://example.org/person/{}> <http://example.org/knows> <http://example.org/person/{}> .",
+                    i, knows
+                ));
+            }
+        }
+
+        let ntriples = triples.join("\n");
+
+        let start = std::time::Instant::now();
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg("bulk_test_complex")
+            .arg(&ntriples)
+            .query(ctx.conn());
+
+        let elapsed = start.elapsed();
+        
+        assert!(result.is_ok(), "RDF.INSERT with complex graph should succeed: {:?}", result.err());
+        println!("Inserted {} triples (complex graph) in {:?}", triples.len(), elapsed);
+    }
+}
+
+// ============================================================================
+// RDF.NAMESPACES Tests
+// ============================================================================
+
+mod rdf_namespaces {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn test_namespaces_add() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_graph")
+            .arg("ADD")
+            .arg("ex")
+            .arg("http://example.org/")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.NAMESPACES ADD should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_namespaces_add_multiple() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Add multiple namespaces
+        let namespaces = [
+            ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+            ("rdfs", "http://www.w3.org/2000/01/rdf-schema#"),
+            ("xsd", "http://www.w3.org/2001/XMLSchema#"),
+            ("foaf", "http://xmlns.com/foaf/0.1/"),
+        ];
+
+        for (prefix, uri) in namespaces {
+            let result: RedisResult<redis::Value> = redis::cmd("RDF.NAMESPACES")
+                .arg("test_ns_multi")
+                .arg("ADD")
+                .arg(prefix)
+                .arg(uri)
+                .query(ctx.conn());
+
+            assert!(result.is_ok(), "RDF.NAMESPACES ADD {} should succeed: {:?}", prefix, result.err());
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_namespaces_list() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // First add some namespaces
+        let _ = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_list")
+            .arg("ADD")
+            .arg("ex")
+            .arg("http://example.org/")
+            .query::<redis::Value>(ctx.conn());
+
+        let _ = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_list")
+            .arg("ADD")
+            .arg("foaf")
+            .arg("http://xmlns.com/foaf/0.1/")
+            .query::<redis::Value>(ctx.conn());
+
+        // List namespaces
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_list")
+            .arg("LIST")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.NAMESPACES LIST should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_namespaces_remove() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Add a namespace
+        let _ = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_remove")
+            .arg("ADD")
+            .arg("temp")
+            .arg("http://temp.example.org/")
+            .query::<redis::Value>(ctx.conn());
+
+        // Remove it
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_remove")
+            .arg("REMOVE")
+            .arg("temp")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.NAMESPACES REMOVE should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_namespaces_invalid_prefix() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Invalid prefix (starts with number)
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_invalid")
+            .arg("ADD")
+            .arg("123prefix")
+            .arg("http://example.org/")
+            .query(ctx.conn());
+
+        assert!(result.is_err(), "RDF.NAMESPACES with invalid prefix should fail");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_namespaces_invalid_uri() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Invalid URI (no scheme)
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_invalid_uri")
+            .arg("ADD")
+            .arg("ex")
+            .arg("not-a-valid-uri")
+            .query(ctx.conn());
+
+        assert!(result.is_err(), "RDF.NAMESPACES with invalid URI should fail");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_namespaces_persistence() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+
+        // Add a namespace
+        let _ = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_persist")
+            .arg("ADD")
+            .arg("persistent")
+            .arg("http://persistent.example.org/")
+            .query::<redis::Value>(ctx.conn());
+
+        // List should include it
+        let result: RedisResult<Vec<redis::Value>> = redis::cmd("RDF.NAMESPACES")
+            .arg("test_ns_persist")
+            .arg("LIST")
+            .query(ctx.conn());
+
+        assert!(result.is_ok(), "RDF.NAMESPACES LIST should succeed");
+        
+        // Verify the namespace is present (implementation-specific check)
+        let values = result.unwrap();
+        assert!(!values.is_empty(), "Namespace list should not be empty after adding");
+    }
+}
+
+// ============================================================================
 // Test Runner Helper
 // ============================================================================
 
