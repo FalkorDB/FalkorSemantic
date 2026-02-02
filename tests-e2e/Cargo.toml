@@ -11,3 +11,7 @@ anyhow = "1.0"
 [[test]]
 name = "e2e"
 path = "src/e2e.rs"
+
+[[test]]
+name = "benchmarks"
+path = "src/benchmarks.rs"
