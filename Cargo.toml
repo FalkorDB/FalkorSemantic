@@ -2,6 +2,7 @@
 members = [
     "parser",
     "mapper",
+    "storage",
     "module",
 ]
 resolver = "2"

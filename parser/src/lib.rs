@@ -1,6 +1,9 @@
 //! FalkorSemantic Parser
 //!
-//! This crate provides parsing functionality for semantic data.
+//! This crate provides parsing functionality for semantic data,
+//! including core RDF data types (IRIs, literals, triples, etc.).
+
+pub mod rdf;
 
 use thiserror::Error;
 

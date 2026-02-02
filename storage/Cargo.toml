@@ -1,0 +1,17 @@
+[package]
+name = "falkorsemantic-storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Storage layer for FalkorSemantic - IRI dictionary and graph storage"
+
+[dependencies]
+falkorsemantic-parser = { path = "../parser" }
+thiserror.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[dev-dependencies]
