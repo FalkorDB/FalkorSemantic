@@ -155,10 +155,9 @@ impl<'a> RedisCypherExecutor<'a> {
                 // Second element is data rows
                 let rows = if arr.len() > 1 {
                     match &arr[1] {
-                        RedisValue::Array(data_rows) => data_rows
-                            .iter()
-                            .map(|row| self.parse_row(row))
-                            .collect(),
+                        RedisValue::Array(data_rows) => {
+                            data_rows.iter().map(|row| self.parse_row(row)).collect()
+                        }
                         _ => vec![],
                     }
                 } else {
@@ -245,7 +244,10 @@ impl<'a> RedisCypherExecutor<'a> {
         // Extract relationship type (index 2)
         if arr.len() > 2 {
             if let RedisValue::SimpleString(rel_type) | RedisValue::BulkString(rel_type) = &arr[2] {
-                props.insert("predicate".to_string(), CypherValue::String(rel_type.clone()));
+                props.insert(
+                    "predicate".to_string(),
+                    CypherValue::String(rel_type.clone()),
+                );
             }
         }
 
@@ -407,13 +409,7 @@ mod tests {
 
     #[test]
     fn test_output_format_to_result_format() {
-        assert_eq!(
-            OutputFormat::Json.to_result_format(),
-            ResultFormat::Json
-        );
-        assert_eq!(
-            OutputFormat::Xml.to_result_format(),
-            ResultFormat::Xml
-        );
+        assert_eq!(OutputFormat::Json.to_result_format(), ResultFormat::Json);
+        assert_eq!(OutputFormat::Xml.to_result_format(), ResultFormat::Xml);
     }
 }

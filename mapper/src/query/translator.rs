@@ -107,7 +107,12 @@ impl SparqlToCypher {
         let mut where_parts = Vec::new();
         let mut bound_vars = HashSet::new();
 
-        self.process_pattern(pattern.inner(), &mut match_parts, &mut where_parts, &mut bound_vars)?;
+        self.process_pattern(
+            pattern.inner(),
+            &mut match_parts,
+            &mut where_parts,
+            &mut bound_vars,
+        )?;
 
         let match_clause = if match_parts.is_empty() {
             "MATCH (n)".to_string() // Fallback for empty patterns
@@ -143,7 +148,11 @@ impl SparqlToCypher {
                 self.process_pattern(left, match_parts, where_parts, bound_vars)?;
                 self.process_pattern(right, match_parts, where_parts, bound_vars)?;
             }
-            GP::LeftJoin { left, right, expression } => {
+            GP::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
                 self.process_pattern(left, match_parts, where_parts, bound_vars)?;
                 // OPTIONAL becomes OPTIONAL MATCH in Cypher
                 let mut opt_match = Vec::new();
@@ -170,7 +179,11 @@ impl SparqlToCypher {
                 // TODO: Implement proper UNION support with UNION ALL
                 self.process_pattern(left, match_parts, where_parts, bound_vars)?;
             }
-            GP::Extend { inner, variable, expression: _ } => {
+            GP::Extend {
+                inner,
+                variable,
+                expression: _,
+            } => {
                 self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
                 bound_vars.insert(Variable::from(variable.clone()));
                 // BIND becomes WITH ... AS in Cypher
@@ -194,7 +207,10 @@ impl SparqlToCypher {
             GP::Group { inner, .. } => {
                 self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
             }
-            GP::Values { variables, bindings: _ } => {
+            GP::Values {
+                variables,
+                bindings: _,
+            } => {
                 // VALUES clause - translate to WHERE ... IN ...
                 for var in variables {
                     bound_vars.insert(Variable::from(var.clone()));
@@ -205,22 +221,26 @@ impl SparqlToCypher {
                     "SERVICE clause not supported".into(),
                 ));
             }
-            GP::Path { subject, path: _, object } => {
+            GP::Path {
+                subject,
+                path: _,
+                object,
+            } => {
                 // Property path - simplified translation
                 let (subj_var, subj_cond) = self.term_to_cypher(subject)?;
                 let (obj_var, obj_cond) = self.term_to_cypher(object)?;
-                
+
                 // Basic path translation (simplified)
                 let path_pattern = format!("({})-[*]->({})", subj_var, obj_var);
                 match_parts.push(path_pattern);
-                
+
                 if let Some(cond) = subj_cond {
                     where_parts.push(cond);
                 }
                 if let Some(cond) = obj_cond {
                     where_parts.push(cond);
                 }
-                
+
                 self.add_term_variable(subject, bound_vars);
                 self.add_term_variable(object, bound_vars);
             }
@@ -232,10 +252,7 @@ impl SparqlToCypher {
                 let mut minus_vars = HashSet::new();
                 self.process_pattern(right, &mut minus_match, &mut minus_where, &mut minus_vars)?;
                 if !minus_match.is_empty() {
-                    where_parts.push(format!(
-                        "NOT EXISTS {{ MATCH {} }}",
-                        minus_match.join(", ")
-                    ));
+                    where_parts.push(format!("NOT EXISTS {{ MATCH {} }}", minus_match.join(", ")));
                 }
             }
         }
@@ -607,7 +624,9 @@ mod tests {
 
     fn translate(sparql: &str) -> Result<CypherQuery, MapperError> {
         let parser = SparqlParser::new();
-        let query = parser.parse(sparql).map_err(|e| MapperError::MappingError(e.to_string()))?;
+        let query = parser
+            .parse(sparql)
+            .map_err(|e| MapperError::MappingError(e.to_string()))?;
         let translator = SparqlToCypher::new();
         translator.translate(&query)
     }
@@ -668,7 +687,9 @@ mod tests {
 
     #[test]
     fn test_select_with_filter() {
-        let result = translate("SELECT ?s ?age WHERE { ?s <http://example.org/age> ?age . FILTER(?age > 18) }");
+        let result = translate(
+            "SELECT ?s ?age WHERE { ?s <http://example.org/age> ?age . FILTER(?age > 18) }",
+        );
         // Filter translation may not be fully supported yet
         // Using correct SPARQL syntax with FILTER inside WHERE clause
         assert!(result.is_ok(), "Translation failed: {:?}", result.err());

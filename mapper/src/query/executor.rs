@@ -169,18 +169,14 @@ impl CypherValue {
                     }
                 } else if let Some(CypherValue::String(value)) = props.get("value") {
                     // Literal node
-                    let datatype = props
-                        .get("datatype")
-                        .and_then(|d| match d {
-                            CypherValue::String(s) => Some(s.clone()),
-                            _ => None,
-                        });
-                    let language = props
-                        .get("language")
-                        .and_then(|l| match l {
-                            CypherValue::String(s) => Some(s.clone()),
-                            _ => None,
-                        });
+                    let datatype = props.get("datatype").and_then(|d| match d {
+                        CypherValue::String(s) => Some(s.clone()),
+                        _ => None,
+                    });
+                    let language = props.get("language").and_then(|l| match l {
+                        CypherValue::String(s) => Some(s.clone()),
+                        _ => None,
+                    });
                     if let Some(lang) = language {
                         Some(Term::lang_literal(value.clone(), lang))
                     } else if let Some(dt) = datatype {
@@ -413,9 +409,12 @@ mod tests {
     #[test]
     fn test_node_to_term() {
         let mut props = HashMap::new();
-        props.insert("uri".to_string(), CypherValue::String("http://example.org/Alice".to_string()));
+        props.insert(
+            "uri".to_string(),
+            CypherValue::String("http://example.org/Alice".to_string()),
+        );
         let node = CypherValue::Node(props);
-        
+
         let term = node.to_term().unwrap();
         assert!(term.is_iri());
         assert_eq!(term.value(), "http://example.org/Alice");
@@ -431,13 +430,11 @@ mod tests {
 
         let cypher_result = CypherResult {
             columns: vec!["s".to_string(), "p".to_string(), "o".to_string()],
-            rows: vec![
-                vec![
-                    CypherValue::String("http://example.org/Alice".to_string()),
-                    CypherValue::String("http://example.org/knows".to_string()),
-                    CypherValue::String("http://example.org/Bob".to_string()),
-                ],
-            ],
+            rows: vec![vec![
+                CypherValue::String("http://example.org/Alice".to_string()),
+                CypherValue::String("http://example.org/knows".to_string()),
+                CypherValue::String("http://example.org/Bob".to_string()),
+            ]],
             stats: None,
         };
 
@@ -461,13 +458,15 @@ mod tests {
     fn test_query_executor() {
         let mock_result = CypherResult {
             columns: vec!["s".to_string()],
-            rows: vec![
-                vec![CypherValue::String("http://example.org/Alice".to_string())],
-            ],
+            rows: vec![vec![CypherValue::String(
+                "http://example.org/Alice".to_string(),
+            )]],
             stats: None,
         };
 
-        let executor = MockExecutor { result: mock_result };
+        let executor = MockExecutor {
+            result: mock_result,
+        };
         let query_executor = QueryExecutor::new(executor);
 
         let cypher_query = CypherQuery {
