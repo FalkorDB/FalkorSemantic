@@ -9,7 +9,7 @@ use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, 
 fn init(_ctx: &Context, args: &[RedisString]) -> Status {
     env_logger::init();
     log::info!("FalkorSemantic module loaded");
-    
+
     if args.len() % 2 != 1 {
         return Status::Err;
     }
@@ -24,10 +24,10 @@ fn semantic_parse(_ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     }
 
     let input = args[1].try_as_str()?;
-    
+
     // TODO: Implement actual parsing and mapping
     log::debug!("Parsing semantic data: {}", input);
-    
+
     Ok("OK".into())
 }
 
