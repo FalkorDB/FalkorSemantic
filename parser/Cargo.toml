@@ -13,5 +13,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 log.workspace = true
 
+# RDF parsing
+rio_api = "0.8"
+rio_turtle = "0.8"
+
 [dev-dependencies]
 mockall.workspace = true
