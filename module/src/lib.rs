@@ -6,14 +6,10 @@
 use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, Status};
 
 /// Initialize the module with Redis
-fn init(_ctx: &Context, args: &[RedisString]) -> Status {
-    env_logger::init();
-    log::info!("FalkorSemantic module loaded");
-
-    if args.len() % 2 != 1 {
-        return Status::Err;
-    }
-
+fn init(_ctx: &Context, _args: &[RedisString]) -> Status {
+    // Try to initialize logging, ignore if it fails
+    let _ = env_logger::try_init();
+    
     Status::Ok
 }
 
