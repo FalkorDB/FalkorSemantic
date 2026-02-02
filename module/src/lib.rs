@@ -41,5 +41,6 @@ redis_module! {
         ["rdf.bulk_insert", commands::rdf_bulk_insert, "write", 2, -1, 1],
         ["rdf.namespaces", commands::rdf_namespaces, "write", 2, -1, 1],
         ["rdf.graph", commands::rdf_graph, "write", 1, -1, 1],
+        ["rdf.query", commands::rdf_query, "readonly", 2, -1, 1],
     ],
 }

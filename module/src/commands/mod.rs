@@ -4,8 +4,10 @@ mod rdf_bulk_insert;
 mod rdf_graph;
 mod rdf_insert;
 mod rdf_namespaces;
+mod rdf_query;
 
 pub use rdf_bulk_insert::rdf_bulk_insert;
 pub use rdf_graph::rdf_graph;
 pub use rdf_insert::rdf_insert;
 pub use rdf_namespaces::rdf_namespaces;
+pub use rdf_query::rdf_query;
