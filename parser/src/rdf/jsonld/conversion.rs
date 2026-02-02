@@ -127,9 +127,9 @@ impl JsonLdToRdf {
     fn get_subject(&mut self, obj: &serde_json::Map<String, Value>) -> JsonLdResult<Subject> {
         if let Some(id) = obj.get("@id") {
             if let Some(id_str) = id.as_str() {
-                if id_str.starts_with("_:") {
+                if let Some(stripped) = id_str.strip_prefix("_:") {
                     // Blank node
-                    let bn = self.get_or_create_blank_node(&id_str[2..]);
+                    let bn = self.get_or_create_blank_node(stripped);
                     Ok(Subject::BlankNode(bn))
                 } else {
                     // IRI
@@ -196,8 +196,8 @@ impl JsonLdToRdf {
                 } else if let Some(id) = obj.get("@id") {
                     // Node reference
                     if let Some(id_str) = id.as_str() {
-                        if id_str.starts_with("_:") {
-                            let bn = self.get_or_create_blank_node(&id_str[2..]);
+                        if let Some(stripped) = id_str.strip_prefix("_:") {
+                            let bn = self.get_or_create_blank_node(stripped);
                             Ok(Some(Object::BlankNode(bn)))
                         } else {
                             let iri = Iri::new(id_str)

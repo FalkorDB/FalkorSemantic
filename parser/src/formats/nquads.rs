@@ -8,10 +8,8 @@ use std::io::BufRead;
 use rio_api::parser::QuadsParser;
 use rio_turtle::NQuadsParser;
 
-use crate::rdf::{BlankNode, GraphName, Iri, Literal, Object, Quad, Subject, Triple};
-use crate::ParserError;
-
-use super::ntriples::ParseErrorInfo;
+use super::common::{parser_error_to_turtle_error, ParseErrorInfo, QuadParser, RioConverter};
+use crate::rdf::Quad;
 
 /// Result of parsing a single quad
 pub type ParseQuadResult = std::result::Result<Quad, ParseErrorInfo>;
@@ -44,32 +42,33 @@ impl NQuadsReader {
         self
     }
 
+    /// Get the configured converter
+    fn converter(&self) -> RioConverter {
+        match &self.blank_node_prefix {
+            Some(prefix) => RioConverter::with_blank_node_prefix(prefix.clone()),
+            None => RioConverter::new(),
+        }
+    }
+
     /// Parse all quads from a reader into a vector
     ///
     /// Returns an error on the first parse failure.
     pub fn parse_all<R: BufRead>(&self, reader: R) -> Result<Vec<Quad>, ParseErrorInfo> {
         let mut quads = Vec::new();
         let mut parser = NQuadsParser::new(reader);
-        let blank_node_prefix = self.blank_node_prefix.as_deref();
+        let converter = self.converter();
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut |rio_quad| {
-                match convert_quad(rio_quad, blank_node_prefix) {
+                match converter.convert_quad(rio_quad) {
                     Ok(quad) => {
                         quads.push(quad);
                         Ok(())
                     }
-                    Err(e) => Err(rio_turtle::TurtleError::from(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        e.to_string(),
-                    ))),
+                    Err(e) => Err(parser_error_to_turtle_error(e)),
                 }
             }) {
-                return Err(ParseErrorInfo {
-                    message: e.to_string(),
-                    line: None,
-                    column: None,
-                });
+                return Err(ParseErrorInfo::new(e.to_string()));
             }
         }
 
@@ -92,19 +91,33 @@ impl NQuadsReader {
     }
 }
 
+impl QuadParser for NQuadsReader {
+    fn parse_str(&self, input: &str) -> Result<Vec<Quad>, ParseErrorInfo> {
+        self.parse_all_str(input)
+    }
+
+    fn parse_read<R: BufRead>(&self, reader: R) -> Result<Vec<Quad>, ParseErrorInfo> {
+        self.parse_all(reader)
+    }
+}
+
 /// Collects quads from a parser
 pub struct QuadCollector<R: BufRead> {
     parser: NQuadsParser<R>,
-    blank_node_prefix: Option<String>,
+    converter: RioConverter,
     pending: Vec<Quad>,
     finished: bool,
 }
 
 impl<R: BufRead> QuadCollector<R> {
     fn new(reader: R, blank_node_prefix: Option<String>) -> Self {
+        let converter = match blank_node_prefix {
+            Some(prefix) => RioConverter::with_blank_node_prefix(prefix),
+            None => RioConverter::new(),
+        };
         Self {
             parser: NQuadsParser::new(reader),
-            blank_node_prefix,
+            converter,
             pending: Vec::new(),
             finished: false,
         }
@@ -125,19 +138,16 @@ impl<R: BufRead> Iterator for QuadCollector<R> {
         }
 
         // Parse the next step
-        let blank_node_prefix = self.blank_node_prefix.as_deref();
         let pending = &mut self.pending;
+        let converter = &self.converter;
 
         match self.parser.parse_step(&mut |rio_quad| {
-            match convert_quad(rio_quad, blank_node_prefix) {
+            match converter.convert_quad(rio_quad) {
                 Ok(quad) => {
                     pending.push(quad);
                     Ok(())
                 }
-                Err(e) => Err(rio_turtle::TurtleError::from(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    e.to_string(),
-                ))),
+                Err(e) => Err(parser_error_to_turtle_error(e)),
             }
         }) {
             Ok(()) => {
@@ -153,11 +163,7 @@ impl<R: BufRead> Iterator for QuadCollector<R> {
             }
             Err(e) => {
                 self.finished = true;
-                Some(Err(ParseErrorInfo {
-                    message: e.to_string(),
-                    line: None,
-                    column: None,
-                }))
+                Some(Err(ParseErrorInfo::new(e.to_string())))
             }
         }
     }
@@ -165,96 +171,6 @@ impl<R: BufRead> Iterator for QuadCollector<R> {
 
 /// Convenience type alias for the iterator
 pub type NQuadsIterator<R> = QuadCollector<R>;
-
-fn convert_quad(
-    rio_quad: rio_api::model::Quad<'_>,
-    blank_node_prefix: Option<&str>,
-) -> Result<Quad, ParserError> {
-    let subject = convert_subject(rio_quad.subject, blank_node_prefix)?;
-    let predicate = convert_predicate(rio_quad.predicate)?;
-    let object = convert_object(rio_quad.object, blank_node_prefix)?;
-    let graph_name = convert_graph_name(rio_quad.graph_name, blank_node_prefix)?;
-
-    let triple = Triple::new(subject, predicate, object);
-    Ok(Quad::new(triple, graph_name))
-}
-
-fn convert_subject(
-    subject: rio_api::model::Subject<'_>,
-    blank_node_prefix: Option<&str>,
-) -> Result<Subject, ParserError> {
-    match subject {
-        rio_api::model::Subject::NamedNode(nn) => Ok(Subject::Iri(Iri::new(nn.iri)?)),
-        rio_api::model::Subject::BlankNode(bn) => {
-            let label = if let Some(prefix) = blank_node_prefix {
-                format!("{}_{}", prefix, bn.id)
-            } else {
-                bn.id.to_string()
-            };
-            Ok(Subject::BlankNode(BlankNode::new(label)))
-        }
-        rio_api::model::Subject::Triple(_) => Err(ParserError::ParseError(
-            "RDF-star quoted triples not supported".into(),
-        )),
-    }
-}
-
-fn convert_predicate(predicate: rio_api::model::NamedNode<'_>) -> Result<Iri, ParserError> {
-    Iri::new(predicate.iri)
-}
-
-fn convert_object(
-    object: rio_api::model::Term<'_>,
-    blank_node_prefix: Option<&str>,
-) -> Result<Object, ParserError> {
-    match object {
-        rio_api::model::Term::NamedNode(nn) => Ok(Object::Iri(Iri::new(nn.iri)?)),
-        rio_api::model::Term::BlankNode(bn) => {
-            let label = if let Some(prefix) = blank_node_prefix {
-                format!("{}_{}", prefix, bn.id)
-            } else {
-                bn.id.to_string()
-            };
-            Ok(Object::BlankNode(BlankNode::new(label)))
-        }
-        rio_api::model::Term::Literal(lit) => {
-            let literal = match lit {
-                rio_api::model::Literal::Simple { value } => Literal::new(value),
-                rio_api::model::Literal::LanguageTaggedString { value, language } => {
-                    Literal::with_language(value, language)
-                        .map_err(|e| ParserError::ParseError(e.to_string()))?
-                }
-                rio_api::model::Literal::Typed { value, datatype } => {
-                    Literal::with_datatype(value, Iri::new(datatype.iri)?)
-                }
-            };
-            Ok(Object::Literal(literal))
-        }
-        rio_api::model::Term::Triple(_) => Err(ParserError::ParseError(
-            "RDF-star quoted triples not supported".into(),
-        )),
-    }
-}
-
-fn convert_graph_name(
-    graph_name: Option<rio_api::model::GraphName<'_>>,
-    blank_node_prefix: Option<&str>,
-) -> Result<Option<GraphName>, ParserError> {
-    match graph_name {
-        None => Ok(None),
-        Some(rio_api::model::GraphName::NamedNode(nn)) => {
-            Ok(Some(GraphName::Iri(Iri::new(nn.iri)?)))
-        }
-        Some(rio_api::model::GraphName::BlankNode(bn)) => {
-            let label = if let Some(prefix) = blank_node_prefix {
-                format!("{}_{}", prefix, bn.id)
-            } else {
-                bn.id.to_string()
-            };
-            Ok(Some(GraphName::BlankNode(BlankNode::new(label))))
-        }
-    }
-}
 
 /// Parse N-Quads from a string
 ///
@@ -271,6 +187,7 @@ pub fn parse_nquads_reader<R: BufRead>(reader: R) -> Result<Vec<Quad>, ParseErro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rdf::GraphName;
 
     #[test]
     fn test_parse_quad_without_graph() {

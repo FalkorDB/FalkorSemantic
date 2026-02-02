@@ -684,10 +684,10 @@ mod tests {
 
     #[test]
     fn test_numbers() {
-        let mut lexer = Lexer::new("42 3.14 1.5e10");
+        let mut lexer = Lexer::new("42 3.25 1.5e10");
         let tokens = lexer.tokenize().unwrap();
         assert_eq!(tokens[0].kind, TokenKind::Integer(42));
-        assert_eq!(tokens[1].kind, TokenKind::Decimal(3.14));
+        assert_eq!(tokens[1].kind, TokenKind::Decimal(3.25));
         assert_eq!(tokens[2].kind, TokenKind::Double(1.5e10));
     }
 

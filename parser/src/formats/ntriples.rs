@@ -8,33 +8,8 @@ use std::io::BufRead;
 use rio_api::parser::TriplesParser;
 use rio_turtle::NTriplesParser;
 
-use crate::rdf::{BlankNode, Iri, Literal, Object, Subject, Triple};
-use crate::ParserError;
-
-/// Error information with location details
-#[derive(Debug, Clone)]
-pub struct ParseErrorInfo {
-    /// The error message
-    pub message: String,
-    /// Line number where the error occurred (1-indexed)
-    pub line: Option<u64>,
-    /// Column number where the error occurred (1-indexed)
-    pub column: Option<u64>,
-}
-
-impl std::fmt::Display for ParseErrorInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match (self.line, self.column) {
-            (Some(line), Some(col)) => {
-                write!(f, "{}:{}: {}", line, col, self.message)
-            }
-            (Some(line), None) => {
-                write!(f, "line {}: {}", line, self.message)
-            }
-            _ => write!(f, "{}", self.message),
-        }
-    }
-}
+use super::common::{parser_error_to_turtle_error, ParseErrorInfo, RioConverter, TripleParser};
+use crate::rdf::Triple;
 
 /// Result of parsing a single triple
 pub type ParseTripleResult = std::result::Result<Triple, ParseErrorInfo>;
@@ -66,32 +41,33 @@ impl NTriplesReader {
         self
     }
 
+    /// Get the configured converter
+    fn converter(&self) -> RioConverter {
+        match &self.blank_node_prefix {
+            Some(prefix) => RioConverter::with_blank_node_prefix(prefix.clone()),
+            None => RioConverter::new(),
+        }
+    }
+
     /// Parse all triples from a reader into a vector
     ///
     /// Returns an error on the first parse failure.
     pub fn parse_all<R: BufRead>(&self, reader: R) -> Result<Vec<Triple>, ParseErrorInfo> {
         let mut triples = Vec::new();
         let mut parser = NTriplesParser::new(reader);
-        let blank_node_prefix = self.blank_node_prefix.as_deref();
+        let converter = self.converter();
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut |rio_triple| {
-                match convert_triple(rio_triple, blank_node_prefix) {
+                match converter.convert_triple(rio_triple) {
                     Ok(triple) => {
                         triples.push(triple);
                         Ok(())
                     }
-                    Err(e) => Err(rio_turtle::TurtleError::from(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        e.to_string(),
-                    ))),
+                    Err(e) => Err(parser_error_to_turtle_error(e)),
                 }
             }) {
-                return Err(ParseErrorInfo {
-                    message: e.to_string(),
-                    line: None,
-                    column: None,
-                });
+                return Err(ParseErrorInfo::new(e.to_string()));
             }
         }
 
@@ -114,23 +90,35 @@ impl NTriplesReader {
     }
 }
 
+impl TripleParser for NTriplesReader {
+    fn parse_str(&self, input: &str) -> Result<Vec<Triple>, ParseErrorInfo> {
+        self.parse_all_str(input)
+    }
+
+    fn parse_read<R: BufRead>(&self, reader: R) -> Result<Vec<Triple>, ParseErrorInfo> {
+        self.parse_all(reader)
+    }
+}
+
 /// Collects triples from a parser
 pub struct TripleCollector<R: BufRead> {
     parser: NTriplesParser<R>,
-    blank_node_prefix: Option<String>,
+    converter: RioConverter,
     pending: Vec<Triple>,
     finished: bool,
-    error: Option<ParseErrorInfo>,
 }
 
 impl<R: BufRead> TripleCollector<R> {
     fn new(reader: R, blank_node_prefix: Option<String>) -> Self {
+        let converter = match blank_node_prefix {
+            Some(prefix) => RioConverter::with_blank_node_prefix(prefix),
+            None => RioConverter::new(),
+        };
         Self {
             parser: NTriplesParser::new(reader),
-            blank_node_prefix,
+            converter,
             pending: Vec::new(),
             finished: false,
-            error: None,
         }
     }
 }
@@ -144,30 +132,21 @@ impl<R: BufRead> Iterator for TripleCollector<R> {
             return Some(Ok(self.pending.remove(0)));
         }
 
-        // Return error if we have one
-        if let Some(err) = self.error.take() {
-            self.finished = true;
-            return Some(Err(err));
-        }
-
         if self.finished || self.parser.is_end() {
             return None;
         }
 
         // Parse the next step
-        let blank_node_prefix = self.blank_node_prefix.as_deref();
         let pending = &mut self.pending;
+        let converter = &self.converter;
 
         match self.parser.parse_step(&mut |rio_triple| {
-            match convert_triple(rio_triple, blank_node_prefix) {
+            match converter.convert_triple(rio_triple) {
                 Ok(triple) => {
                     pending.push(triple);
                     Ok(())
                 }
-                Err(e) => Err(rio_turtle::TurtleError::from(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    e.to_string(),
-                ))),
+                Err(e) => Err(parser_error_to_turtle_error(e)),
             }
         }) {
             Ok(()) => {
@@ -183,11 +162,7 @@ impl<R: BufRead> Iterator for TripleCollector<R> {
             }
             Err(e) => {
                 self.finished = true;
-                Some(Err(ParseErrorInfo {
-                    message: e.to_string(),
-                    line: None,
-                    column: None,
-                }))
+                Some(Err(ParseErrorInfo::new(e.to_string())))
             }
         }
     }
@@ -195,73 +170,6 @@ impl<R: BufRead> Iterator for TripleCollector<R> {
 
 /// Convenience type alias for the iterator
 pub type NTriplesIterator<'a, R> = TripleCollector<R>;
-
-fn convert_triple(
-    rio_triple: rio_api::model::Triple<'_>,
-    blank_node_prefix: Option<&str>,
-) -> Result<Triple, ParserError> {
-    let subject = convert_subject(rio_triple.subject, blank_node_prefix)?;
-    let predicate = convert_predicate(rio_triple.predicate)?;
-    let object = convert_object(rio_triple.object, blank_node_prefix)?;
-    Ok(Triple::new(subject, predicate, object))
-}
-
-fn convert_subject(
-    subject: rio_api::model::Subject<'_>,
-    blank_node_prefix: Option<&str>,
-) -> Result<Subject, ParserError> {
-    match subject {
-        rio_api::model::Subject::NamedNode(nn) => Ok(Subject::Iri(Iri::new(nn.iri)?)),
-        rio_api::model::Subject::BlankNode(bn) => {
-            let label = if let Some(prefix) = blank_node_prefix {
-                format!("{}_{}", prefix, bn.id)
-            } else {
-                bn.id.to_string()
-            };
-            Ok(Subject::BlankNode(BlankNode::new(label)))
-        }
-        rio_api::model::Subject::Triple(_) => Err(ParserError::ParseError(
-            "RDF-star quoted triples not supported".into(),
-        )),
-    }
-}
-
-fn convert_predicate(predicate: rio_api::model::NamedNode<'_>) -> Result<Iri, ParserError> {
-    Iri::new(predicate.iri)
-}
-
-fn convert_object(
-    object: rio_api::model::Term<'_>,
-    blank_node_prefix: Option<&str>,
-) -> Result<Object, ParserError> {
-    match object {
-        rio_api::model::Term::NamedNode(nn) => Ok(Object::Iri(Iri::new(nn.iri)?)),
-        rio_api::model::Term::BlankNode(bn) => {
-            let label = if let Some(prefix) = blank_node_prefix {
-                format!("{}_{}", prefix, bn.id)
-            } else {
-                bn.id.to_string()
-            };
-            Ok(Object::BlankNode(BlankNode::new(label)))
-        }
-        rio_api::model::Term::Literal(lit) => {
-            let literal = match lit {
-                rio_api::model::Literal::Simple { value } => Literal::new(value),
-                rio_api::model::Literal::LanguageTaggedString { value, language } => {
-                    Literal::with_language(value, language)
-                        .map_err(|e| ParserError::ParseError(e.to_string()))?
-                }
-                rio_api::model::Literal::Typed { value, datatype } => {
-                    Literal::with_datatype(value, Iri::new(datatype.iri)?)
-                }
-            };
-            Ok(Object::Literal(literal))
-        }
-        rio_api::model::Term::Triple(_) => Err(ParserError::ParseError(
-            "RDF-star quoted triples not supported".into(),
-        )),
-    }
-}
 
 /// Parse N-Triples from a string
 ///

@@ -132,8 +132,10 @@ impl ContextResolver {
         obj: &serde_json::Map<String, Value>,
         base_iri: Option<&str>,
     ) -> JsonLdResult<ResolvedContext> {
-        let mut result = ResolvedContext::default();
-        result.base = base_iri.map(String::from);
+        let mut result = ResolvedContext {
+            base: base_iri.map(String::from),
+            ..Default::default()
+        };
 
         for (key, value) in obj {
             match key.as_str() {
