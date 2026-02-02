@@ -3,6 +3,8 @@
 //! This is the main Redis module that integrates the parser and mapper
 //! to provide semantic graph capabilities.
 
+mod commands;
+
 use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, Status};
 
 /// Initialize the module with Redis
@@ -35,5 +37,6 @@ redis_module! {
     init: init,
     commands: [
         ["semantic.parse", semantic_parse, "write", 1, 1, 1],
+        ["rdf.insert", commands::rdf_insert, "write", 2, -1, 1],
     ],
 }
