@@ -12,6 +12,12 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 log.workspace = true
+json-ld.workspace = true
+rdf-types.workspace = true
+locspan.workspace = true
+iref.workspace = true
+static-iref.workspace = true
+contextual.workspace = true
 
 # RDF parsing
 rio_api = "0.8"
