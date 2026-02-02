@@ -27,8 +27,8 @@
 //! ```
 
 pub mod rdf;
-pub mod sparql;
 pub mod report;
+pub mod sparql;
 
 use std::path::PathBuf;
 

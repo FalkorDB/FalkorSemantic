@@ -3,8 +3,8 @@
 //! Implements CSV (RFC 4180) and TSV result formats for SPARQL:
 //! https://www.w3.org/TR/sparql11-results-csv-tsv/
 
-use std::io::Write;
 use super::{AskResult, ResultsResult, ResultsWriter, SelectResults, Term};
+use std::io::Write;
 
 /// Writer for CSV Results Format
 #[derive(Debug, Clone, Default)]

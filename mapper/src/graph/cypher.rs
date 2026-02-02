@@ -90,11 +90,7 @@ impl CypherGenerator {
             }
             Object::Literal(lit) => {
                 // Object is a literal - store as property on edge or as literal node
-                statements.push(self.generate_literal_edge(
-                    subject_var,
-                    &triple.predicate,
-                    lit,
-                ));
+                statements.push(self.generate_literal_edge(subject_var, &triple.predicate, lit));
             }
         }
 
@@ -163,7 +159,13 @@ impl CypherGenerator {
         )
     }
 
-    fn generate_edge(&self, from_var: &str, to_var: &str, predicate: &str, local_name: &str) -> String {
+    fn generate_edge(
+        &self,
+        from_var: &str,
+        to_var: &str,
+        predicate: &str,
+        local_name: &str,
+    ) -> String {
         let edge_type = sanitize_identifier(local_name);
         format!(
             "{} ({})-[:{}{{predicate: '{}'}}]->({})",

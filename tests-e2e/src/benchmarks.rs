@@ -135,7 +135,10 @@ impl BenchRedisServer {
 
         if redis_is_available(port) {
             if Self::verify_module_loaded(port) {
-                return Ok(Self { process: None, port });
+                return Ok(Self {
+                    process: None,
+                    port,
+                });
             } else {
                 return Err(format!(
                     "Redis is running on port {} but FalkorSemantic module is not loaded",
@@ -186,7 +189,10 @@ impl BenchRedisServer {
                 ));
             }
             child.kill().ok();
-            return Err(format!("Redis failed to start within {:?}", REDIS_STARTUP_TIMEOUT));
+            return Err(format!(
+                "Redis failed to start within {:?}",
+                REDIS_STARTUP_TIMEOUT
+            ));
         }
 
         Ok(Self {
@@ -205,7 +211,8 @@ impl BenchRedisServer {
             Err(_) => return false,
         };
 
-        let result: RedisResult<Vec<redis::Value>> = redis::cmd("MODULE").arg("LIST").query(&mut con);
+        let result: RedisResult<Vec<redis::Value>> =
+            redis::cmd("MODULE").arg("LIST").query(&mut con);
         match result {
             Ok(modules) => {
                 for module in modules {
@@ -275,13 +282,20 @@ impl BenchContext {
     fn cleanup_graph(&mut self, graph_key: &str) {
         let _ = redis::cmd("DEL").arg(graph_key).query::<i64>(self.conn());
         // Also try to delete any FalkorDB graph
-        let _ = redis::cmd("GRAPH.DELETE").arg(graph_key).query::<String>(self.conn());
+        let _ = redis::cmd("GRAPH.DELETE")
+            .arg(graph_key)
+            .query::<String>(self.conn());
     }
 }
 
 /// Generate N-Triples data for a given number of entities
-fn generate_ntriples(entity_count: usize, properties_per_entity: usize, relationships_per_entity: usize) -> String {
-    let mut triples = Vec::with_capacity(entity_count * (1 + properties_per_entity + relationships_per_entity));
+fn generate_ntriples(
+    entity_count: usize,
+    properties_per_entity: usize,
+    relationships_per_entity: usize,
+) -> String {
+    let mut triples =
+        Vec::with_capacity(entity_count * (1 + properties_per_entity + relationships_per_entity));
 
     for i in 0..entity_count {
         // Type triple
@@ -293,7 +307,7 @@ fn generate_ntriples(entity_count: usize, properties_per_entity: usize, relation
         // Property triples
         for p in 0..properties_per_entity {
             triples.push(format!(
-                "<http://example.org/entity/{}> <http://example.org/prop{}> \"value_{}_{}\""  ,
+                "<http://example.org/entity/{}> <http://example.org/prop{}> \"value_{}_{}\"",
                 i, p, i, p
             ));
         }
@@ -353,7 +367,12 @@ mod bulk_insert_benchmarks {
     use super::*;
 
     /// Benchmark helper for bulk insert
-    fn benchmark_bulk_insert(ctx: &mut BenchContext, name: &str, triple_count: usize, batch_size: usize) -> BenchmarkResult {
+    fn benchmark_bulk_insert(
+        ctx: &mut BenchContext,
+        name: &str,
+        triple_count: usize,
+        batch_size: usize,
+    ) -> BenchmarkResult {
         let graph_key = format!("bench_{}", name.replace(" ", "_").to_lowercase());
         ctx.cleanup_graph(&graph_key);
 
@@ -364,7 +383,10 @@ mod bulk_insert_benchmarks {
         let actual_triple_count = data.lines().count();
 
         println!("\n=== {} ===", name);
-        println!("Generating {} triples ({} entities)...", actual_triple_count, entity_count);
+        println!(
+            "Generating {} triples ({} entities)...",
+            actual_triple_count, entity_count
+        );
 
         let start = Instant::now();
 
@@ -482,7 +504,10 @@ mod query_benchmarks {
         let data = generate_social_network(person_count, 10);
         let triple_count = data.lines().count();
 
-        println!("Setting up graph with {} people ({} triples)...", person_count, triple_count);
+        println!(
+            "Setting up graph with {} people ({} triples)...",
+            person_count, triple_count
+        );
 
         let start = Instant::now();
 
@@ -500,7 +525,13 @@ mod query_benchmarks {
     }
 
     /// Run a query multiple times and return average duration
-    fn benchmark_query(ctx: &mut BenchContext, name: &str, graph_key: &str, query: &str, iterations: usize) -> BenchmarkResult {
+    fn benchmark_query(
+        ctx: &mut BenchContext,
+        name: &str,
+        graph_key: &str,
+        query: &str,
+        iterations: usize,
+    ) -> BenchmarkResult {
         println!("\n=== {} ===", name);
         println!("Query: {}", query);
         println!("Iterations: {}", iterations);
@@ -696,7 +727,12 @@ mod cypher_comparison {
     use super::*;
 
     /// Set up the same data in both RDF and native Cypher formats
-    fn setup_comparison_graph(ctx: &mut BenchContext, rdf_graph: &str, cypher_graph: &str, person_count: usize) {
+    fn setup_comparison_graph(
+        ctx: &mut BenchContext,
+        rdf_graph: &str,
+        cypher_graph: &str,
+        person_count: usize,
+    ) {
         ctx.cleanup_graph(rdf_graph);
         ctx.cleanup_graph(cypher_graph);
 
@@ -721,7 +757,9 @@ mod cypher_comparison {
         for i in 0..person_count {
             let cypher = format!(
                 "CREATE (p:Person {{id: {}, name: 'Person {}', age: {}}})",
-                i, i, 18 + (i % 62)
+                i,
+                i,
+                18 + (i % 62)
             );
             let _: RedisResult<redis::Value> = redis::cmd("GRAPH.QUERY")
                 .arg(cypher_graph)
@@ -743,10 +781,12 @@ mod cypher_comparison {
         for chunk in rels.chunks(1000) {
             let merges: Vec<String> = chunk
                 .iter()
-                .map(|(from, to)| format!(
+                .map(|(from, to)| {
+                    format!(
                     "MATCH (a:Person {{id: {}}}), (b:Person {{id: {}}}) CREATE (a)-[:KNOWS]->(b)",
                     from, to
-                ))
+                )
+                })
                 .collect();
 
             for merge in merges {
@@ -761,7 +801,12 @@ mod cypher_comparison {
     }
 
     /// Benchmark a SPARQL query
-    fn bench_sparql(ctx: &mut BenchContext, graph_key: &str, query: &str, iterations: usize) -> Duration {
+    fn bench_sparql(
+        ctx: &mut BenchContext,
+        graph_key: &str,
+        query: &str,
+        iterations: usize,
+    ) -> Duration {
         let start = Instant::now();
         for _ in 0..iterations {
             let _: RedisResult<redis::Value> = redis::cmd("RDF.QUERY")
@@ -773,7 +818,12 @@ mod cypher_comparison {
     }
 
     /// Benchmark a Cypher query
-    fn bench_cypher(ctx: &mut BenchContext, graph_key: &str, query: &str, iterations: usize) -> Duration {
+    fn bench_cypher(
+        ctx: &mut BenchContext,
+        graph_key: &str,
+        query: &str,
+        iterations: usize,
+    ) -> Duration {
         let start = Instant::now();
         for _ in 0..iterations {
             let _: RedisResult<redis::Value> = redis::cmd("GRAPH.QUERY")
@@ -807,33 +857,68 @@ mod cypher_comparison {
         let cypher_time = bench_cypher(&mut ctx, cypher_graph, cypher_simple, iterations);
 
         println!("\n--- Simple Match (LIMIT 100) ---");
-        println!("SPARQL: {:?} ({:.2} queries/sec)", sparql_time, iterations as f64 / sparql_time.as_secs_f64());
-        println!("Cypher: {:?} ({:.2} queries/sec)", cypher_time, iterations as f64 / cypher_time.as_secs_f64());
-        println!("Ratio: {:.2}x", sparql_time.as_secs_f64() / cypher_time.as_secs_f64());
+        println!(
+            "SPARQL: {:?} ({:.2} queries/sec)",
+            sparql_time,
+            iterations as f64 / sparql_time.as_secs_f64()
+        );
+        println!(
+            "Cypher: {:?} ({:.2} queries/sec)",
+            cypher_time,
+            iterations as f64 / cypher_time.as_secs_f64()
+        );
+        println!(
+            "Ratio: {:.2}x",
+            sparql_time.as_secs_f64() / cypher_time.as_secs_f64()
+        );
 
         // Test 2: Join (friend of friend)
         let sparql_join = "SELECT ?p1 ?p3 WHERE { ?p1 <http://xmlns.com/foaf/0.1/knows> ?p2 . ?p2 <http://xmlns.com/foaf/0.1/knows> ?p3 } LIMIT 100";
-        let cypher_join = "MATCH (p1:Person)-[:KNOWS]->(p2:Person)-[:KNOWS]->(p3:Person) RETURN p1, p3 LIMIT 100";
+        let cypher_join =
+            "MATCH (p1:Person)-[:KNOWS]->(p2:Person)-[:KNOWS]->(p3:Person) RETURN p1, p3 LIMIT 100";
 
         let sparql_time = bench_sparql(&mut ctx, rdf_graph, sparql_join, iterations);
         let cypher_time = bench_cypher(&mut ctx, cypher_graph, cypher_join, iterations);
 
         println!("\n--- 2-hop Join (friend of friend, LIMIT 100) ---");
-        println!("SPARQL: {:?} ({:.2} queries/sec)", sparql_time, iterations as f64 / sparql_time.as_secs_f64());
-        println!("Cypher: {:?} ({:.2} queries/sec)", cypher_time, iterations as f64 / cypher_time.as_secs_f64());
-        println!("Ratio: {:.2}x", sparql_time.as_secs_f64() / cypher_time.as_secs_f64());
+        println!(
+            "SPARQL: {:?} ({:.2} queries/sec)",
+            sparql_time,
+            iterations as f64 / sparql_time.as_secs_f64()
+        );
+        println!(
+            "Cypher: {:?} ({:.2} queries/sec)",
+            cypher_time,
+            iterations as f64 / cypher_time.as_secs_f64()
+        );
+        println!(
+            "Ratio: {:.2}x",
+            sparql_time.as_secs_f64() / cypher_time.as_secs_f64()
+        );
 
         // Test 3: Aggregate
-        let sparql_agg = "SELECT (COUNT(?p) AS ?count) WHERE { ?p a <http://xmlns.com/foaf/0.1/Person> }";
+        let sparql_agg =
+            "SELECT (COUNT(?p) AS ?count) WHERE { ?p a <http://xmlns.com/foaf/0.1/Person> }";
         let cypher_agg = "MATCH (p:Person) RETURN COUNT(p)";
 
         let sparql_time = bench_sparql(&mut ctx, rdf_graph, sparql_agg, iterations);
         let cypher_time = bench_cypher(&mut ctx, cypher_graph, cypher_agg, iterations);
 
         println!("\n--- COUNT Aggregate ---");
-        println!("SPARQL: {:?} ({:.2} queries/sec)", sparql_time, iterations as f64 / sparql_time.as_secs_f64());
-        println!("Cypher: {:?} ({:.2} queries/sec)", cypher_time, iterations as f64 / cypher_time.as_secs_f64());
-        println!("Ratio: {:.2}x", sparql_time.as_secs_f64() / cypher_time.as_secs_f64());
+        println!(
+            "SPARQL: {:?} ({:.2} queries/sec)",
+            sparql_time,
+            iterations as f64 / sparql_time.as_secs_f64()
+        );
+        println!(
+            "Cypher: {:?} ({:.2} queries/sec)",
+            cypher_time,
+            iterations as f64 / cypher_time.as_secs_f64()
+        );
+        println!(
+            "Ratio: {:.2}x",
+            sparql_time.as_secs_f64() / cypher_time.as_secs_f64()
+        );
 
         ctx.cleanup_graph(rdf_graph);
         ctx.cleanup_graph(cypher_graph);
@@ -950,7 +1035,8 @@ mod export_benchmarks {
 #[test]
 #[ignore]
 fn bench_summary() {
-    println!("
+    println!(
+        "
 ========================================
 FalkorSemantic Performance Benchmarks
 ========================================
@@ -982,5 +1068,6 @@ Run with:
 
 For specific benchmarks:
   cargo test --test benchmarks bench_insert_1m_triples -- --ignored --nocapture
-");
+"
+    );
 }

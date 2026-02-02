@@ -104,7 +104,11 @@ impl TriGSerializer {
     }
 
     /// Write graph opening
-    fn write_graph_open<W: Write>(&self, graph: &GraphName, writer: &mut W) -> SerializerResult<()> {
+    fn write_graph_open<W: Write>(
+        &self,
+        graph: &GraphName,
+        writer: &mut W,
+    ) -> SerializerResult<()> {
         match graph {
             GraphName::Iri(iri) => writeln!(writer, "GRAPH {} {{", self.compact_iri(iri.as_str()))?,
             GraphName::BlankNode(bn) => writeln!(writer, "GRAPH _:{} {{", bn.label())?,
@@ -128,7 +132,7 @@ impl TriGSerializer {
 impl QuadSerializer for TriGSerializer {
     fn serialize_quad<W: Write>(&mut self, quad: &Quad, writer: &mut W) -> SerializerResult<()> {
         use super::traits::TripleSerializer;
-        
+
         let graph_str = Self::graph_string(&quad.graph);
 
         // Check if we need to switch graphs
@@ -142,7 +146,7 @@ impl QuadSerializer for TriGSerializer {
                 // Default graph - no GRAPH block needed
                 self.current_graph = None;
             }
-            
+
             // Reset turtle serializer state for new graph
             self.turtle = TurtleSerializer::new();
             for (prefix, iri) in &self.prefixes {
@@ -156,16 +160,16 @@ impl QuadSerializer for TriGSerializer {
         }
 
         self.turtle.serialize_triple(&quad.triple, writer)?;
-        
+
         Ok(())
     }
 
     fn finish<W: Write>(&mut self, writer: &mut W) -> SerializerResult<()> {
         self.close_current_graph(writer)?;
-        
+
         // Finish default graph content
         self.turtle.finish(writer)?;
-        
+
         Ok(())
     }
 }
@@ -193,7 +197,10 @@ mod tests {
         serializer.finish(&mut output).unwrap();
 
         let result = String::from_utf8(output).unwrap();
-        assert!(!result.contains("GRAPH"), "Default graph should not have GRAPH block");
+        assert!(
+            !result.contains("GRAPH"),
+            "Default graph should not have GRAPH block"
+        );
         assert!(result.contains("<http://example.org/s>"));
     }
 
@@ -214,7 +221,10 @@ mod tests {
         serializer.finish(&mut output).unwrap();
 
         let result = String::from_utf8(output).unwrap();
-        assert!(result.contains("GRAPH <http://example.org/graph1>"), "Expected GRAPH block");
+        assert!(
+            result.contains("GRAPH <http://example.org/graph1>"),
+            "Expected GRAPH block"
+        );
         assert!(result.contains("{"), "Expected opening brace");
         assert!(result.contains("}"), "Expected closing brace");
     }
@@ -257,7 +267,7 @@ mod tests {
     fn test_with_prefixes() {
         let mut serializer = TriGSerializer::new();
         serializer.add_prefix("ex", "http://example.org/");
-        
+
         let quad = Quad::in_named_graph(
             Triple::new(
                 test_iri("http://example.org/s"),

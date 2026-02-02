@@ -59,15 +59,15 @@ impl NQuadsReader {
         let converter = self.converter();
 
         while !parser.is_end() {
-            if let Err(e) = parser.parse_step(&mut |rio_quad| {
-                match converter.convert_quad(rio_quad) {
+            if let Err(e) =
+                parser.parse_step(&mut |rio_quad| match converter.convert_quad(rio_quad) {
                     Ok(quad) => {
                         quads.push(quad);
                         Ok(())
                     }
                     Err(e) => Err(parser_error_to_turtle_error(e)),
-                }
-            }) {
+                })
+            {
                 return Err(ParseErrorInfo::new(e.to_string()));
             }
         }
@@ -141,15 +141,15 @@ impl<R: BufRead> Iterator for QuadCollector<R> {
         let pending = &mut self.pending;
         let converter = &self.converter;
 
-        match self.parser.parse_step(&mut |rio_quad| {
-            match converter.convert_quad(rio_quad) {
+        match self
+            .parser
+            .parse_step(&mut |rio_quad| match converter.convert_quad(rio_quad) {
                 Ok(quad) => {
                     pending.push(quad);
                     Ok(())
                 }
                 Err(e) => Err(parser_error_to_turtle_error(e)),
-            }
-        }) {
+            }) {
             Ok(()) => {
                 if !self.pending.is_empty() {
                     Some(Ok(self.pending.remove(0)))
@@ -191,8 +191,7 @@ mod tests {
 
     #[test]
     fn test_parse_quad_without_graph() {
-        let input =
-            r#"<http://example.org/s> <http://example.org/p> <http://example.org/o> ."#;
+        let input = r#"<http://example.org/s> <http://example.org/p> <http://example.org/o> ."#;
         let quads = parse_nquads(input).unwrap();
 
         assert_eq!(quads.len(), 1);
@@ -220,7 +219,8 @@ mod tests {
 
     #[test]
     fn test_parse_quad_with_blank_node_graph() {
-        let input = r#"<http://example.org/s> <http://example.org/p> <http://example.org/o> _:g1 ."#;
+        let input =
+            r#"<http://example.org/s> <http://example.org/p> <http://example.org/o> _:g1 ."#;
         let quads = parse_nquads(input).unwrap();
 
         assert_eq!(quads.len(), 1);
@@ -260,8 +260,7 @@ mod tests {
 
     #[test]
     fn test_parse_language_tagged_literal_in_quad() {
-        let input =
-            r#"<http://example.org/s> <http://example.org/p> "bonjour"@fr <http://example.org/g> ."#;
+        let input = r#"<http://example.org/s> <http://example.org/p> "bonjour"@fr <http://example.org/g> ."#;
         let quads = parse_nquads(input).unwrap();
 
         assert_eq!(quads.len(), 1);

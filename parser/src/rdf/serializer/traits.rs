@@ -10,7 +10,11 @@ use crate::rdf::{Quad, Triple};
 /// Trait for serializing individual RDF triples
 pub trait TripleSerializer {
     /// Serialize a single triple to the writer
-    fn serialize_triple<W: Write>(&mut self, triple: &Triple, writer: &mut W) -> SerializerResult<()>;
+    fn serialize_triple<W: Write>(
+        &mut self,
+        triple: &Triple,
+        writer: &mut W,
+    ) -> SerializerResult<()>;
 
     /// Serialize multiple triples to the writer
     fn serialize_triples<'a, W, I>(&mut self, triples: I, writer: &mut W) -> SerializerResult<()>
@@ -117,7 +121,10 @@ pub fn escape_json_string(s: &str) -> String {
 /// Check if a local name is valid for prefix compaction
 /// A valid local name contains only alphanumeric characters, underscores, and hyphens
 pub fn is_valid_local_name(local: &str) -> bool {
-    !local.is_empty() && local.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    !local.is_empty()
+        && local
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
 }
 
 #[cfg(test)]

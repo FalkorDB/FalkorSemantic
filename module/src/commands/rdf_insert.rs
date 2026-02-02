@@ -306,7 +306,13 @@ pub fn rdf_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     log::debug!("Generated {} Cypher statements", statements.len());
 
     // Execute Cypher against FalkorDB
-    let stats = execute_cypher(ctx, parsed_args.graph_key, &statements, parsed_args.atomic, triples_count);
+    let stats = execute_cypher(
+        ctx,
+        parsed_args.graph_key,
+        &statements,
+        parsed_args.atomic,
+        triples_count,
+    );
 
     log::debug!(
         "Insert complete: parsed={}, generated={}, executed={}, errors={}",

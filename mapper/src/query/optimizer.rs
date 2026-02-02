@@ -348,9 +348,7 @@ impl JoinOrderOptimizer {
             return candidates
                 .iter()
                 .enumerate()
-                .min_by(|(_, a), (_, b)| {
-                    a.selectivity.partial_cmp(&b.selectivity).unwrap()
-                })
+                .min_by(|(_, a), (_, b)| a.selectivity.partial_cmp(&b.selectivity).unwrap())
                 .map(|(i, _)| i)
                 .unwrap_or(0);
         }
@@ -360,10 +358,7 @@ impl JoinOrderOptimizer {
         let mut best_score = f64::MAX;
 
         for (i, cost) in candidates.iter().enumerate() {
-            let shared = cost
-                .bound_variables
-                .intersection(bound_vars)
-                .count();
+            let shared = cost.bound_variables.intersection(bound_vars).count();
 
             // Prefer patterns that share variables
             let join_factor = if shared > 0 { 0.1 } else { 1.0 };
@@ -462,7 +457,7 @@ mod tests {
 
         // Pattern with bound predicate should be more selective
         let patterns = vec![
-            make_pattern("?s", "?p", "?o"),                  // All variables
+            make_pattern("?s", "?p", "?o"),                       // All variables
             make_pattern("?s", "http://example.org/knows", "?o"), // Bound predicate
         ];
 

@@ -52,7 +52,10 @@ impl ResourceNode {
 
     /// Get the primary label for Cypher (first label or "Resource")
     pub fn primary_label(&self) -> &str {
-        self.labels.first().map(|s| s.as_str()).unwrap_or("Resource")
+        self.labels
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("Resource")
     }
 }
 
@@ -191,10 +194,7 @@ mod tests {
 
     #[test]
     fn test_edge() {
-        let edge = Edge::new(
-            "http://example.org/knows".to_string(),
-            "knows".to_string(),
-        );
+        let edge = Edge::new("http://example.org/knows".to_string(), "knows".to_string());
         assert_eq!(edge.edge_type(), "knows");
     }
 

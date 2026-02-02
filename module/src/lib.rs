@@ -11,7 +11,7 @@ use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, 
 fn init(_ctx: &Context, _args: &[RedisString]) -> Status {
     // Try to initialize logging, ignore if it fails
     let _ = env_logger::try_init();
-    
+
     Status::Ok
 }
 

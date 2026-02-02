@@ -270,7 +270,11 @@ fn build_where_condition(
             escape_cypher_string(id),
             var_name
         )),
-        PatternComponent::Literal { value, language, datatype } => {
+        PatternComponent::Literal {
+            value,
+            language,
+            datatype,
+        } => {
             let mut conditions = vec![format!(
                 "{}.value = '{}'",
                 var_name,
@@ -332,7 +336,10 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                 } else {
                     pred.clone()
                 };
-                where_conditions.push(format!("r.predicate = '{}'", escape_cypher_string(&expanded)));
+                where_conditions.push(format!(
+                    "r.predicate = '{}'",
+                    escape_cypher_string(&expanded)
+                ));
             }
         }
         // Object only
@@ -347,17 +354,26 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                     };
                     where_conditions.push(format!("o.uri = '{}'", escape_cypher_string(&expanded)));
                 }
-                PatternComponent::Literal { value, language, datatype } => {
+                PatternComponent::Literal {
+                    value,
+                    language,
+                    datatype,
+                } => {
                     where_conditions.push(format!("o.value = '{}'", escape_cypher_string(value)));
                     if let Some(lang) = language {
-                        where_conditions.push(format!("o.language = '{}'", escape_cypher_string(lang)));
+                        where_conditions
+                            .push(format!("o.language = '{}'", escape_cypher_string(lang)));
                     }
                     if let Some(dtype) = datatype {
-                        where_conditions.push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
+                        where_conditions
+                            .push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
                     }
                 }
                 PatternComponent::BlankNode(id) => {
-                    where_conditions.push(format!("o.uri = '{}' AND o.isBlank = true", escape_cypher_string(id)));
+                    where_conditions.push(format!(
+                        "o.uri = '{}' AND o.isBlank = true",
+                        escape_cypher_string(id)
+                    ));
                 }
                 PatternComponent::Wildcard => {}
             }
@@ -376,7 +392,10 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                 } else {
                     pred.clone()
                 };
-                where_conditions.push(format!("r.predicate = '{}'", escape_cypher_string(&expanded)));
+                where_conditions.push(format!(
+                    "r.predicate = '{}'",
+                    escape_cypher_string(&expanded)
+                ));
             }
         }
         // Subject and object
@@ -396,17 +415,26 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                     };
                     where_conditions.push(format!("o.uri = '{}'", escape_cypher_string(&expanded)));
                 }
-                PatternComponent::Literal { value, language, datatype } => {
+                PatternComponent::Literal {
+                    value,
+                    language,
+                    datatype,
+                } => {
                     where_conditions.push(format!("o.value = '{}'", escape_cypher_string(value)));
                     if let Some(lang) = language {
-                        where_conditions.push(format!("o.language = '{}'", escape_cypher_string(lang)));
+                        where_conditions
+                            .push(format!("o.language = '{}'", escape_cypher_string(lang)));
                     }
                     if let Some(dtype) = datatype {
-                        where_conditions.push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
+                        where_conditions
+                            .push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
                     }
                 }
                 PatternComponent::BlankNode(id) => {
-                    where_conditions.push(format!("o.uri = '{}' AND o.isBlank = true", escape_cypher_string(id)));
+                    where_conditions.push(format!(
+                        "o.uri = '{}' AND o.isBlank = true",
+                        escape_cypher_string(id)
+                    ));
                 }
                 PatternComponent::Wildcard => {}
             }
@@ -420,7 +448,10 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                 } else {
                     pred.clone()
                 };
-                where_conditions.push(format!("r.predicate = '{}'", escape_cypher_string(&expanded)));
+                where_conditions.push(format!(
+                    "r.predicate = '{}'",
+                    escape_cypher_string(&expanded)
+                ));
             }
             match &args.object {
                 PatternComponent::Iri(iri) => {
@@ -431,17 +462,26 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                     };
                     where_conditions.push(format!("o.uri = '{}'", escape_cypher_string(&expanded)));
                 }
-                PatternComponent::Literal { value, language, datatype } => {
+                PatternComponent::Literal {
+                    value,
+                    language,
+                    datatype,
+                } => {
                     where_conditions.push(format!("o.value = '{}'", escape_cypher_string(value)));
                     if let Some(lang) = language {
-                        where_conditions.push(format!("o.language = '{}'", escape_cypher_string(lang)));
+                        where_conditions
+                            .push(format!("o.language = '{}'", escape_cypher_string(lang)));
                     }
                     if let Some(dtype) = datatype {
-                        where_conditions.push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
+                        where_conditions
+                            .push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
                     }
                 }
                 PatternComponent::BlankNode(id) => {
-                    where_conditions.push(format!("o.uri = '{}' AND o.isBlank = true", escape_cypher_string(id)));
+                    where_conditions.push(format!(
+                        "o.uri = '{}' AND o.isBlank = true",
+                        escape_cypher_string(id)
+                    ));
                 }
                 PatternComponent::Wildcard => {}
             }
@@ -460,7 +500,10 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                 } else {
                     pred.clone()
                 };
-                where_conditions.push(format!("r.predicate = '{}'", escape_cypher_string(&expanded)));
+                where_conditions.push(format!(
+                    "r.predicate = '{}'",
+                    escape_cypher_string(&expanded)
+                ));
             }
             match &args.object {
                 PatternComponent::Iri(iri) => {
@@ -471,17 +514,26 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
                     };
                     where_conditions.push(format!("o.uri = '{}'", escape_cypher_string(&expanded)));
                 }
-                PatternComponent::Literal { value, language, datatype } => {
+                PatternComponent::Literal {
+                    value,
+                    language,
+                    datatype,
+                } => {
                     where_conditions.push(format!("o.value = '{}'", escape_cypher_string(value)));
                     if let Some(lang) = language {
-                        where_conditions.push(format!("o.language = '{}'", escape_cypher_string(lang)));
+                        where_conditions
+                            .push(format!("o.language = '{}'", escape_cypher_string(lang)));
                     }
                     if let Some(dtype) = datatype {
-                        where_conditions.push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
+                        where_conditions
+                            .push(format!("o.datatype = '{}'", escape_cypher_string(dtype)));
                     }
                 }
                 PatternComponent::BlankNode(id) => {
-                    where_conditions.push(format!("o.uri = '{}' AND o.isBlank = true", escape_cypher_string(id)));
+                    where_conditions.push(format!(
+                        "o.uri = '{}' AND o.isBlank = true",
+                        escape_cypher_string(id)
+                    ));
                 }
                 PatternComponent::Wildcard => {}
             }
@@ -622,7 +674,10 @@ mod tests {
 
     #[test]
     fn test_pattern_component_wildcard() {
-        assert_eq!(PatternComponent::parse("*").unwrap(), PatternComponent::Wildcard);
+        assert_eq!(
+            PatternComponent::parse("*").unwrap(),
+            PatternComponent::Wildcard
+        );
     }
 
     #[test]

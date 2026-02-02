@@ -3,8 +3,8 @@
 //! Implements the SPARQL Query Results JSON Format as per:
 //! https://www.w3.org/TR/sparql11-results-json/
 
-use std::io::Write;
 use super::{AskResult, ResultsError, ResultsResult, ResultsWriter, SelectResults, Term};
+use std::io::Write;
 
 /// Writer for SPARQL JSON Results Format
 #[derive(Debug, Clone, Default)]
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn test_select_with_bindings() {
         let mut results = SelectResults::with_variables(vec!["s".to_string(), "o".to_string()]);
-        
+
         let mut binding = Binding::new();
         binding.insert("s".to_string(), Term::iri("http://example.org/s1"));
         binding.insert("o".to_string(), Term::literal("hello"));
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn test_select_with_typed_literal() {
         let mut results = SelectResults::with_variables(vec!["x".to_string()]);
-        
+
         let mut binding = Binding::new();
         binding.insert(
             "x".to_string(),
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn test_select_with_lang_literal() {
         let mut results = SelectResults::with_variables(vec!["label".to_string()]);
-        
+
         let mut binding = Binding::new();
         binding.insert("label".to_string(), Term::lang_literal("hello", "en"));
         results.add_binding(binding);
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn test_select_with_blank_node() {
         let mut results = SelectResults::with_variables(vec!["x".to_string()]);
-        
+
         let mut binding = Binding::new();
         binding.insert("x".to_string(), Term::blank_node("b1"));
         results.add_binding(binding);
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn test_json_escaping() {
         let mut results = SelectResults::with_variables(vec!["x".to_string()]);
-        
+
         let mut binding = Binding::new();
         binding.insert("x".to_string(), Term::literal("hello\n\"world\""));
         results.add_binding(binding);

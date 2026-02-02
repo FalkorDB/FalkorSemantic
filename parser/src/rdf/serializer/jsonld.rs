@@ -95,9 +95,13 @@ impl JsonLdSerializer {
     }
 
     /// Get or create a node for a subject
-    fn get_or_create_node(&mut self, subject: &Subject, graph: Option<&GraphName>) -> &mut JsonLdNode {
+    fn get_or_create_node(
+        &mut self,
+        subject: &Subject,
+        graph: Option<&GraphName>,
+    ) -> &mut JsonLdNode {
         let subject_id = Self::subject_to_id(subject);
-        
+
         let nodes = if let Some(g) = graph {
             let graph_id = Self::graph_name_to_id(g);
             self.named_graphs.entry(graph_id).or_default()
@@ -105,11 +109,13 @@ impl JsonLdSerializer {
             &mut self.nodes
         };
 
-        nodes.entry(subject_id.clone()).or_insert_with(|| JsonLdNode {
-            id: Some(subject_id),
-            types: Vec::new(),
-            properties: HashMap::new(),
-        })
+        nodes
+            .entry(subject_id.clone())
+            .or_insert_with(|| JsonLdNode {
+                id: Some(subject_id),
+                types: Vec::new(),
+                properties: HashMap::new(),
+            })
     }
 
     /// Convert subject to string ID
@@ -146,7 +152,7 @@ impl JsonLdSerializer {
         if !self.use_context {
             return iri.to_string();
         }
-        
+
         for (prefix, namespace) in &self.prefixes {
             if iri.starts_with(namespace) {
                 let local = &iri[namespace.len()..];
@@ -164,15 +170,15 @@ impl JsonLdSerializer {
         let newline = if self.pretty { "\n" } else { "" };
 
         write!(writer, "{{")?;
-        
+
         // Write @context if using compact form
         if self.use_context && !self.prefixes.is_empty() {
             write!(writer, "{}{}\"@context\": {{", newline, indent)?;
-            
+
             let mut first = true;
             let mut prefixes: Vec<_> = self.prefixes.iter().collect();
             prefixes.sort_by_key(|(k, _)| k.as_str());
-            
+
             for (prefix, iri) in prefixes {
                 if !first {
                     write!(writer, ",")?;
@@ -181,34 +187,44 @@ impl JsonLdSerializer {
                 write!(writer, " \"{}\"", iri)?;
                 first = false;
             }
-            
+
             write!(writer, "{}{}}}", newline, indent)?;
         }
 
         // Write nodes
         let has_named_graphs = !self.named_graphs.is_empty();
-        
+
         if has_named_graphs {
             // Write as @graph array
             if self.use_context && !self.prefixes.is_empty() {
                 write!(writer, ",")?;
             }
             write!(writer, "{}{}\"@graph\": [", newline, indent)?;
-            
+
             // Write default graph nodes
             self.write_nodes_array(&self.nodes, writer, indent, newline, true)?;
-            
+
             // Write named graphs
             for (graph_id, nodes) in &self.named_graphs {
                 write!(writer, ",")?;
                 write!(writer, "{}{}{{", newline, indent)?;
-                write!(writer, "{}{}{}\"@id\": \"{}\",", newline, indent, indent, graph_id)?;
+                write!(
+                    writer,
+                    "{}{}{}\"@id\": \"{}\",",
+                    newline, indent, indent, graph_id
+                )?;
                 write!(writer, "{}{}{}\"@graph\": [", newline, indent, indent)?;
-                self.write_nodes_array(nodes, writer, &format!("{}{}", indent, indent), newline, true)?;
+                self.write_nodes_array(
+                    nodes,
+                    writer,
+                    &format!("{}{}", indent, indent),
+                    newline,
+                    true,
+                )?;
                 write!(writer, "{}{}{}]", newline, indent, indent)?;
                 write!(writer, "{}{}}}", newline, indent)?;
             }
-            
+
             write!(writer, "{}{}]", newline, indent)?;
         } else if !self.nodes.is_empty() {
             // Single graph - write nodes directly or as @graph
@@ -236,7 +252,7 @@ impl JsonLdSerializer {
     }
 
     /// Write an array of nodes
-    /// 
+    ///
     /// # Arguments
     /// * `skip_first_separator` - If true, skip the comma before the first node (the array opening bracket was just written)
     fn write_nodes_array<W: Write>(
@@ -248,10 +264,10 @@ impl JsonLdSerializer {
         skip_first_separator: bool,
     ) -> SerializerResult<()> {
         let mut is_first = skip_first_separator;
-        
+
         let mut sorted_nodes: Vec<_> = nodes.iter().collect();
         sorted_nodes.sort_by_key(|(k, _)| k.as_str());
-        
+
         for (_, node) in sorted_nodes {
             if !is_first {
                 write!(writer, ",")?;
@@ -261,7 +277,7 @@ impl JsonLdSerializer {
             write!(writer, "{}{}}}", newline, indent)?;
             is_first = false;
         }
-        
+
         Ok(())
     }
 
@@ -280,7 +296,13 @@ impl JsonLdSerializer {
         // Write @id
         if include_id {
             if let Some(ref id) = node.id {
-                write!(writer, "{}{}\"@id\": \"{}\"", newline, inner_indent, escape_json_string(id))?;
+                write!(
+                    writer,
+                    "{}{}\"@id\": \"{}\"",
+                    newline,
+                    inner_indent,
+                    escape_json_string(id)
+                )?;
                 first = false;
             }
         }
@@ -309,15 +331,21 @@ impl JsonLdSerializer {
         // Write properties
         let mut sorted_props: Vec<_> = node.properties.iter().collect();
         sorted_props.sort_by_key(|(k, _)| k.as_str());
-        
+
         for (predicate, values) in sorted_props {
             if !first {
                 write!(writer, ",")?;
             }
-            
+
             let key = self.compact_iri(predicate);
-            write!(writer, "{}{}\"{}\":", newline, inner_indent, escape_json_string(&key))?;
-            
+            write!(
+                writer,
+                "{}{}\"{}\":",
+                newline,
+                inner_indent,
+                escape_json_string(&key)
+            )?;
+
             if values.len() == 1 {
                 write!(writer, " ")?;
                 self.write_value(&values[0], writer)?;
@@ -332,7 +360,7 @@ impl JsonLdSerializer {
                 }
                 write!(writer, " ]")?;
             }
-            
+
             first = false;
         }
 
@@ -347,10 +375,18 @@ impl JsonLdSerializer {
                 if compacted == *id {
                     write!(writer, "{{\"@id\": \"{}\"}}", escape_json_string(id))?;
                 } else {
-                    write!(writer, "{{\"@id\": \"{}\"}}", escape_json_string(&compacted))?;
+                    write!(
+                        writer,
+                        "{{\"@id\": \"{}\"}}",
+                        escape_json_string(&compacted)
+                    )?;
                 }
             }
-            JsonLdValue::Literal { value, datatype, language } => {
+            JsonLdValue::Literal {
+                value,
+                datatype,
+                language,
+            } => {
                 if language.is_some() || datatype.is_some() {
                     write!(writer, "{{\"@value\": \"{}\"", escape_json_string(value))?;
                     if let Some(lang) = language {
@@ -377,9 +413,13 @@ impl JsonLdSerializer {
 }
 
 impl TripleSerializer for JsonLdSerializer {
-    fn serialize_triple<W: Write>(&mut self, triple: &Triple, _writer: &mut W) -> SerializerResult<()> {
+    fn serialize_triple<W: Write>(
+        &mut self,
+        triple: &Triple,
+        _writer: &mut W,
+    ) -> SerializerResult<()> {
         let node = self.get_or_create_node(&triple.subject, None);
-        
+
         // Handle rdf:type specially
         if triple.predicate.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
             if let Object::Iri(type_iri) = &triple.object {
@@ -387,15 +427,12 @@ impl TripleSerializer for JsonLdSerializer {
                 return Ok(());
             }
         }
-        
+
         let predicate = triple.predicate.as_str().to_string();
         let value = Self::object_to_value(&triple.object);
-        
-        node.properties
-            .entry(predicate)
-            .or_default()
-            .push(value);
-        
+
+        node.properties.entry(predicate).or_default().push(value);
+
         Ok(())
     }
 
@@ -407,7 +444,7 @@ impl TripleSerializer for JsonLdSerializer {
 impl QuadSerializer for JsonLdSerializer {
     fn serialize_quad<W: Write>(&mut self, quad: &Quad, _writer: &mut W) -> SerializerResult<()> {
         let node = self.get_or_create_node(&quad.triple.subject, quad.graph.as_ref());
-        
+
         // Handle rdf:type specially
         if quad.triple.predicate.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
             if let Object::Iri(type_iri) = &quad.triple.object {
@@ -415,15 +452,12 @@ impl QuadSerializer for JsonLdSerializer {
                 return Ok(());
             }
         }
-        
+
         let predicate = quad.triple.predicate.as_str().to_string();
         let value = Self::object_to_value(&quad.triple.object);
-        
-        node.properties
-            .entry(predicate)
-            .or_default()
-            .push(value);
-        
+
+        node.properties.entry(predicate).or_default().push(value);
+
         Ok(())
     }
 
@@ -445,7 +479,7 @@ mod tests {
     fn test_simple_triple() {
         let mut serializer = JsonLdSerializer::new();
         serializer.use_context = false;
-        
+
         let triple = Triple::new(
             test_iri("http://example.org/person/1"),
             test_iri("http://example.org/name"),
@@ -466,7 +500,7 @@ mod tests {
     fn test_with_context() {
         let mut serializer = JsonLdSerializer::new();
         serializer.add_prefix("ex", "http://example.org/");
-        
+
         let triple = Triple::new(
             test_iri("http://example.org/person/1"),
             test_iri("http://example.org/name"),
@@ -486,7 +520,7 @@ mod tests {
     fn test_rdf_type() {
         let mut serializer = JsonLdSerializer::new();
         serializer.use_context = false;
-        
+
         let triple = Triple::new(
             test_iri("http://example.org/person/1"),
             test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
@@ -506,7 +540,7 @@ mod tests {
     fn test_named_graph() {
         let mut serializer = JsonLdSerializer::new();
         serializer.use_context = false;
-        
+
         let quad = Quad::in_named_graph(
             Triple::new(
                 test_iri("http://example.org/s"),
@@ -529,7 +563,7 @@ mod tests {
     fn test_language_tag() {
         let mut serializer = JsonLdSerializer::new();
         serializer.use_context = false;
-        
+
         let triple = Triple::new(
             test_iri("http://example.org/thing"),
             test_iri("http://example.org/label"),
@@ -550,7 +584,7 @@ mod tests {
     fn test_typed_literal() {
         let mut serializer = JsonLdSerializer::new();
         serializer.use_context = false;
-        
+
         let triple = Triple::new(
             test_iri("http://example.org/thing"),
             test_iri("http://example.org/count"),

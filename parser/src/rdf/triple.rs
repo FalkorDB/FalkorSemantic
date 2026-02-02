@@ -166,7 +166,11 @@ pub struct Triple {
 
 impl Triple {
     /// Create a new triple
-    pub fn new(subject: impl Into<Subject>, predicate: Predicate, object: impl Into<Object>) -> Self {
+    pub fn new(
+        subject: impl Into<Subject>,
+        predicate: Predicate,
+        object: impl Into<Object>,
+    ) -> Self {
         Self {
             subject: subject.into(),
             predicate,
@@ -383,10 +387,7 @@ impl TriplePattern {
 
     /// Check if this pattern matches a given triple
     pub fn matches(&self, triple: &Triple) -> bool {
-        let subject_matches = self
-            .subject
-            .as_ref()
-            .map_or(true, |s| s == &triple.subject);
+        let subject_matches = self.subject.as_ref().map_or(true, |s| s == &triple.subject);
         let predicate_matches = self
             .predicate
             .as_ref()

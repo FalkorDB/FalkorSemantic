@@ -2,8 +2,8 @@
 //!
 //! Handles @context processing including embedded contexts and base IRI resolution.
 
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 use super::error::{JsonLdError, JsonLdResult};
 
@@ -87,7 +87,11 @@ impl ContextResolver {
     }
 
     /// Resolve a @context value
-    pub fn resolve(&mut self, context: &Value, base_iri: Option<&str>) -> JsonLdResult<ResolvedContext> {
+    pub fn resolve(
+        &mut self,
+        context: &Value,
+        base_iri: Option<&str>,
+    ) -> JsonLdResult<ResolvedContext> {
         match context {
             Value::Null => Ok(ResolvedContext::default()),
             Value::String(url) => {
@@ -107,7 +111,7 @@ impl ContextResolver {
         base_iri: Option<&str>,
     ) -> JsonLdResult<ResolvedContext> {
         let mut result = ResolvedContext::default();
-        
+
         for ctx in contexts {
             let resolved = self.resolve(ctx, base_iri)?;
             // Merge contexts - later contexts override earlier ones
@@ -122,7 +126,7 @@ impl ContextResolver {
                 result.language = resolved.language;
             }
         }
-        
+
         Ok(result)
     }
 
@@ -220,12 +224,12 @@ impl ContextResolver {
                     .and_then(|v| v.as_str())
                     .and_then(ContainerType::from_str);
 
-                let language = obj.get("@language").and_then(|v| v.as_str()).map(String::from);
-
-                let reverse = obj
-                    .get("@reverse")
+                let language = obj
+                    .get("@language")
                     .and_then(|v| v.as_str())
-                    .is_some();
+                    .map(String::from);
+
+                let reverse = obj.get("@reverse").and_then(|v| v.as_str()).is_some();
 
                 Ok(TermDefinition {
                     iri: id,
@@ -308,8 +312,14 @@ mod tests {
         });
 
         let resolved = resolver.resolve(&context, None).unwrap();
-        assert_eq!(resolved.terms.get("name").unwrap().iri, "http://schema.org/name");
-        assert_eq!(resolved.terms.get("homepage").unwrap().iri, "http://schema.org/url");
+        assert_eq!(
+            resolved.terms.get("name").unwrap().iri,
+            "http://schema.org/name"
+        );
+        assert_eq!(
+            resolved.terms.get("homepage").unwrap().iri,
+            "http://schema.org/url"
+        );
     }
 
     #[test]
@@ -322,7 +332,10 @@ mod tests {
 
         let resolved = resolver.resolve(&context, None).unwrap();
         assert_eq!(resolved.vocab, Some("http://schema.org/".to_string()));
-        assert_eq!(resolved.terms.get("name").unwrap().iri, "http://xmlns.com/foaf/0.1/name");
+        assert_eq!(
+            resolved.terms.get("name").unwrap().iri,
+            "http://xmlns.com/foaf/0.1/name"
+        );
     }
 
     #[test]
@@ -350,7 +363,10 @@ mod tests {
         });
 
         let resolved = resolver.resolve(&context, None).unwrap();
-        assert_eq!(resolved.terms.get("name").unwrap().iri, "http://xmlns.com/foaf/0.1/name");
+        assert_eq!(
+            resolved.terms.get("name").unwrap().iri,
+            "http://xmlns.com/foaf/0.1/name"
+        );
     }
 
     #[test]

@@ -361,7 +361,10 @@ impl StatisticsCollector {
 
         // Calculate average degrees
         if subjects > 0 {
-            stats.set_avg_degrees(count as f64 / subjects as f64, count as f64 / objects as f64);
+            stats.set_avg_degrees(
+                count as f64 / subjects as f64,
+                count as f64 / objects as f64,
+            );
         }
 
         stats

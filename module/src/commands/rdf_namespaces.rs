@@ -102,10 +102,10 @@ fn namespace_pattern(graph_key: &str) -> String {
 /// List all namespace prefixes for a graph
 fn list_namespaces(ctx: &Context, graph_key: &str) -> RedisResult {
     let pattern = namespace_pattern(graph_key);
-    
+
     // Use KEYS to find all namespace keys (SCAN would be better for large datasets)
     let keys_result = ctx.call("KEYS", &[&pattern])?;
-    
+
     let keys = match keys_result {
         RedisValue::Array(arr) => arr,
         _ => return Ok(RedisValue::Array(vec![])),
@@ -118,10 +118,10 @@ fn list_namespaces(ctx: &Context, graph_key: &str) -> RedisResult {
         if let RedisValue::SimpleString(key_str) = key {
             // Extract prefix from key
             let prefix = &key_str[prefix_offset..];
-            
+
             // Get the URI value
             let uri_result = ctx.call("GET", &[&key_str])?;
-            
+
             if let RedisValue::SimpleString(uri) = uri_result {
                 namespaces.push(RedisValue::Array(vec![
                     RedisValue::SimpleString(prefix.to_string()),
@@ -141,11 +141,16 @@ fn add_namespace(ctx: &Context, graph_key: &str, prefix: &str, uri: &str) -> Red
     validate_uri(uri).map_err(|e| RedisError::String(format!("Invalid URI: {}", e)))?;
 
     let key = namespace_key(graph_key, prefix);
-    
+
     // Store the mapping
     ctx.call("SET", &[&key, uri])?;
 
-    log::debug!("Added namespace: {} -> {} (graph: {})", prefix, uri, graph_key);
+    log::debug!(
+        "Added namespace: {} -> {} (graph: {})",
+        prefix,
+        uri,
+        graph_key
+    );
 
     Ok(RedisValue::SimpleStringStatic("OK"))
 }
@@ -153,7 +158,7 @@ fn add_namespace(ctx: &Context, graph_key: &str, prefix: &str, uri: &str) -> Red
 /// Remove a namespace prefix mapping
 fn remove_namespace(ctx: &Context, graph_key: &str, prefix: &str) -> RedisResult {
     let key = namespace_key(graph_key, prefix);
-    
+
     // Check if the key exists
     let exists_result = ctx.call("EXISTS", &[&key])?;
     let exists = match exists_result {
@@ -304,21 +309,12 @@ mod tests {
 
     #[test]
     fn test_namespace_key() {
-        assert_eq!(
-            namespace_key("mygraph", "rdf"),
-            "rdf:ns:mygraph:rdf"
-        );
-        assert_eq!(
-            namespace_key("test", "ex"),
-            "rdf:ns:test:ex"
-        );
+        assert_eq!(namespace_key("mygraph", "rdf"), "rdf:ns:mygraph:rdf");
+        assert_eq!(namespace_key("test", "ex"), "rdf:ns:test:ex");
     }
 
     #[test]
     fn test_namespace_pattern() {
-        assert_eq!(
-            namespace_pattern("mygraph"),
-            "rdf:ns:mygraph:*"
-        );
+        assert_eq!(namespace_pattern("mygraph"), "rdf:ns:mygraph:*");
     }
 }

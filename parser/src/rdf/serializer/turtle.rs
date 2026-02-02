@@ -8,7 +8,7 @@ use std::io::Write;
 
 use super::error::SerializerResult;
 use super::traits::{escape_string, GraphSerializer, TripleSerializer};
-use crate::rdf::{Literal, Object, Subject, Triple, Iri};
+use crate::rdf::{Iri, Literal, Object, Subject, Triple};
 
 /// Turtle serializer with prefix support
 ///
@@ -85,23 +85,23 @@ impl TurtleSerializer {
         if s.is_empty() {
             return true; // Empty local name is valid (just prefix:)
         }
-        
+
         let mut chars = s.chars();
-        
+
         // First char must be a letter, underscore, or digit for PN_LOCAL
         if let Some(first) = chars.next() {
             if !first.is_alphanumeric() && first != '_' {
                 return false;
             }
         }
-        
+
         // Remaining chars
         for c in chars {
             if !c.is_alphanumeric() && c != '_' && c != '-' && c != '.' {
                 return false;
             }
         }
-        
+
         true
     }
 
@@ -138,33 +138,37 @@ impl TurtleSerializer {
     /// Write a literal in Turtle format
     fn write_literal<W: Write>(&self, literal: &Literal, writer: &mut W) -> SerializerResult<()> {
         let value = literal.value();
-        
+
         // Check if we can use a short form for numbers/booleans
         if let Some(datatype) = literal.explicit_datatype() {
             let dt_str = datatype.as_str();
-            
+
             // Integer shorthand
-            if dt_str == "http://www.w3.org/2001/XMLSchema#integer" && value.parse::<i64>().is_ok() {
+            if dt_str == "http://www.w3.org/2001/XMLSchema#integer" && value.parse::<i64>().is_ok()
+            {
                 write!(writer, "{}", value)?;
                 return Ok(());
             }
-            
+
             // Decimal shorthand
-            if (dt_str == "http://www.w3.org/2001/XMLSchema#decimal" 
+            if (dt_str == "http://www.w3.org/2001/XMLSchema#decimal"
                 || dt_str == "http://www.w3.org/2001/XMLSchema#double")
-                && value.parse::<f64>().is_ok() && value.contains('.') {
+                && value.parse::<f64>().is_ok()
+                && value.contains('.')
+            {
                 write!(writer, "{}", value)?;
                 return Ok(());
             }
-            
+
             // Boolean shorthand
             if dt_str == "http://www.w3.org/2001/XMLSchema#boolean"
-                && (value == "true" || value == "false") {
+                && (value == "true" || value == "false")
+            {
                 write!(writer, "{}", value)?;
                 return Ok(());
             }
         }
-        
+
         // Check if multiline string
         if value.contains('\n') || value.contains('\r') {
             let escaped = escape_string(value);
@@ -173,7 +177,7 @@ impl TurtleSerializer {
             let escaped = escape_string(value);
             write!(writer, "\"{}\"", escaped)?;
         }
-        
+
         if let Some(lang) = literal.language() {
             write!(writer, "@{}", lang)?;
         } else if let Some(datatype) = literal.explicit_datatype() {
@@ -183,7 +187,7 @@ impl TurtleSerializer {
                 write!(writer, "^^{}", self.compact_iri(dt_str))?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -197,12 +201,16 @@ impl TurtleSerializer {
 }
 
 impl TripleSerializer for TurtleSerializer {
-    fn serialize_triple<W: Write>(&mut self, triple: &Triple, writer: &mut W) -> SerializerResult<()> {
+    fn serialize_triple<W: Write>(
+        &mut self,
+        triple: &Triple,
+        writer: &mut W,
+    ) -> SerializerResult<()> {
         let subject_str = self.subject_string(&triple.subject);
-        
+
         // Check if this is the same subject as the previous triple
         let same_subject = self.current_subject.as_ref() == Some(&subject_str);
-        
+
         if same_subject && self.in_subject_block {
             // Continue previous subject block
             write!(writer, " ;\n    ")?;
@@ -211,18 +219,18 @@ impl TripleSerializer for TurtleSerializer {
             if self.in_subject_block {
                 writeln!(writer, " .")?;
             }
-            
+
             // Start new subject block
             self.write_subject(&triple.subject, writer)?;
             write!(writer, " ")?;
             self.current_subject = Some(subject_str);
             self.in_subject_block = true;
         }
-        
+
         self.write_predicate(&triple.predicate, writer)?;
         write!(writer, " ")?;
         self.write_object(&triple.object, writer)?;
-        
+
         Ok(())
     }
 
@@ -241,19 +249,19 @@ impl GraphSerializer for TurtleSerializer {
         if self.header_written {
             return Ok(());
         }
-        
+
         // Write prefix declarations
         let mut prefixes: Vec<_> = self.prefixes.iter().collect();
         prefixes.sort_by_key(|(k, _)| k.as_str());
-        
+
         for (prefix, iri) in prefixes {
             writeln!(writer, "@prefix {}: <{}> .", prefix, iri)?;
         }
-        
+
         if !self.prefixes.is_empty() {
             writeln!(writer)?;
         }
-        
+
         self.header_written = true;
         Ok(())
     }
@@ -290,7 +298,7 @@ mod tests {
     fn test_with_prefixes() {
         let mut serializer = TurtleSerializer::new();
         serializer.add_prefix("ex", "http://example.org/");
-        
+
         let triple = Triple::new(
             test_iri("http://example.org/subject"),
             test_iri("http://example.org/predicate"),
@@ -313,7 +321,7 @@ mod tests {
     fn test_rdf_type_shorthand() {
         let mut serializer = TurtleSerializer::new();
         serializer.add_prefix("ex", "http://example.org/");
-        
+
         let triple = Triple::new(
             test_iri("http://example.org/thing"),
             test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
@@ -325,7 +333,10 @@ mod tests {
         serializer.finish(&mut output).unwrap();
 
         let result = String::from_utf8(output).unwrap();
-        assert!(result.contains(" a "), "Expected 'a' shorthand for rdf:type");
+        assert!(
+            result.contains(" a "),
+            "Expected 'a' shorthand for rdf:type"
+        );
     }
 
     #[test]
@@ -342,7 +353,10 @@ mod tests {
         serializer.finish(&mut output).unwrap();
 
         let result = String::from_utf8(output).unwrap();
-        assert!(result.contains(" 42 ") || result.contains(" 42."), "Expected integer shorthand");
+        assert!(
+            result.contains(" 42 ") || result.contains(" 42."),
+            "Expected integer shorthand"
+        );
     }
 
     #[test]
@@ -369,7 +383,10 @@ mod tests {
 
         let result = String::from_utf8(output).unwrap();
         // Should use semicolon to separate predicates for same subject
-        assert!(result.contains(";"), "Expected semicolon for predicate grouping");
+        assert!(
+            result.contains(";"),
+            "Expected semicolon for predicate grouping"
+        );
         // Should only have one period at the end
         assert_eq!(result.matches(" .").count(), 1, "Expected single period");
     }
