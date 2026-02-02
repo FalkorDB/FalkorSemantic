@@ -17,10 +17,11 @@ FalkorSemantic is a Redis module that enables semantic web data processing with 
 
 ## Architecture
 
-The project is organized as a Cargo workspace with three main crates:
+The project is organized as a Cargo workspace with four main crates:
 
 - **`parser`**: Parses RDF formats (Turtle, N-Triples, JSON-LD) and SPARQL queries
 - **`mapper`**: Maps RDF triples to FalkorDB graph structures and translates SPARQL to Cypher
+- **`storage`**: Dictionary and namespace storage for efficient IRI handling
 - **`module`**: Redis module that exposes RDF/SPARQL commands
 
 ```
@@ -345,7 +346,9 @@ cargo audit
 FalkorSemantic/
 ├── parser/              # RDF and SPARQL parsing
 │   ├── src/
-│   │   ├── rdf/        # Turtle, N-Triples, JSON-LD parsers
+│   │   ├── rdf/        # RDF data types and parsers
+│   │   │   ├── jsonld/ # JSON-LD parser (expansion, compaction, framing)
+│   │   │   └── ...     # IRIs, literals, triples, namespaces
 │   │   └── sparql/     # SPARQL query parser
 │   └── Cargo.toml
 ├── mapper/              # Graph mapping and query translation
@@ -353,11 +356,17 @@ FalkorSemantic/
 │   │   ├── rdf/        # RDF to FalkorDB mapping
 │   │   └── sparql/     # SPARQL to Cypher translation
 │   └── Cargo.toml
+├── storage/             # Storage utilities
+│   ├── src/
+│   │   ├── dictionary/ # IRI dictionary for efficient storage
+│   │   └── namespace/  # Namespace prefix management
+│   └── Cargo.toml
 ├── module/              # Redis module implementation
 │   ├── src/
 │   │   └── commands/   # RDF.* command handlers
 │   └── Cargo.toml
-├── tests/               # Integration tests
+├── tests-e2e/           # End-to-end tests
+├── scripts/             # Utility scripts
 ├── .github/workflows/   # CI/CD pipelines
 ├── docker-compose.yml   # Development environment
 └── Cargo.toml          # Workspace configuration
@@ -418,7 +427,7 @@ console.log(JSON.parse(result));
 - [ ] SPARQL parser integration
 - [ ] SPARQL to Cypher translation
 - [ ] Core Redis commands (INSERT, SPARQL, DELETE)
-- [ ] JSON-LD support
+- [x] JSON-LD support
 - [ ] Property paths
 - [ ] Performance optimization
 - [ ] SPARQL UPDATE support
