@@ -4,6 +4,7 @@
 
 pub mod nquads;
 pub mod ntriples;
+pub mod turtle;
 
 pub use nquads::{
     parse_nquads, parse_nquads_reader, NQuadsIterator, NQuadsReader, ParseQuadResult,
