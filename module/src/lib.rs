@@ -38,5 +38,6 @@ redis_module! {
     commands: [
         ["semantic.parse", semantic_parse, "write", 1, 1, 1],
         ["rdf.insert", commands::rdf_insert, "write", 2, -1, 1],
+        ["rdf.namespaces", commands::rdf_namespaces, "write", 2, -1, 1],
     ],
 }
