@@ -57,8 +57,7 @@ impl PatternComponent {
         }
 
         // Blank node: _:...
-        if s.starts_with("_:") {
-            let label = &s[2..];
+        if let Some(label) = s.strip_prefix("_:") {
             if label.is_empty() {
                 return Err("Empty blank node label".into());
             }
@@ -66,10 +65,10 @@ impl PatternComponent {
         }
 
         // Literal with language tag: "value"@lang
-        if s.starts_with('"') {
+        if let Some(quoted) = s.strip_prefix('"') {
             // Find the closing quote, handling escaped quotes
             let mut quote_end = None;
-            let mut chars = s[1..].char_indices();
+            let mut chars = quoted.char_indices();
             while let Some((i, c)) = chars.next() {
                 if c == '\\' {
                     // Skip the next character (escaped)
@@ -81,19 +80,17 @@ impl PatternComponent {
             }
 
             if let Some(end_pos) = quote_end {
-                let value = s[1..end_pos + 1].to_string();
-                let rest = &s[end_pos + 2..];
+                let value = quoted[..end_pos].to_string();
+                let rest = &quoted[end_pos + 1..];
 
-                if rest.starts_with('@') {
-                    let lang = rest[1..].to_string();
+                if let Some(lang) = rest.strip_prefix('@') {
                     return Ok(PatternComponent::Literal {
                         value,
-                        language: Some(lang),
+                        language: Some(lang.to_string()),
                         datatype: None,
                     });
-                } else if rest.starts_with("^^") {
+                } else if let Some(dtype_str) = rest.strip_prefix("^^") {
                     // Datatype: "value"^^<type>
-                    let dtype_str = &rest[2..];
                     if dtype_str.starts_with('<') && dtype_str.ends_with('>') {
                         let datatype = dtype_str[1..dtype_str.len() - 1].to_string();
                         return Ok(PatternComponent::Literal {

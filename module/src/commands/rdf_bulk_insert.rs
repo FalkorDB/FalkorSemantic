@@ -444,7 +444,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                     result
                 },
             )
-            .map_err(|e| RedisError::String(e))?
+            .map_err(RedisError::String)?
         }
         RdfFormat::Turtle | RdfFormat::JsonLd => {
             // Load complete file for formats requiring full context
@@ -455,7 +455,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                 format,
                 parsed_args.batch_size,
             )
-            .map_err(|e| RedisError::String(e))?
+            .map_err(RedisError::String)?
         }
     };
 

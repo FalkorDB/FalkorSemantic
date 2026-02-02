@@ -495,10 +495,20 @@ mod tests {
         let ttl = String::from_utf8_lossy(&buf);
         // Should have semicolon separating predicates
         assert!(ttl.contains(";"));
-        // Should have only one subject with both predicates grouped
-        // (prefix line also has "." so we check for pattern with subject grouping)
-        assert!(ttl.contains("ex:p1 ex:o1 ;"));
-        assert!(ttl.contains("ex:p2 ex:o2 ."));
+        // Should have both predicates (order may vary due to HashMap iteration)
+        assert!(ttl.contains("ex:p1 ex:o1"));
+        assert!(ttl.contains("ex:p2 ex:o2"));
+        // One should end with semicolon, one with period
+        let has_semicolon_pred = ttl.contains("ex:p1 ex:o1 ;") || ttl.contains("ex:p2 ex:o2 ;");
+        let has_period_pred = ttl.contains("ex:p1 ex:o1 .") || ttl.contains("ex:p2 ex:o2 .");
+        assert!(
+            has_semicolon_pred,
+            "Should have a predicate ending with semicolon"
+        );
+        assert!(
+            has_period_pred,
+            "Should have a predicate ending with period"
+        );
     }
 
     #[test]
