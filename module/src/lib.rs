@@ -16,7 +16,7 @@ fn init(_ctx: &Context, _args: &[RedisString]) -> Status {
 }
 
 /// Parse semantic data command
-fn semantic_parse(_ctx: &Context, args: Vec<RedisString>) -> RedisResult {
+fn rdf_parse(_ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     if args.len() < 2 {
         return Err(RedisError::WrongArity);
     }
@@ -24,7 +24,7 @@ fn semantic_parse(_ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let input = args[1].try_as_str()?;
 
     // TODO: Implement actual parsing and mapping
-    log::debug!("Parsing semantic data: {}", input);
+    log::debug!("Parsing RDF data: {}", input);
 
     Ok("OK".into())
 }
@@ -36,7 +36,7 @@ redis_module! {
     data_types: [],
     init: init,
     commands: [
-        ["semantic.parse", semantic_parse, "write", 1, 1, 1],
+        ["rdf.parse", rdf_parse, "write", 1, 1, 1],
         ["rdf.insert", commands::rdf_insert, "write", 2, -1, 1],
         ["rdf.namespaces", commands::rdf_namespaces, "write", 2, -1, 1],
         ["rdf.graph", commands::rdf_graph, "write", 1, -1, 1],

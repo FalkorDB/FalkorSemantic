@@ -333,11 +333,11 @@ mod semantic_parse_command {
     fn test_parse_returns_ok() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
-        let result: RedisResult<String> = redis::cmd("SEMANTIC.PARSE")
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE")
             .arg("test data")
             .query(ctx.conn());
 
-        assert!(result.is_ok(), "SEMANTIC.PARSE should succeed");
+        assert!(result.is_ok(), "RDF.PARSE should succeed");
         assert_eq!(result.unwrap(), "OK");
     }
 
@@ -349,9 +349,9 @@ mod semantic_parse_command {
         let ntriples = r#"<http://example.org/subject> <http://example.org/predicate> <http://example.org/object> ."#;
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
-        assert!(result.is_ok(), "SEMANTIC.PARSE with N-Triples should succeed");
+        assert!(result.is_ok(), "RDF.PARSE with N-Triples should succeed");
         assert_eq!(result.unwrap(), "OK");
     }
 
@@ -363,9 +363,9 @@ mod semantic_parse_command {
         let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "John Doe" ."#;
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
-        assert!(result.is_ok(), "SEMANTIC.PARSE with literal should succeed");
+        assert!(result.is_ok(), "RDF.PARSE with literal should succeed");
     }
 
     #[test]
@@ -376,11 +376,11 @@ mod semantic_parse_command {
         let ntriples = r#"<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
-            "SEMANTIC.PARSE with typed literal should succeed"
+            "RDF.PARSE with typed literal should succeed"
         );
     }
 
@@ -392,11 +392,11 @@ mod semantic_parse_command {
         let ntriples = r#"<http://example.org/book/1> <http://example.org/title> "Le Petit Prince"@fr ."#;
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
-            "SEMANTIC.PARSE with language tag should succeed"
+            "RDF.PARSE with language tag should succeed"
         );
     }
 
@@ -410,11 +410,11 @@ mod semantic_parse_command {
 <http://example.org/s3> <http://example.org/p> "value" ."#;
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
-            "SEMANTIC.PARSE with multiple triples should succeed"
+            "RDF.PARSE with multiple triples should succeed"
         );
     }
 
@@ -427,11 +427,11 @@ mod semantic_parse_command {
 _:b2 <http://example.org/p> <http://example.org/o> ."#;
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
-            "SEMANTIC.PARSE with blank nodes should succeed"
+            "RDF.PARSE with blank nodes should succeed"
         );
     }
 
@@ -440,11 +440,11 @@ _:b2 <http://example.org/p> <http://example.org/o> ."#;
     fn test_parse_no_args_returns_error() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
-        let result: RedisResult<String> = redis::cmd("SEMANTIC.PARSE").query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").query(ctx.conn());
 
         assert!(
             result.is_err(),
-            "SEMANTIC.PARSE without arguments should fail"
+            "RDF.PARSE without arguments should fail"
         );
     }
 
@@ -453,10 +453,10 @@ _:b2 <http://example.org/p> <http://example.org/o> ."#;
     fn test_parse_empty_string() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
-        let result: RedisResult<String> = redis::cmd("SEMANTIC.PARSE").arg("").query(ctx.conn());
+        let result: RedisResult<String> = redis::cmd("RDF.PARSE").arg("").query(ctx.conn());
 
         // Empty string should be valid (no triples to parse)
-        assert!(result.is_ok(), "SEMANTIC.PARSE with empty string should succeed");
+        assert!(result.is_ok(), "RDF.PARSE with empty string should succeed");
     }
 
     #[test]
@@ -467,11 +467,11 @@ _:b2 <http://example.org/p> <http://example.org/o> ."#;
         let ntriples = r#"<http://example.org/s> <http://example.org/p> "日本語テスト" ."#;
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
-            "SEMANTIC.PARSE with unicode should succeed"
+            "RDF.PARSE with unicode should succeed"
         );
     }
 }
@@ -484,14 +484,14 @@ mod command_help {
     fn test_command_exists() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
 
-        // Check that SEMANTIC.PARSE is a known command
+        // Check that RDF.PARSE is a known command
         let result: RedisResult<Vec<redis::Value>> =
-            redis::cmd("COMMAND").arg("INFO").arg("SEMANTIC.PARSE").query(ctx.conn());
+            redis::cmd("COMMAND").arg("INFO").arg("RDF.PARSE").query(ctx.conn());
 
-        assert!(result.is_ok(), "COMMAND INFO SEMANTIC.PARSE should succeed");
+        assert!(result.is_ok(), "COMMAND INFO RDF.PARSE should succeed");
         
         let info = result.unwrap();
-        assert!(!info.is_empty(), "SEMANTIC.PARSE should be a registered command");
+        assert!(!info.is_empty(), "RDF.PARSE should be a registered command");
     }
 }
 
@@ -516,7 +516,7 @@ mod concurrent_access {
                     );
 
                     let mut guard = ctx.lock().unwrap();
-                    let result: RedisResult<String> = redis::cmd("SEMANTIC.PARSE")
+                    let result: RedisResult<String> = redis::cmd("RDF.PARSE")
                         .arg(&ntriples)
                         .query(guard.conn());
 
@@ -529,7 +529,7 @@ mod concurrent_access {
 
         assert!(
             results.iter().all(|&r| r),
-            "All concurrent SEMANTIC.PARSE commands should succeed"
+            "All concurrent RDF.PARSE commands should succeed"
         );
     }
 }
@@ -555,9 +555,9 @@ mod large_data {
         let ntriples = triples.join("\n");
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(&ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(&ntriples).query(ctx.conn());
 
-        assert!(result.is_ok(), "SEMANTIC.PARSE with 1000 triples should succeed");
+        assert!(result.is_ok(), "RDF.PARSE with 1000 triples should succeed");
     }
 
     #[test]
@@ -573,11 +573,11 @@ mod large_data {
         );
 
         let result: RedisResult<String> =
-            redis::cmd("SEMANTIC.PARSE").arg(&ntriples).query(ctx.conn());
+            redis::cmd("RDF.PARSE").arg(&ntriples).query(ctx.conn());
 
         assert!(
             result.is_ok(),
-            "SEMANTIC.PARSE with large literal should succeed"
+            "RDF.PARSE with large literal should succeed"
         );
     }
 }

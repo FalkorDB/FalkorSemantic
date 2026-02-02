@@ -66,13 +66,13 @@ fn test_semantic_parse_command() {
     }
 
     let output = Command::new("redis-cli")
-        .args(&["SEMANTIC.PARSE", "test data"])
+        .args(&["RDF.PARSE", "test data"])
         .output()
         .expect("Failed to execute redis-cli");
 
     assert!(
         output.status.success(),
-        "SEMANTIC.PARSE command failed: {}",
+        "RDF.PARSE command failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     
