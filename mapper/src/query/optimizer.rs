@@ -209,7 +209,7 @@ impl JoinOrderOptimizer {
         let total = stats.triple_count().max(1) as f64;
 
         // Check for rdf:type pattern
-        let is_type_pattern = matches!(&pattern.predicate, TermPattern::NamedNode(n) 
+        let is_type_pattern = matches!(&pattern.predicate, TermPattern::NamedNode(n)
             if n.iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
 
         // Get predicate IRI ID if known
@@ -277,7 +277,7 @@ impl JoinOrderOptimizer {
         };
 
         // Check for rdf:type pattern (typically selective)
-        let is_type_pattern = matches!(&pattern.predicate, TermPattern::NamedNode(n) 
+        let is_type_pattern = matches!(&pattern.predicate, TermPattern::NamedNode(n)
             if n.iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
 
         let selectivity = if is_type_pattern {

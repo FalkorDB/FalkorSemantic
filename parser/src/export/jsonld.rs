@@ -5,10 +5,10 @@
 //!
 //! JSON-LD is a JSON-based format to serialize Linked Data.
 
+use super::{ExportResult, TripleWriter};
+use crate::rdf::{Object, Subject, Triple};
 use std::collections::HashMap;
 use std::io::Write;
-use crate::rdf::{Object, Subject, Triple};
-use super::{ExportResult, TripleWriter};
 
 /// Writer for JSON-LD format
 #[derive(Debug, Clone)]
@@ -28,7 +28,10 @@ pub enum ContextEntry {
     /// Simple IRI mapping
     Iri(String),
     /// Term definition with @id and optional @type
-    Definition { id: String, value_type: Option<String> },
+    Definition {
+        id: String,
+        value_type: Option<String>,
+    },
 }
 
 impl Default for JsonLdWriter {
@@ -49,13 +52,15 @@ impl JsonLdWriter {
 
     /// Add a term to the context
     pub fn with_term(mut self, term: &str, iri: &str) -> Self {
-        self.context.insert(term.to_string(), ContextEntry::Iri(iri.to_string()));
+        self.context
+            .insert(term.to_string(), ContextEntry::Iri(iri.to_string()));
         self
     }
 
     /// Add a prefix to the context
     pub fn with_prefix(mut self, prefix: &str, namespace: &str) -> Self {
-        self.context.insert(prefix.to_string(), ContextEntry::Iri(namespace.to_string()));
+        self.context
+            .insert(prefix.to_string(), ContextEntry::Iri(namespace.to_string()));
         self
     }
 
@@ -188,7 +193,7 @@ impl JsonLdWriter {
                 } else {
                     let dt = lit.datatype();
                     let dt_str = dt.as_str();
-                    
+
                     if dt_str == "http://www.w3.org/2001/XMLSchema#string" {
                         // Simple string - just write the value
                         write!(writer, "\"")?;
@@ -217,13 +222,13 @@ impl JsonLdWriter {
     {
         // Group triples by subject
         let mut by_subject: HashMap<String, HashMap<String, Vec<&Object>>> = HashMap::new();
-        
+
         for triple in triples {
             let subject_key = match &triple.subject {
                 Subject::Iri(iri) => iri.as_str().to_string(),
                 Subject::BlankNode(bn) => format!("_:{}", bn.label()),
             };
-            
+
             by_subject
                 .entry(subject_key)
                 .or_default()
@@ -265,7 +270,7 @@ impl JsonLdWriter {
                 write!(writer, ",")?;
                 self.nl(writer)?;
                 self.write_indent(writer, 3)?;
-                
+
                 // Compact predicate IRI
                 let compacted_pred = self.compact_iri(pred_iri);
                 write!(writer, "\"")?;
@@ -365,13 +370,13 @@ mod tests {
             "http://example.org/p",
             "http://example.org/o",
         );
-        
+
         let mut buf = Vec::new();
         JsonLdWriter::new()
             .with_prefix("ex", "http://example.org/")
             .write_triples([&triple], &mut buf)
             .unwrap();
-        
+
         let jsonld = String::from_utf8_lossy(&buf);
         assert!(jsonld.contains("\"@context\""));
         assert!(jsonld.contains("\"ex\""));
@@ -432,8 +437,16 @@ mod tests {
     #[test]
     fn test_multiple_objects() {
         let triples = vec![
-            make_triple("http://example.org/s", "http://example.org/p", "http://example.org/o1"),
-            make_triple("http://example.org/s", "http://example.org/p", "http://example.org/o2"),
+            make_triple(
+                "http://example.org/s",
+                "http://example.org/p",
+                "http://example.org/o1",
+            ),
+            make_triple(
+                "http://example.org/s",
+                "http://example.org/p",
+                "http://example.org/o2",
+            ),
         ];
         let jsonld = write_jsonld(&triples).unwrap();
         // Multiple objects for same predicate should be in an array
@@ -447,13 +460,13 @@ mod tests {
             "http://example.org/p",
             "http://example.org/o",
         );
-        
+
         let mut buf = Vec::new();
         JsonLdWriter::new()
             .compact()
             .write_triples([&triple], &mut buf)
             .unwrap();
-        
+
         let jsonld = String::from_utf8_lossy(&buf);
         // Compact output should not have newlines (except possibly at end)
         assert!(!jsonld.contains("\n  ")); // No indented lines

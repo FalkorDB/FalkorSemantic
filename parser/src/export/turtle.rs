@@ -6,10 +6,10 @@
 //! Turtle is a compact, human-readable format for RDF graphs that
 //! supports prefixes, subject/predicate grouping, and shorthand notations.
 
+use super::{ExportResult, TripleWriter};
+use crate::rdf::{BlankNode, Iri, Literal, Object, Subject, Triple};
 use std::collections::HashMap;
 use std::io::Write;
-use crate::rdf::{BlankNode, Iri, Literal, Object, Subject, Triple};
-use super::{ExportResult, TripleWriter};
 
 /// Writer for Turtle format
 #[derive(Debug, Clone)]
@@ -40,7 +40,8 @@ impl TurtleWriter {
 
     /// Add a prefix mapping
     pub fn with_prefix(mut self, prefix: &str, namespace: &str) -> Self {
-        self.prefixes.insert(prefix.to_string(), namespace.to_string());
+        self.prefixes
+            .insert(prefix.to_string(), namespace.to_string());
         self
     }
 
@@ -96,19 +97,19 @@ impl TurtleWriter {
         }
         let mut chars = s.chars();
         let first = chars.next().unwrap();
-        
+
         // First char must be letter, underscore, or digit
         if !first.is_ascii_alphanumeric() && first != '_' {
             return false;
         }
-        
+
         // Rest can include dots, hyphens
         for c in chars {
             if !c.is_ascii_alphanumeric() && c != '_' && c != '-' && c != '.' {
                 return false;
             }
         }
-        
+
         // Cannot end with '.'
         !s.ends_with('.')
     }
@@ -149,7 +150,7 @@ impl TurtleWriter {
     /// Write a literal
     fn write_literal<W: Write>(&self, lit: &Literal, writer: &mut W) -> ExportResult<()> {
         let value = lit.value();
-        
+
         // Use long string format if contains newlines
         if value.contains('\n') || value.contains('\r') {
             write!(writer, "\"\"\"")?;
@@ -166,7 +167,7 @@ impl TurtleWriter {
         } else {
             let dt = lit.datatype();
             let dt_str = dt.as_str();
-            
+
             // Use shorthand for common types
             match dt_str {
                 "http://www.w3.org/2001/XMLSchema#string" => {}
@@ -284,7 +285,7 @@ impl TurtleWriter {
 
                 // Write predicate
                 let pred = Iri::new_unchecked(pred_iri.as_str());
-                
+
                 // Use 'a' shorthand for rdf:type
                 if pred_iri.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
                     write!(writer, "a")?;
@@ -314,14 +315,14 @@ impl TripleWriter for TurtleWriter {
     fn write_triple<W: Write>(&self, triple: &Triple, writer: &mut W) -> ExportResult<()> {
         self.write_subject(&triple.subject, writer)?;
         write!(writer, " ")?;
-        
+
         // Use 'a' shorthand for rdf:type
         if triple.predicate.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
             write!(writer, "a")?;
         } else {
             self.write_iri(&triple.predicate, writer)?;
         }
-        
+
         write!(writer, " ")?;
         self.write_object(&triple.object, writer)?;
         writeln!(writer, " .")?;
@@ -389,14 +390,14 @@ mod tests {
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
             "http://example.org/Type",
         );
-        
+
         let mut buf = Vec::new();
         TurtleWriter::new()
             .with_prefix("ex", "http://example.org/")
             .with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
             .write_triples([&triple], &mut buf)
             .unwrap();
-        
+
         let ttl = String::from_utf8_lossy(&buf);
         assert!(ttl.contains("@prefix ex:"));
         assert!(ttl.contains("ex:s"));
@@ -436,13 +437,13 @@ mod tests {
                 Iri::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
             )),
         );
-        
+
         let mut buf = Vec::new();
         TurtleWriter::new()
             .with_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
             .write_triples([&triple], &mut buf)
             .unwrap();
-        
+
         let ttl = String::from_utf8_lossy(&buf);
         assert!(ttl.contains("\"42\"^^xsd:integer"));
     }
@@ -473,16 +474,24 @@ mod tests {
     #[test]
     fn test_subject_grouping() {
         let triples = vec![
-            make_triple("http://example.org/s", "http://example.org/p1", "http://example.org/o1"),
-            make_triple("http://example.org/s", "http://example.org/p2", "http://example.org/o2"),
+            make_triple(
+                "http://example.org/s",
+                "http://example.org/p1",
+                "http://example.org/o1",
+            ),
+            make_triple(
+                "http://example.org/s",
+                "http://example.org/p2",
+                "http://example.org/o2",
+            ),
         ];
-        
+
         let mut buf = Vec::new();
         TurtleWriter::new()
             .with_prefix("ex", "http://example.org/")
             .write_triples(&triples, &mut buf)
             .unwrap();
-        
+
         let ttl = String::from_utf8_lossy(&buf);
         // Should have semicolon separating predicates
         assert!(ttl.contains(";"));
