@@ -15,5 +15,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 log.workspace = true
 
+# SPARQL parsing (same version as parser)
+spargebra = "0.4"
+
 [dev-dependencies]
 mockall.workspace = true

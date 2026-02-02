@@ -569,6 +569,7 @@ dependencies = [
  "mockall",
  "serde",
  "serde_json",
+ "spargebra",
  "thiserror",
 ]
 

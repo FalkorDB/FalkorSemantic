@@ -370,6 +370,11 @@ impl GraphPattern {
     pub fn is_empty(&self) -> bool {
         matches!(&self.inner, spargebra::algebra::GraphPattern::Bgp { patterns } if patterns.is_empty())
     }
+
+    /// Get the underlying spargebra pattern for advanced translation
+    pub fn inner(&self) -> &spargebra::algebra::GraphPattern {
+        &self.inner
+    }
 }
 
 /// Extract variables from a spargebra graph pattern
