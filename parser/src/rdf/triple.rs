@@ -307,6 +307,275 @@ impl fmt::Display for Quad {
     }
 }
 
+/// A triple pattern for matching/deletion operations
+///
+/// Each component is optional - `None` represents a wildcard that matches any value.
+/// Used for pattern-based queries like DELETE operations.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct TriplePattern {
+    /// The subject pattern (None = wildcard)
+    pub subject: Option<Subject>,
+    /// The predicate pattern (None = wildcard)
+    pub predicate: Option<Predicate>,
+    /// The object pattern (None = wildcard)
+    pub object: Option<Object>,
+}
+
+impl TriplePattern {
+    /// Create a new triple pattern with all wildcards
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a pattern matching a specific triple exactly
+    pub fn from_triple(triple: &Triple) -> Self {
+        Self {
+            subject: Some(triple.subject.clone()),
+            predicate: Some(triple.predicate.clone()),
+            object: Some(triple.object.clone()),
+        }
+    }
+
+    /// Create a pattern with a specific subject (wildcard predicate/object)
+    pub fn with_subject(subject: impl Into<Subject>) -> Self {
+        Self {
+            subject: Some(subject.into()),
+            predicate: None,
+            object: None,
+        }
+    }
+
+    /// Create a pattern with a specific predicate (wildcard subject/object)
+    pub fn with_predicate(predicate: Predicate) -> Self {
+        Self {
+            subject: None,
+            predicate: Some(predicate),
+            object: None,
+        }
+    }
+
+    /// Create a pattern with a specific object (wildcard subject/predicate)
+    pub fn with_object(object: impl Into<Object>) -> Self {
+        Self {
+            subject: None,
+            predicate: None,
+            object: Some(object.into()),
+        }
+    }
+
+    /// Set the subject pattern
+    pub fn subject(mut self, subject: impl Into<Subject>) -> Self {
+        self.subject = Some(subject.into());
+        self
+    }
+
+    /// Set the predicate pattern
+    pub fn predicate(mut self, predicate: Predicate) -> Self {
+        self.predicate = Some(predicate);
+        self
+    }
+
+    /// Set the object pattern
+    pub fn object(mut self, object: impl Into<Object>) -> Self {
+        self.object = Some(object.into());
+        self
+    }
+
+    /// Check if this pattern matches a given triple
+    pub fn matches(&self, triple: &Triple) -> bool {
+        let subject_matches = self
+            .subject
+            .as_ref()
+            .map_or(true, |s| s == &triple.subject);
+        let predicate_matches = self
+            .predicate
+            .as_ref()
+            .map_or(true, |p| p == &triple.predicate);
+        let object_matches = self.object.as_ref().map_or(true, |o| o == &triple.object);
+
+        subject_matches && predicate_matches && object_matches
+    }
+
+    /// Check if all components are wildcards
+    pub fn is_all_wildcard(&self) -> bool {
+        self.subject.is_none() && self.predicate.is_none() && self.object.is_none()
+    }
+
+    /// Check if this pattern has any wildcards
+    pub fn has_wildcard(&self) -> bool {
+        self.subject.is_none() || self.predicate.is_none() || self.object.is_none()
+    }
+
+    /// Check if this is an exact pattern (no wildcards)
+    pub fn is_exact(&self) -> bool {
+        self.subject.is_some() && self.predicate.is_some() && self.object.is_some()
+    }
+}
+
+impl fmt::Display for TriplePattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let subject = self
+            .subject
+            .as_ref()
+            .map_or("*".to_string(), |s| s.to_string());
+        let predicate = self
+            .predicate
+            .as_ref()
+            .map_or("*".to_string(), |p| p.to_string());
+        let object = self
+            .object
+            .as_ref()
+            .map_or("*".to_string(), |o| o.to_string());
+        write!(f, "{} {} {} .", subject, predicate, object)
+    }
+}
+
+/// A quad pattern for matching/deletion operations with graph scope
+///
+/// Extends `TriplePattern` with an optional graph component.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct QuadPattern {
+    /// The triple pattern
+    pub pattern: TriplePattern,
+    /// The graph pattern (None = default graph, Some(None) = any graph, Some(Some(_)) = specific graph)
+    pub graph: Option<Option<GraphName>>,
+}
+
+/// Specifies which graphs a pattern should match
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum GraphScope {
+    /// Match only the default (unnamed) graph
+    #[default]
+    Default,
+    /// Match a specific named graph
+    Named(GraphName),
+    /// Match all graphs (default and named)
+    All,
+}
+
+impl QuadPattern {
+    /// Create a new quad pattern with all wildcards in the default graph
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a quad pattern from a triple pattern (default graph)
+    pub fn from_triple_pattern(pattern: TriplePattern) -> Self {
+        Self {
+            pattern,
+            graph: None,
+        }
+    }
+
+    /// Create a quad pattern matching a specific quad exactly
+    pub fn from_quad(quad: &Quad) -> Self {
+        Self {
+            pattern: TriplePattern::from_triple(&quad.triple),
+            graph: Some(quad.graph.clone()),
+        }
+    }
+
+    /// Create a pattern scoped to a specific named graph
+    pub fn in_graph(pattern: TriplePattern, graph: impl Into<GraphName>) -> Self {
+        Self {
+            pattern,
+            graph: Some(Some(graph.into())),
+        }
+    }
+
+    /// Create a pattern that matches across all graphs
+    pub fn in_all_graphs(pattern: TriplePattern) -> Self {
+        Self {
+            pattern,
+            graph: Some(None), // Some(None) means "any graph"
+        }
+    }
+
+    /// Get the graph scope for this pattern
+    pub fn graph_scope(&self) -> GraphScope {
+        match &self.graph {
+            None => GraphScope::Default,
+            Some(None) => GraphScope::All,
+            Some(Some(g)) => GraphScope::Named(g.clone()),
+        }
+    }
+
+    /// Check if this pattern matches a given quad
+    pub fn matches(&self, quad: &Quad) -> bool {
+        if !self.pattern.matches(&quad.triple) {
+            return false;
+        }
+
+        match &self.graph {
+            None => quad.graph.is_none(), // Default graph only
+            Some(None) => true,           // Any graph
+            Some(Some(g)) => quad.graph.as_ref() == Some(g),
+        }
+    }
+
+    /// Set the subject pattern
+    pub fn subject(mut self, subject: impl Into<Subject>) -> Self {
+        self.pattern.subject = Some(subject.into());
+        self
+    }
+
+    /// Set the predicate pattern
+    pub fn predicate(mut self, predicate: Predicate) -> Self {
+        self.pattern.predicate = Some(predicate);
+        self
+    }
+
+    /// Set the object pattern
+    pub fn object(mut self, object: impl Into<Object>) -> Self {
+        self.pattern.object = Some(object.into());
+        self
+    }
+}
+
+impl fmt::Display for QuadPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.graph {
+            None => write!(f, "{}", self.pattern),
+            Some(None) => {
+                let s = self
+                    .pattern
+                    .subject
+                    .as_ref()
+                    .map_or("*".to_string(), |s| s.to_string());
+                let p = self
+                    .pattern
+                    .predicate
+                    .as_ref()
+                    .map_or("*".to_string(), |p| p.to_string());
+                let o = self
+                    .pattern
+                    .object
+                    .as_ref()
+                    .map_or("*".to_string(), |o| o.to_string());
+                write!(f, "{} {} {} * .", s, p, o)
+            }
+            Some(Some(g)) => {
+                let s = self
+                    .pattern
+                    .subject
+                    .as_ref()
+                    .map_or("*".to_string(), |s| s.to_string());
+                let p = self
+                    .pattern
+                    .predicate
+                    .as_ref()
+                    .map_or("*".to_string(), |p| p.to_string());
+                let o = self
+                    .pattern
+                    .object
+                    .as_ref()
+                    .map_or("*".to_string(), |o| o.to_string());
+                write!(f, "{} {} {} {} .", s, p, o, g)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +652,140 @@ mod tests {
 
         let lit_obj: Object = Literal::new("text").into();
         assert!(lit_obj.is_literal());
+    }
+
+    // TriplePattern tests
+    #[test]
+    fn test_triple_pattern_wildcard() {
+        let pattern = TriplePattern::new();
+        assert!(pattern.is_all_wildcard());
+        assert!(pattern.has_wildcard());
+        assert!(!pattern.is_exact());
+    }
+
+    #[test]
+    fn test_triple_pattern_from_triple() {
+        let triple = Triple::new(
+            test_iri("http://example.org/s"),
+            test_iri("http://example.org/p"),
+            test_iri("http://example.org/o"),
+        );
+        let pattern = TriplePattern::from_triple(&triple);
+
+        assert!(pattern.is_exact());
+        assert!(!pattern.has_wildcard());
+        assert!(pattern.matches(&triple));
+    }
+
+    #[test]
+    fn test_triple_pattern_matches_subject_wildcard() {
+        let pattern = TriplePattern::new()
+            .predicate(test_iri("http://example.org/knows"))
+            .object(test_iri("http://example.org/Bob"));
+
+        let matching = Triple::new(
+            test_iri("http://example.org/Alice"),
+            test_iri("http://example.org/knows"),
+            test_iri("http://example.org/Bob"),
+        );
+        let non_matching = Triple::new(
+            test_iri("http://example.org/Alice"),
+            test_iri("http://example.org/likes"),
+            test_iri("http://example.org/Bob"),
+        );
+
+        assert!(pattern.matches(&matching));
+        assert!(!pattern.matches(&non_matching));
+    }
+
+    #[test]
+    fn test_triple_pattern_display() {
+        let pattern = TriplePattern::with_subject(test_iri("http://example.org/s"));
+        assert!(format!("{}", pattern).contains("<http://example.org/s>"));
+        assert!(format!("{}", pattern).contains("*"));
+    }
+
+    // QuadPattern tests
+    #[test]
+    fn test_quad_pattern_default_graph() {
+        let pattern = QuadPattern::from_triple_pattern(TriplePattern::new());
+
+        let quad_in_default = Quad::in_default_graph(Triple::new(
+            test_iri("http://example.org/s"),
+            test_iri("http://example.org/p"),
+            test_iri("http://example.org/o"),
+        ));
+        let quad_in_named = Quad::in_named_graph(
+            Triple::new(
+                test_iri("http://example.org/s"),
+                test_iri("http://example.org/p"),
+                test_iri("http://example.org/o"),
+            ),
+            test_iri("http://example.org/graph"),
+        );
+
+        assert!(pattern.matches(&quad_in_default));
+        assert!(!pattern.matches(&quad_in_named));
+    }
+
+    #[test]
+    fn test_quad_pattern_all_graphs() {
+        let pattern = QuadPattern::in_all_graphs(TriplePattern::new());
+
+        let quad_in_default = Quad::in_default_graph(Triple::new(
+            test_iri("http://example.org/s"),
+            test_iri("http://example.org/p"),
+            test_iri("http://example.org/o"),
+        ));
+        let quad_in_named = Quad::in_named_graph(
+            Triple::new(
+                test_iri("http://example.org/s"),
+                test_iri("http://example.org/p"),
+                test_iri("http://example.org/o"),
+            ),
+            test_iri("http://example.org/graph"),
+        );
+
+        assert!(pattern.matches(&quad_in_default));
+        assert!(pattern.matches(&quad_in_named));
+    }
+
+    #[test]
+    fn test_quad_pattern_named_graph() {
+        let graph = test_iri("http://example.org/graph1");
+        let pattern = QuadPattern::in_graph(TriplePattern::new(), graph.clone());
+
+        let quad_graph1 = Quad::in_named_graph(
+            Triple::new(
+                test_iri("http://example.org/s"),
+                test_iri("http://example.org/p"),
+                test_iri("http://example.org/o"),
+            ),
+            graph,
+        );
+        let quad_graph2 = Quad::in_named_graph(
+            Triple::new(
+                test_iri("http://example.org/s"),
+                test_iri("http://example.org/p"),
+                test_iri("http://example.org/o"),
+            ),
+            test_iri("http://example.org/graph2"),
+        );
+
+        assert!(pattern.matches(&quad_graph1));
+        assert!(!pattern.matches(&quad_graph2));
+    }
+
+    #[test]
+    fn test_graph_scope() {
+        let default_pattern = QuadPattern::new();
+        assert!(matches!(default_pattern.graph_scope(), GraphScope::Default));
+
+        let all_pattern = QuadPattern::in_all_graphs(TriplePattern::new());
+        assert!(matches!(all_pattern.graph_scope(), GraphScope::All));
+
+        let named_pattern =
+            QuadPattern::in_graph(TriplePattern::new(), test_iri("http://example.org/g"));
+        assert!(matches!(named_pattern.graph_scope(), GraphScope::Named(_)));
     }
 }

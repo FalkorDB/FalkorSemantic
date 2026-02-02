@@ -15,4 +15,4 @@ pub use iri::Iri;
 pub use jsonld::{ContextResolver, JsonLdError, JsonLdParser, JsonLdToRdf};
 pub use literal::{xsd, Literal, RDF_LANG_STRING};
 pub use namespace::{well_known, NamespaceRegistry, PrefixedName};
-pub use triple::{GraphName, Object, Predicate, Quad, Subject, Triple};
+pub use triple::{GraphName, GraphScope, Object, Predicate, Quad, QuadPattern, Subject, Triple, TriplePattern};
