@@ -26,7 +26,7 @@ The project is organized as a Cargo workspace with three main crates:
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.75 or later
 - Docker and Docker Compose (for development environment)
 - Redis CLI tools (optional, for testing)
 

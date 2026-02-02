@@ -27,7 +27,7 @@ This project adheres to a code of conduct. By participating, you are expected to
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.75 or later
 - Docker and Docker Compose
 - Redis CLI tools (for testing)
 

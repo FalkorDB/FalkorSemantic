@@ -1,4 +1,4 @@
-FROM rust:1.70-slim
+FROM rust:1.75-slim
 
 # Install development tools
 RUN apt-get update && apt-get install -y \

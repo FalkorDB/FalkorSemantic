@@ -12,7 +12,7 @@ edition = "2021"
 authors = ["FalkorDB Team"]
 license = "MIT"
 repository = "https://github.com/FalkorDB/FalkorSemantic"
-rust-version = "1.70"
+rust-version = "1.75"
 
 [workspace.dependencies]
 # Redis module development
