@@ -27,8 +27,9 @@ git pull && git status
 
 1. **Build the project** - Ensure the code compiles without errors
 2. **Run Clippy** - Check for lints and warnings
-3. **Run as Redis module** - Start the module in Redis to verify it loads
-4. **Sanity test with redis-cli** - Run basic commands to verify functionality
+3. **Run tests** - Run unit tests (excluding module which requires Redis runtime)
+4. **Run as Redis module** - Start the module in Redis to verify it loads
+5. **Sanity test with redis-cli** - Run basic commands to verify functionality
 
 #### Implementation
 Before committing:
@@ -37,10 +38,10 @@ Before committing:
 cargo build --release
 
 # 2. Run Clippy for lints
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace -- -D warnings
 
-# 3. Run tests
-cargo test
+# 3. Run tests (exclude module - it requires Redis allocator)
+cargo test --workspace --exclude falkorsemantic-module
 
 # 4. Start Redis with the module (in background)
 redis-server --loadmodule ./target/release/libfalkorsemantic_module.so &
@@ -53,12 +54,28 @@ redis-cli MODULE LIST  # Verify module is loaded
 redis-cli SHUTDOWN NOSAVE
 ```
 
+**Note:** The `falkorsemantic-module` crate cannot be tested with regular `cargo test` because it requires the Redis allocator. Use `make test` or exclude the module explicitly.
+
 #### Quick Validation Script
 ```bash
-# Full pre-commit validation
+# Full pre-commit validation (use make commands when available)
+make build && \
+make lint && \
+make test && \
+echo "Starting Redis with module..." && \
+redis-server --loadmodule ./target/release/libfalkorsemantic_module.so --daemonize yes && \
+sleep 2 && \
+redis-cli PING && \
+redis-cli MODULE LIST | grep -i falkor && \
+redis-cli SHUTDOWN NOSAVE && \
+echo "All checks passed!"
+```
+
+Or without make:
+```bash
 cargo build --release && \
-cargo clippy --all-targets -- -D warnings && \
-cargo test && \
+cargo clippy --workspace -- -D warnings && \
+cargo test --workspace --exclude falkorsemantic-module && \
 echo "Starting Redis with module..." && \
 redis-server --loadmodule ./target/release/libfalkorsemantic_module.so --daemonize yes && \
 sleep 2 && \
