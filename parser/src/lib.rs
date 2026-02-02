@@ -3,8 +3,9 @@
 //! This crate provides parsing functionality for semantic data,
 //! including core RDF data types (IRIs, literals, triples, etc.)
 //! and parsers for RDF serialization formats (N-Triples, Turtle, etc.),
-//! as well as SPARQL query parsing and result serialization.
+//! as well as SPARQL query parsing, result serialization, and RDF export.
 
+pub mod export;
 pub mod formats;
 pub mod rdf;
 pub mod results;
