@@ -1,0 +1,13 @@
+[package]
+name = "falkorsemantic-e2e-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+redis = "0.27"
+anyhow = "1.0"
+
+[[test]]
+name = "e2e"
+path = "src/e2e.rs"
