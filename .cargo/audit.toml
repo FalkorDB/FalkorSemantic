@@ -1,0 +1,16 @@
+# Cargo audit configuration
+# See: https://github.com/rustsec/rustsec/tree/main/cargo-audit
+
+[advisories]
+# Advisories to ignore
+ignore = [
+    # owning_ref vulnerability - transitive dependency from json-ld crate
+    # Tracked upstream: https://github.com/timothee-haudebourg/json-ld
+    # The json-ld crate does not currently have a patched version available
+    # We use json-ld for JSON-LD parsing which is a read-only operation
+    # and does not expose the vulnerable owning_ref API directly
+    "RUSTSEC-2022-0040",
+]
+
+# Treat warnings as errors (unmaintained crates, etc.)
+informational_warnings = ["unmaintained"]
