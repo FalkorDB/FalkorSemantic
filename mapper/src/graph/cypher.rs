@@ -49,12 +49,17 @@ impl CypherGenerator {
             if let Object::Iri(type_iri) = &triple.object {
                 let label = sanitize_identifier(type_iri.local_name());
                 let subject_uri = self.subject_uri(&triple.subject);
+                let is_blank = matches!(triple.subject, Subject::BlankNode(_));
+                let node_label = if is_blank { "BlankNode" } else { "Resource" };
 
+                // Use consistent MERGE pattern with other node creations
                 let statement = format!(
-                    "{} (n {{uri: '{}'}}) SET n:{}",
+                    "{} (n:{} {{uri: '{}'}}) SET n:{}, n.isBlank = {}",
                     self.operation(),
+                    node_label,
                     escape_cypher_string(&subject_uri),
-                    label
+                    label,
+                    is_blank
                 );
                 return Ok(vec![statement]);
             }
@@ -137,31 +142,37 @@ impl CypherGenerator {
         let is_blank = matches!(subject, Subject::BlankNode(_));
         let label = if is_blank { "BlankNode" } else { "Resource" };
 
+        // MERGE on label + uri only, then SET isBlank for consistency
         format!(
-            "{} ({}:{} {{uri: '{}', isBlank: {}}})",
+            "{} ({}:{} {{uri: '{}'}}) SET {}.isBlank = {}",
             self.operation(),
             var,
             label,
             escape_cypher_string(uri),
+            var,
             is_blank
         )
     }
 
     fn generate_resource_node_from_iri(&self, var: &str, uri: &str) -> String {
+        // MERGE on label + uri only, then SET isBlank for consistency
         format!(
-            "{} ({}:Resource {{uri: '{}'}})",
+            "{} ({}:Resource {{uri: '{}'}}) SET {}.isBlank = false",
             self.operation(),
             var,
-            escape_cypher_string(uri)
+            escape_cypher_string(uri),
+            var
         )
     }
 
     fn generate_blank_node(&self, var: &str, id: &str) -> String {
+        // MERGE on label + uri only, then SET isBlank for consistency
         format!(
-            "{} ({}:BlankNode {{uri: '{}', isBlank: true}})",
+            "{} ({}:BlankNode {{uri: '{}'}}) SET {}.isBlank = true",
             self.operation(),
             var,
-            escape_cypher_string(id)
+            escape_cypher_string(id),
+            var
         )
     }
 
