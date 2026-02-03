@@ -45,7 +45,7 @@ mockall = "0.14"
 # JSON-LD
 json-ld = "0.21"
 rdf-types = "0.22"
-locspan = "0.8"
+locspan = "0.9"
 iref = "3.2"
 static-iref = "3.0"
 contextual = "0.1"
