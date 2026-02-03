@@ -406,8 +406,7 @@ mod tests {
     }
 
     #[test]
-    fn test_output_format_to_result_format() {
-        assert_eq!(OutputFormat::Json.to_result_format(), ResultFormat::Json);
-        assert_eq!(OutputFormat::Xml.to_result_format(), ResultFormat::Xml);
+    fn test_output_format_default() {
+        assert_eq!(OutputFormat::default(), OutputFormat::Json);
     }
 }

@@ -44,33 +44,54 @@ impl RdfFormat {
             return RdfFormat::JsonLd;
         }
 
-        // Check for Turtle indicators (@prefix, @base, PREFIX, BASE)
-        if trimmed.starts_with("@prefix")
-            || trimmed.starts_with("@base")
-            || trimmed.starts_with("PREFIX")
-            || trimmed.starts_with("BASE")
-        {
-            return RdfFormat::Turtle;
-        }
+        // First pass: scan ALL lines for Turtle-specific indicators
+        // This is important because @prefix can appear anywhere in Turtle files
+        for line in trimmed.lines() {
+            let line = line.trim();
 
-        // Check for prefixed names (common in Turtle)
-        if trimmed.contains(":") && !trimmed.starts_with('<') {
-            // Look for patterns like "prefix:local" that aren't in angle brackets
-            let first_line = trimmed.lines().next().unwrap_or("");
-            if first_line.contains(':') && !first_line.starts_with('<') {
-                // Could be Turtle with prefixed names
+            // Skip empty lines and comments
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            // Check for Turtle-specific directives anywhere in the file
+            if line.starts_with("@prefix")
+                || line.starts_with("@base")
+                || line.starts_with("PREFIX")
+                || line.starts_with("BASE")
+            {
                 return RdfFormat::Turtle;
+            }
+
+            // Semicolon or comma syntax is Turtle-specific
+            if line.contains(';') || (line.contains(',') && !line.starts_with('<')) {
+                return RdfFormat::Turtle;
+            }
+
+            // Prefixed names (prefix:local) indicate Turtle
+            // But exclude N-Triples lines and blank nodes
+            if !line.starts_with('<') && !line.starts_with('_') {
+                for word in line.split_whitespace() {
+                    if word.contains(':')
+                        && !word.starts_with('<')
+                        && !word.starts_with('"')
+                        && !word.starts_with("_:")
+                        && !word.starts_with("^^")
+                    {
+                        return RdfFormat::Turtle;
+                    }
+                }
             }
         }
 
-        // Check for N-Quads (4 components per line)
+        // Second pass: check for N-Quads (need 4 components with graph)
         for line in trimmed.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
+
             // N-Quads have 4 components: subject, predicate, object, graph
-            // Count the number of '>' or '"' endings followed by spaces
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 4 && line.ends_with('.') {
                 // Check if 4th element looks like a graph (IRI or blank node)
@@ -79,7 +100,7 @@ impl RdfFormat {
                     return RdfFormat::NQuads;
                 }
             }
-            break; // Only check first non-empty line
+            break; // Only check first non-empty line for N-Quads
         }
 
         // Default to N-Triples (simplest format)
@@ -371,6 +392,100 @@ mod tests {
     }
 
     #[test]
+    fn test_format_detection_turtle_with_comments() {
+        // Turtle file starting with comments, @prefix comes later
+        let turtle = r#"
+# This is a comment
+# Another comment
+
+@prefix ex: <http://example.org/> .
+ex:s ex:p ex:o .
+"#;
+        assert_eq!(RdfFormat::detect(turtle), RdfFormat::Turtle);
+    }
+
+    #[test]
+    fn test_format_detection_turtle_with_ntriples_style_first() {
+        // File starts with N-Triples style but has @prefix later
+        let turtle = r#"
+# Comment line
+<http://example.com/emp134> <http://example.com/hireDate> "2022-11-12" .
+<http://example.com/emp134> <http://example.com/familyName> "Smith" .
+
+@prefix ex: <http://example.com/> .
+ex:emp134 ex:hireDate "2022-11-12" .
+"#;
+        assert_eq!(RdfFormat::detect(turtle), RdfFormat::Turtle);
+    }
+
+    #[test]
+    fn test_format_detection_turtle_semicolon_syntax() {
+        // Turtle with semicolon syntax (predicate-object lists)
+        let turtle = r#"
+<http://example.org/s> <http://example.org/p1> "value1" ;
+                       <http://example.org/p2> "value2" .
+"#;
+        assert_eq!(RdfFormat::detect(turtle), RdfFormat::Turtle);
+    }
+
+    #[test]
+    fn test_format_detection_turtle_comma_syntax() {
+        // Turtle with comma syntax (object lists)
+        let turtle = r#"
+ex:s ex:p "value1", "value2", "value3" .
+"#;
+        assert_eq!(RdfFormat::detect(turtle), RdfFormat::Turtle);
+    }
+
+    #[test]
+    fn test_format_detection_turtle_prefixed_names() {
+        // Turtle with prefixed names but no explicit @prefix in content
+        let turtle = "ex:subject ex:predicate ex:object .";
+        assert_eq!(RdfFormat::detect(turtle), RdfFormat::Turtle);
+    }
+
+    #[test]
+    fn test_format_detection_turtle_base_directive() {
+        let turtle = "@base <http://example.org/> .\n<s> <p> <o> .";
+        assert_eq!(RdfFormat::detect(turtle), RdfFormat::Turtle);
+
+        let turtle2 = "BASE <http://example.org/>\n<s> <p> <o> .";
+        assert_eq!(RdfFormat::detect(turtle2), RdfFormat::Turtle);
+    }
+
+    #[test]
+    fn test_format_detection_nquads() {
+        // N-Quads with named graph
+        let nq = "<http://example.org/s> <http://example.org/p> <http://example.org/o> <http://example.org/graph> .";
+        assert_eq!(RdfFormat::detect(nq), RdfFormat::NQuads);
+
+        // N-Quads with blank node graph
+        let nq2 = "<http://example.org/s> <http://example.org/p> \"value\" _:graph .";
+        assert_eq!(RdfFormat::detect(nq2), RdfFormat::NQuads);
+    }
+
+    #[test]
+    fn test_format_detection_pure_ntriples() {
+        // Pure N-Triples without any Turtle features
+        let nt = r#"
+<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .
+<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .
+<http://example.org/s3> <http://example.org/p> "literal value" .
+"#;
+        assert_eq!(RdfFormat::detect(nt), RdfFormat::NTriples);
+    }
+
+    #[test]
+    fn test_format_detection_empty_and_comments_only() {
+        // Empty content defaults to N-Triples
+        assert_eq!(RdfFormat::detect(""), RdfFormat::NTriples);
+
+        // Comments only defaults to N-Triples
+        let comments = "# Just a comment\n# Another comment\n";
+        assert_eq!(RdfFormat::detect(comments), RdfFormat::NTriples);
+    }
+
+    #[test]
     fn test_parse_turtle() {
         let turtle = r#"
             @prefix ex: <http://example.org/> .
@@ -385,5 +500,24 @@ mod tests {
         let nt = "<http://example.org/s> <http://example.org/p> <http://example.org/o> .";
         let triples = parse_rdf(nt, RdfFormat::NTriples).unwrap();
         assert_eq!(triples.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_turtle_with_late_prefix() {
+        // This is the problematic case from learnrdf.ttl
+        let turtle = r#"
+# Comments at the start
+
+<http://example.com/emp134> <http://example.com/hireDate> "2022-11-12" .
+
+@prefix ex: <http://example.com/> .
+ex:emp134 ex:familyName "Smith" .
+"#;
+        // Should detect as Turtle and parse successfully
+        let format = RdfFormat::detect(turtle);
+        assert_eq!(format, RdfFormat::Turtle);
+
+        let triples = parse_rdf(turtle, format).unwrap();
+        assert_eq!(triples.len(), 2);
     }
 }
