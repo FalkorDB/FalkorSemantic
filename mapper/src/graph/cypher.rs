@@ -39,9 +39,10 @@ impl CypherGenerator {
     }
 
     /// Generate Cypher for a triple
+    ///
+    /// Returns a single combined Cypher statement that handles the entire triple,
+    /// ensuring variable bindings are preserved within the query.
     pub fn generate_triple(&self, triple: &Triple) -> Result<Vec<String>, MapperError> {
-        let mut statements = Vec::new();
-
         // Check if this is an rdf:type statement
         if triple.predicate.as_str() == rdf_predicates::RDF_TYPE {
             // Handle rdf:type as a label assignment
@@ -49,28 +50,31 @@ impl CypherGenerator {
                 let label = sanitize_identifier(type_iri.local_name());
                 let subject_uri = self.subject_uri(&triple.subject);
 
-                statements.push(format!(
+                let statement = format!(
                     "{} (n {{uri: '{}'}}) SET n:{}",
                     self.operation(),
                     escape_cypher_string(&subject_uri),
                     label
-                ));
-                return Ok(statements);
+                );
+                return Ok(vec![statement]);
             }
         }
+
+        // Build a single combined query for the triple
+        let mut parts = Vec::new();
 
         // Create/merge subject node
         let subject_uri = self.subject_uri(&triple.subject);
         let subject_var = "s";
-        statements.push(self.generate_resource_node(subject_var, &subject_uri, &triple.subject));
+        parts.push(self.generate_resource_node(subject_var, &subject_uri, &triple.subject));
 
         // Generate based on object type
         match &triple.object {
             Object::Iri(iri) => {
                 // Object is a resource
                 let object_uri = iri.as_str();
-                statements.push(self.generate_resource_node_from_iri("o", object_uri));
-                statements.push(self.generate_edge(
+                parts.push(self.generate_resource_node_from_iri("o", object_uri));
+                parts.push(self.generate_edge(
                     subject_var,
                     "o",
                     triple.predicate.as_str(),
@@ -80,8 +84,8 @@ impl CypherGenerator {
             Object::BlankNode(bn) => {
                 // Object is a blank node
                 let bn_id = format!("_:{}", bn.label());
-                statements.push(self.generate_blank_node("o", &bn_id));
-                statements.push(self.generate_edge(
+                parts.push(self.generate_blank_node("o", &bn_id));
+                parts.push(self.generate_edge(
                     subject_var,
                     "o",
                     triple.predicate.as_str(),
@@ -90,11 +94,13 @@ impl CypherGenerator {
             }
             Object::Literal(lit) => {
                 // Object is a literal - store as property on edge or as literal node
-                statements.push(self.generate_literal_edge(subject_var, &triple.predicate, lit));
+                parts.push(self.generate_literal_edge(subject_var, &triple.predicate, lit));
             }
         }
 
-        Ok(statements)
+        // Combine all parts into a single statement with newlines for readability
+        let combined = parts.join("\n");
+        Ok(vec![combined])
     }
 
     /// Generate Cypher for a quad (triple in a named graph)
@@ -351,9 +357,15 @@ mod tests {
         );
 
         let statements = gen.generate_triple(&triple).unwrap();
-        assert!(!statements.is_empty());
-        assert!(statements.iter().any(|s| s.contains("Alice")));
-        assert!(statements.iter().any(|s| s.contains("knows")));
+        // Should return exactly one combined statement
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+        // The combined statement should contain all three MERGE clauses
+        assert!(stmt.contains("Alice"));
+        assert!(stmt.contains("Bob"));
+        assert!(stmt.contains("knows"));
+        // Verify it contains multiple MERGE operations in one statement
+        assert_eq!(stmt.matches("MERGE").count(), 3);
     }
 
     #[test]
@@ -366,9 +378,13 @@ mod tests {
         );
 
         let statements = gen.generate_triple(&triple).unwrap();
-        assert!(!statements.is_empty());
-        assert!(statements.iter().any(|s| s.contains("Alice")));
-        assert!(statements.iter().any(|s| s.contains("Literal")));
+        // Should return exactly one combined statement
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+        assert!(stmt.contains("Alice"));
+        assert!(stmt.contains("Literal"));
+        // Subject MERGE + literal edge MERGE
+        assert_eq!(stmt.matches("MERGE").count(), 2);
     }
 
     #[test]
