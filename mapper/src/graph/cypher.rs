@@ -4,7 +4,9 @@
 
 use falkorsemantic_parser::rdf::{Literal, Object, Quad, Subject, Triple};
 
-use super::schema::{rdf_predicates, sanitize_identifier, Edge, LiteralNode, ResourceNode};
+use super::schema::{
+    rdf_predicates, sanitize_identifier, Edge, LiteralNode, PropertyValue, ResourceNode,
+};
 use crate::MapperError;
 
 /// Generates Cypher statements for RDF triples
@@ -200,8 +202,7 @@ impl CypherGenerator {
         predicate: &falkorsemantic_parser::rdf::Iri,
         literal: &Literal,
     ) -> String {
-        let edge_type = sanitize_identifier(predicate.local_name());
-        let datatype = literal.datatype().as_str().to_string();
+        let prop_name = sanitize_identifier(predicate.local_name());
 
         // For numeric and boolean types, use unquoted values; otherwise quote as string
         let is_numeric_or_bool = literal.as_integer().is_some()
@@ -214,34 +215,178 @@ impl CypherGenerator {
             format!("'{}'", escape_cypher_string(literal.value()))
         };
 
-        let lang_part = literal
-            .language()
-            .map(|l| format!(", language: '{}'", l))
-            .unwrap_or_default();
-
-        format!(
-            "{} ({})-[:{}{{predicate: '{}', value: {}, datatype: '{}'{}}}]->(l:Literal{{value: {}, datatype: '{}'{}}})",
-            self.operation(),
-            subject_var,
-            edge_type,
-            escape_cypher_string(predicate.as_str()),
-            value_repr,
-            escape_cypher_string(&datatype),
-            lang_part,
-            value_repr,
-            escape_cypher_string(&datatype),
-            lang_part
-        )
+        // Store literal as a property on the subject node instead of creating a separate node
+        format!("SET {}.{} = {}", subject_var, prop_name, value_repr)
     }
 
     /// Generate a batch of statements for multiple triples
+    ///
+    /// This method optimizes by grouping triples by subject and generating
+    /// a single combined query per subject, reducing the number of queries.
     pub fn generate_batch(&self, triples: &[Triple]) -> Result<Vec<String>, MapperError> {
-        let mut all_statements = Vec::new();
+        use std::collections::HashMap;
+
+        // Group triples by subject URI
+        let mut subjects: HashMap<String, SubjectData> = HashMap::new();
+
         for triple in triples {
-            all_statements.extend(self.generate_triple(triple)?);
+            let subject_uri = self.subject_uri(&triple.subject);
+            let is_blank = matches!(triple.subject, Subject::BlankNode(_));
+
+            let data = subjects
+                .entry(subject_uri.clone())
+                .or_insert_with(|| SubjectData {
+                    uri: subject_uri.clone(),
+                    is_blank,
+                    labels: Vec::new(),
+                    properties: Vec::new(),
+                    relationships: Vec::new(),
+                });
+
+            // Categorize the triple
+            if triple.predicate.as_str() == rdf_predicates::RDF_TYPE {
+                // rdf:type -> add label
+                if let Object::Iri(type_iri) = &triple.object {
+                    let label = sanitize_identifier(type_iri.local_name());
+                    if !data.labels.contains(&label) {
+                        data.labels.push(label);
+                    }
+                }
+            } else {
+                match &triple.object {
+                    Object::Literal(lit) => {
+                        // Literal -> add property
+                        let prop_name = sanitize_identifier(triple.predicate.local_name());
+                        let is_numeric_or_bool = lit.as_integer().is_some()
+                            || lit.as_float().is_some()
+                            || lit.as_bool().is_some();
+                        let value_repr = if is_numeric_or_bool {
+                            lit.value().to_string()
+                        } else {
+                            format!("'{}'", escape_cypher_string(lit.value()))
+                        };
+                        data.properties.push((prop_name, value_repr));
+                    }
+                    Object::Iri(iri) => {
+                        // IRI -> add relationship
+                        data.relationships.push(RelationshipData {
+                            predicate: triple.predicate.as_str().to_string(),
+                            local_name: triple.predicate.local_name().to_string(),
+                            target_uri: iri.as_str().to_string(),
+                            target_is_blank: false,
+                        });
+                    }
+                    Object::BlankNode(bn) => {
+                        // Blank node -> add relationship
+                        data.relationships.push(RelationshipData {
+                            predicate: triple.predicate.as_str().to_string(),
+                            local_name: triple.predicate.local_name().to_string(),
+                            target_uri: format!("_:{}", bn.label()),
+                            target_is_blank: true,
+                        });
+                    }
+                }
+            }
         }
-        Ok(all_statements)
+
+        // Generate one query per subject
+        let mut statements = Vec::new();
+
+        for data in subjects.values() {
+            let query = self.generate_subject_query(data);
+            statements.push(query);
+        }
+
+        Ok(statements)
     }
+
+    /// Generate a combined Cypher query for a subject with all its data
+    fn generate_subject_query(&self, data: &SubjectData) -> String {
+        let mut parts = Vec::new();
+        let node_label = if data.is_blank {
+            "BlankNode"
+        } else {
+            "Resource"
+        };
+
+        // Build the SET clause with labels and properties
+        let mut set_parts = Vec::new();
+
+        // Add labels
+        for label in &data.labels {
+            set_parts.push(format!("s:{}", label));
+        }
+
+        // Add isBlank property
+        set_parts.push(format!("s.isBlank = {}", data.is_blank));
+
+        // Add literal properties
+        for (prop_name, value_repr) in &data.properties {
+            set_parts.push(format!("s.{} = {}", prop_name, value_repr));
+        }
+
+        // Build the main MERGE + SET statement
+        let main_stmt = format!(
+            "{} (s:{} {{uri: '{}'}}) SET {}",
+            self.operation(),
+            node_label,
+            escape_cypher_string(&data.uri),
+            set_parts.join(", ")
+        );
+        parts.push(main_stmt);
+
+        // Add relationships
+        for (idx, rel) in data.relationships.iter().enumerate() {
+            let target_var = format!("o{}", idx);
+            let target_label = if rel.target_is_blank {
+                "BlankNode"
+            } else {
+                "Resource"
+            };
+            let edge_type = sanitize_identifier(&rel.local_name);
+
+            // MERGE target node
+            parts.push(format!(
+                "{} ({}:{} {{uri: '{}'}}) SET {}.isBlank = {}",
+                self.operation(),
+                target_var,
+                target_label,
+                escape_cypher_string(&rel.target_uri),
+                target_var,
+                rel.target_is_blank
+            ));
+
+            // MERGE relationship
+            parts.push(format!(
+                "{} (s)-[:{}{{predicate: '{}'}}]->({})",
+                self.operation(),
+                edge_type,
+                escape_cypher_string(&rel.predicate),
+                target_var
+            ));
+        }
+
+        parts.join("\n")
+    }
+}
+
+/// Helper struct to collect data about a subject
+#[derive(Debug)]
+struct SubjectData {
+    uri: String,
+    is_blank: bool,
+    labels: Vec<String>,
+    properties: Vec<(String, String)>, // (property_name, value_repr)
+    relationships: Vec<RelationshipData>,
+}
+
+/// Helper struct for relationship data
+#[derive(Debug)]
+struct RelationshipData {
+    predicate: String,
+    local_name: String,
+    target_uri: String,
+    target_is_blank: bool,
 }
 
 /// Escape a string for use in Cypher queries
@@ -313,17 +458,28 @@ impl GraphBuilder {
                 (id, false)
             }
             Object::Literal(lit) => {
-                let id = format!("literal_{}", self.literals.len());
+                // Store literal as a property on the subject node
+                let prop_key = sanitize_identifier(triple.predicate.local_name());
+                let prop_value = PropertyValue::new(
+                    lit.value().to_string(),
+                    lit.datatype().as_str().to_string(),
+                    lit.language().map(|s| s.to_string()),
+                );
+                if let Some(node) = self.resources.get_mut(&subject_uri) {
+                    node.add_property(prop_key, prop_value);
+                }
+                // Also keep the literal in the literals collection for backwards compatibility
                 self.literals.push(LiteralNode::new(
                     lit.value().to_string(),
                     lit.datatype().as_str().to_string(),
                     lit.language().map(|s| s.to_string()),
                 ));
-                (id, true)
+                // Return early - no edge needed since it's stored as a property
+                return;
             }
         };
 
-        // Add edge
+        // Add edge (only for non-literal objects)
         let edge = Edge::new(
             triple.predicate.as_str().to_string(),
             triple.predicate.local_name().to_string(),
@@ -393,9 +549,10 @@ mod tests {
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
         assert!(stmt.contains("Alice"));
-        assert!(stmt.contains("Literal"));
-        // Subject MERGE + literal edge MERGE
-        assert_eq!(stmt.matches("MERGE").count(), 2);
+        // Literal is now stored as a property, not as a separate Literal node
+        assert!(stmt.contains("SET s.name = 'Alice'"));
+        // Subject MERGE only, literal is now a SET property
+        assert_eq!(stmt.matches("MERGE").count(), 1);
     }
 
     #[test]

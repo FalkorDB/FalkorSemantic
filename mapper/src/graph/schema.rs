@@ -13,6 +13,28 @@ pub enum NodeType {
     Literal,
 }
 
+/// A property value that can be stored on a node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropertyValue {
+    /// The property value
+    pub value: String,
+    /// The datatype IRI
+    pub datatype: String,
+    /// The language tag (if any)
+    pub language: Option<String>,
+}
+
+impl PropertyValue {
+    /// Create a new property value
+    pub fn new(value: String, datatype: String, language: Option<String>) -> Self {
+        Self {
+            value,
+            datatype,
+            language,
+        }
+    }
+}
+
 /// Schema for a resource node (URI or blank node)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceNode {
@@ -22,6 +44,8 @@ pub struct ResourceNode {
     pub is_blank: bool,
     /// Labels assigned to this node (from rdf:type)
     pub labels: Vec<String>,
+    /// Properties on this node (literal values keyed by predicate local name)
+    pub properties: std::collections::HashMap<String, Vec<PropertyValue>>,
 }
 
 impl ResourceNode {
@@ -31,6 +55,7 @@ impl ResourceNode {
             uri,
             is_blank: false,
             labels: Vec::new(),
+            properties: std::collections::HashMap::new(),
         }
     }
 
@@ -40,6 +65,7 @@ impl ResourceNode {
             uri: label,
             is_blank: true,
             labels: Vec::new(),
+            properties: std::collections::HashMap::new(),
         }
     }
 
@@ -48,6 +74,11 @@ impl ResourceNode {
         if !self.labels.contains(&label) {
             self.labels.push(label);
         }
+    }
+
+    /// Add a property to this node
+    pub fn add_property(&mut self, key: String, value: PropertyValue) {
+        self.properties.entry(key).or_default().push(value);
     }
 
     /// Get the primary label for Cypher (first label or "Resource")

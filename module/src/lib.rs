@@ -5,7 +5,9 @@
 
 mod commands;
 
-use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, RedisValue, Status};
+use redis_module::{
+    redis_module, Context, RedisError, RedisResult, RedisString, RedisValue, Status,
+};
 
 /// Initialize the module with Redis
 fn init(ctx: &Context, _args: &[RedisString]) -> Status {
@@ -14,10 +16,12 @@ fn init(ctx: &Context, _args: &[RedisString]) -> Status {
 
     // Check if FalkorDB module is loaded - this is required
     if !check_falkordb_module(ctx) {
-        log::error!("FalkorDB module not detected. FalkorSemantic requires FalkorDB to be loaded first.");
+        log::error!(
+            "FalkorDB module not detected. FalkorSemantic requires FalkorDB to be loaded first."
+        );
         return Status::Err;
     }
-    
+
     log::info!("FalkorDB module detected. FalkorSemantic initialized successfully.");
     Status::Ok
 }
@@ -28,13 +32,34 @@ fn check_falkordb_module(ctx: &Context) -> bool {
         Ok(RedisValue::Array(modules)) => {
             for module in modules {
                 if let RedisValue::Array(module_info) = module {
-                    for field in module_info {
-                        if let RedisValue::BulkString(name) = field {
-                            let name_str = name.to_lowercase();
-                            if name_str.contains("graph") || name_str.contains("falkor") {
-                                return true;
+                    // MODULE LIST returns pairs: ["name", "graph", "ver", 123, ...]
+                    // We need to find the "name" key and check its value
+                    let mut i = 0;
+                    while i + 1 < module_info.len() {
+                        // Extract key and value as strings (can be SimpleString or BulkString)
+                        let key_str = match &module_info[i] {
+                            RedisValue::SimpleString(s) | RedisValue::BulkString(s) => {
+                                Some(s.as_str())
+                            }
+                            _ => None,
+                        };
+
+                        let value_str = match &module_info[i + 1] {
+                            RedisValue::SimpleString(s) | RedisValue::BulkString(s) => {
+                                Some(s.as_str())
+                            }
+                            _ => None,
+                        };
+
+                        if let (Some(key), Some(value)) = (key_str, value_str) {
+                            if key == "name" {
+                                let name_str = value.to_lowercase();
+                                if name_str.contains("graph") || name_str.contains("falkor") {
+                                    return true;
+                                }
                             }
                         }
+                        i += 2; // Move to next key-value pair
                     }
                 }
             }

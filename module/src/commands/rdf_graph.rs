@@ -79,9 +79,10 @@ fn create_graph(ctx: &Context, graph_name: &str) -> RedisResult {
     let query_result = ctx.call("GRAPH.QUERY", &[graph_name, init_query]);
 
     if let Err(e) = query_result {
-        return Err(RedisError::String(
-            format!("Failed to initialize graph in FalkorDB: {:?}", e)
-        ));
+        return Err(RedisError::String(format!(
+            "Failed to initialize graph in FalkorDB: {:?}",
+            e
+        )));
     }
 
     // Register the graph in our tracking set
