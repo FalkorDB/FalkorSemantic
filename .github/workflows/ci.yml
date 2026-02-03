@@ -1,10 +1,16 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+
+permissions:
+  contents: read
 
 # Cancel in-progress runs when a new run is triggered on the same branch/PR
 concurrency:
