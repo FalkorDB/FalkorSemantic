@@ -174,6 +174,61 @@ pub mod rdf_predicates {
     pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 }
 
+/// Escape a string for safe use in Cypher queries.
+///
+/// This function escapes all characters that could be used for Cypher injection
+/// attacks or cause parsing errors.
+///
+/// # Escaped characters:
+/// - Backslash (`\`) → `\\`
+/// - Single quote (`'`) → `\'`
+/// - Double quote (`"`) → `\"`
+/// - Newline → `\n`
+/// - Carriage return → `\r`
+/// - Tab → `\t`
+/// - Null byte → (removed)
+/// - Other control characters (0x00-0x1F, 0x7F) → removed
+///
+/// # Example
+/// ```
+/// use falkorsemantic_mapper::graph::escape_cypher_string;
+/// assert_eq!(escape_cypher_string("it's"), "it\\'s");
+/// assert_eq!(escape_cypher_string("line\nbreak"), "line\\nbreak");
+/// ```
+pub fn escape_cypher_string(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() + 16);
+    for ch in s.chars() {
+        match ch {
+            '\\' => result.push_str("\\\\"),
+            '\'' => result.push_str("\\'"),
+            '"' => result.push_str("\\\""),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            // Remove null bytes and other control characters (security)
+            '\0' => {}
+            c if c.is_control() => {}
+            c => result.push(c),
+        }
+    }
+    result
+}
+
+/// Escape a string and wrap it in backticks for use as a Cypher identifier (label, type).
+///
+/// This is safer than using raw identifiers for user-provided data.
+///
+/// # Example
+/// ```
+/// use falkorsemantic_mapper::graph::escape_cypher_identifier;
+/// assert_eq!(escape_cypher_identifier("My Label"), "`My Label`");
+/// ```
+pub fn escape_cypher_identifier(s: &str) -> String {
+    // Backticks in identifiers are escaped by doubling them
+    let escaped = s.replace('`', "``");
+    format!("`{}`", escaped)
+}
+
 /// Sanitize a string for use as a Cypher identifier
 ///
 /// Replaces invalid characters with underscores and ensures it starts with a letter.
@@ -235,5 +290,51 @@ mod tests {
         assert_eq!(sanitize_identifier("has-name"), "has_name");
         assert_eq!(sanitize_identifier("123abc"), "_123abc");
         assert_eq!(sanitize_identifier("hello world"), "hello_world");
+    }
+
+    #[test]
+    fn test_escape_cypher_string_basic() {
+        assert_eq!(escape_cypher_string("hello"), "hello");
+        assert_eq!(escape_cypher_string("it's"), "it\\'s");
+        assert_eq!(escape_cypher_string("say \"hi\""), "say \\\"hi\\\"");
+    }
+
+    #[test]
+    fn test_escape_cypher_string_whitespace() {
+        assert_eq!(escape_cypher_string("line\nbreak"), "line\\nbreak");
+        assert_eq!(escape_cypher_string("with\ttab"), "with\\ttab");
+        assert_eq!(escape_cypher_string("with\rreturn"), "with\\rreturn");
+    }
+
+    #[test]
+    fn test_escape_cypher_string_backslash() {
+        assert_eq!(escape_cypher_string("path\\to\\file"), "path\\\\to\\\\file");
+        assert_eq!(escape_cypher_string("\\' injection"), "\\\\\\' injection");
+    }
+
+    #[test]
+    fn test_escape_cypher_string_null_byte() {
+        assert_eq!(escape_cypher_string("before\0after"), "beforeafter");
+    }
+
+    #[test]
+    fn test_escape_cypher_string_control_chars() {
+        // Control characters should be removed
+        assert_eq!(escape_cypher_string("test\x01\x02\x03"), "test");
+        assert_eq!(escape_cypher_string("\x7fDEL"), "DEL");
+    }
+
+    #[test]
+    fn test_escape_cypher_string_unicode() {
+        // Unicode should be preserved
+        assert_eq!(escape_cypher_string("日本語"), "日本語");
+        assert_eq!(escape_cypher_string("emoji 🎉"), "emoji 🎉");
+    }
+
+    #[test]
+    fn test_escape_cypher_identifier() {
+        assert_eq!(escape_cypher_identifier("Person"), "`Person`");
+        assert_eq!(escape_cypher_identifier("My Label"), "`My Label`");
+        assert_eq!(escape_cypher_identifier("has`tick"), "`has``tick`");
     }
 }

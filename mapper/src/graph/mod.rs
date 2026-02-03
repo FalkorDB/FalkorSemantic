@@ -9,6 +9,6 @@ mod schema;
 pub use cypher::{CypherGenerator, GraphBuilder};
 pub use delete::{DeleteGenerator, DeleteOptions};
 pub use schema::{
-    rdf_predicates, sanitize_identifier, Edge, GraphElement, LiteralNode, NodeType, PropertyValue,
-    ResourceNode,
+    escape_cypher_identifier, escape_cypher_string, rdf_predicates, sanitize_identifier, Edge,
+    GraphElement, LiteralNode, NodeType, PropertyValue, ResourceNode,
 };

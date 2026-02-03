@@ -2,11 +2,18 @@
 //!
 //! Bulk inserts RDF data from files with streaming, batch processing,
 //! progress reporting, and partial failure recovery.
+//!
+//! ## Security
+//!
+//! File paths are validated to prevent path traversal attacks:
+//! - Paths are canonicalized to resolve symlinks and relative components
+//! - Optional allowed directory restriction via `RDF_BULK_INSERT_ALLOWED_DIR` env var
+//! - Paths containing `..` are rejected before canonicalization for defense in depth
 
 use redis_module::{Context, RedisError, RedisResult, RedisString, RedisValue};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use falkorsemantic_mapper::Mapper;
 use falkorsemantic_parser::formats::NTriplesReader;
@@ -17,6 +24,62 @@ use super::rdf_insert::RdfFormat;
 
 /// Default batch size for processing
 const DEFAULT_BATCH_SIZE: usize = 1000;
+
+/// Environment variable for allowed directory restriction
+const ALLOWED_DIR_ENV: &str = "RDF_BULK_INSERT_ALLOWED_DIR";
+
+/// Validate and sanitize a file path to prevent path traversal attacks.
+///
+/// # Security checks performed:
+/// 1. Reject paths containing `..` components (defense in depth)
+/// 2. Canonicalize the path to resolve symlinks and relative components
+/// 3. Verify the canonical path is within allowed directory (if configured)
+///
+/// # Arguments
+/// * `path` - The user-provided file path
+///
+/// # Returns
+/// * `Ok(PathBuf)` - The validated, canonicalized path
+/// * `Err(String)` - Error message if validation fails
+fn validate_file_path(path: &str) -> Result<PathBuf, String> {
+    // Defense in depth: reject paths with .. before canonicalization
+    if path.contains("..") {
+        return Err("Path traversal detected: '..' is not allowed in file paths".into());
+    }
+
+    let path = Path::new(path);
+
+    // Check if path exists before canonicalization
+    if !path.exists() {
+        return Err(format!("File not found: {}", path.display()));
+    }
+
+    // Canonicalize to resolve symlinks and get absolute path
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+
+    // Check if path is within allowed directory (if configured)
+    if let Ok(allowed_dir) = std::env::var(ALLOWED_DIR_ENV) {
+        let allowed_path = Path::new(&allowed_dir)
+            .canonicalize()
+            .map_err(|e| format!("Invalid allowed directory '{}': {}", allowed_dir, e))?;
+
+        if !canonical.starts_with(&allowed_path) {
+            return Err(format!(
+                "Access denied: file must be within allowed directory '{}'",
+                allowed_path.display()
+            ));
+        }
+    }
+
+    // Verify it's a regular file, not a directory or special file
+    if !canonical.is_file() {
+        return Err(format!("Path is not a regular file: {}", canonical.display()));
+    }
+
+    Ok(canonical)
+}
 
 /// Progress reporting interval (number of triples)
 const PROGRESS_INTERVAL: usize = 10000;
@@ -396,19 +459,14 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
         parsed_args.skip_lines
     );
 
-    // Validate file exists
-    let path = Path::new(parsed_args.file_path);
-    if !path.exists() {
-        return Err(RedisError::String(format!(
-            "File not found: {}",
-            parsed_args.file_path
-        )));
-    }
+    // Validate and sanitize file path (prevents path traversal attacks)
+    let validated_path = validate_file_path(parsed_args.file_path)
+        .map_err(RedisError::String)?;
 
-    // Detect format
+    // Detect format from validated path
     let format = parsed_args
         .format
-        .or_else(|| detect_format_from_path(path))
+        .or_else(|| detect_format_from_path(&validated_path))
         .unwrap_or(RdfFormat::NTriples);
 
     log::info!("Using format: {:?}", format);
@@ -417,7 +475,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let stats = match format {
         RdfFormat::NTriples | RdfFormat::NQuads => {
             // Stream-based processing for line-based formats
-            let file = File::open(path)
+            let file = File::open(&validated_path)
                 .map_err(|e| RedisError::String(format!("Failed to open file: {}", e)))?;
             let reader = BufReader::with_capacity(64 * 1024, file);
 
@@ -451,7 +509,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             load_complete_file(
                 ctx,
                 parsed_args.graph_key,
-                parsed_args.file_path,
+                validated_path.to_str().unwrap_or(parsed_args.file_path),
                 format,
                 parsed_args.batch_size,
             )
@@ -481,7 +539,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
 mod tests {
     use super::*;
     use std::io::Write;
-    use tempfile::NamedTempFile;
+    use tempfile::{NamedTempFile, TempDir};
 
     #[test]
     fn test_detect_format_from_path() {
@@ -577,5 +635,67 @@ mod tests {
 
         // Should skip first line
         assert_eq!(stats.triples_parsed, 2);
+    }
+
+    // Path validation security tests
+
+    #[test]
+    fn test_validate_file_path_rejects_path_traversal() {
+        let result = validate_file_path("../../../etc/passwd");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Path traversal detected"));
+    }
+
+    #[test]
+    fn test_validate_file_path_rejects_hidden_traversal() {
+        let result = validate_file_path("/tmp/../etc/passwd");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Path traversal detected"));
+    }
+
+    #[test]
+    fn test_validate_file_path_rejects_nonexistent() {
+        let result = validate_file_path("/nonexistent/path/file.nt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("File not found"));
+    }
+
+    #[test]
+    fn test_validate_file_path_rejects_directory() {
+        let dir = TempDir::new().unwrap();
+        let result = validate_file_path(dir.path().to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not a regular file"));
+    }
+
+    #[test]
+    fn test_validate_file_path_accepts_valid_file() {
+        let file = NamedTempFile::new().unwrap();
+        let result = validate_file_path(file.path().to_str().unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_file_path_with_allowed_dir() {
+        // Create a temp directory and file
+        let dir = TempDir::new().unwrap();
+        let file_path = dir.path().join("test.nt");
+        std::fs::write(&file_path, "").unwrap();
+
+        // Set allowed directory
+        std::env::set_var(ALLOWED_DIR_ENV, dir.path().to_str().unwrap());
+
+        // File within allowed directory should work
+        let result = validate_file_path(file_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // File outside allowed directory should fail
+        let other_file = NamedTempFile::new().unwrap();
+        let result = validate_file_path(other_file.path().to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Access denied"));
+
+        // Clean up env var
+        std::env::remove_var(ALLOWED_DIR_ENV);
     }
 }

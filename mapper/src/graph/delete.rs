@@ -6,7 +6,7 @@ use falkorsemantic_parser::rdf::{
     GraphName, GraphScope, Object, QuadPattern, Subject, Triple, TriplePattern,
 };
 
-use super::schema::sanitize_identifier;
+use super::schema::{escape_cypher_string, sanitize_identifier};
 use crate::MapperError;
 
 /// Options for DELETE operations
@@ -259,15 +259,6 @@ impl DeleteGenerator {
 
         Ok(all_statements)
     }
-}
-
-/// Escape a string for use in Cypher queries
-fn escape_cypher_string(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('\'', "\\'")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }
 
 #[cfg(test)]

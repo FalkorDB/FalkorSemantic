@@ -44,10 +44,15 @@ impl IriDictionary {
     ///
     /// If the IRI already exists, returns the existing ID.
     /// Otherwise, assigns a new ID and stores the mapping.
+    ///
+    /// # Thread Safety
+    /// This method uses double-checked locking for performance. When inserting,
+    /// both forward and reverse mappings are updated atomically while holding
+    /// both write locks to prevent inconsistency.
     pub fn get_or_insert(&self, iri: &Iri) -> IriId {
         let iri_str = iri.as_str();
 
-        // First, try to read with a read lock
+        // First, try to read with a read lock (fast path)
         {
             let reader = self.iri_to_id.read().unwrap();
             if let Some(&id) = reader.get(iri_str) {
@@ -55,20 +60,20 @@ impl IriDictionary {
             }
         }
 
-        // Not found, need to insert with write lock
-        let mut writer = self.iri_to_id.write().unwrap();
+        // Not found, need to insert with write locks
+        // IMPORTANT: Acquire both locks together to prevent race conditions
+        // Always acquire in the same order (iri_to_id first) to prevent deadlocks
+        let mut forward = self.iri_to_id.write().unwrap();
+        let mut reverse = self.id_to_iri.write().unwrap();
 
-        // Double-check after acquiring write lock
-        if let Some(&id) = writer.get(iri_str) {
+        // Double-check after acquiring write locks (another thread may have inserted)
+        if let Some(&id) = forward.get(iri_str) {
             return id;
         }
 
-        // Assign new ID
+        // Assign new ID and update both mappings atomically
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        writer.insert(iri_str.to_string(), id);
-
-        // Also update reverse mapping
-        let mut reverse = self.id_to_iri.write().unwrap();
+        forward.insert(iri_str.to_string(), id);
         reverse.insert(id, iri_str.to_string());
 
         id
@@ -133,31 +138,44 @@ impl IriDictionary {
     /// Import entries into the dictionary
     ///
     /// Overwrites existing mappings if there are conflicts.
+    ///
+    /// # Thread Safety
+    /// Acquires both write locks in consistent order (iri_to_id first) and
+    /// updates next_id while still holding locks to ensure consistency.
     pub fn import(&self, entries: Vec<(IriId, String)>) -> Result<(), StorageError> {
-        let mut iri_writer = self.iri_to_id.write().unwrap();
-        let mut id_writer = self.id_to_iri.write().unwrap();
+        // Always acquire locks in same order: iri_to_id first, then id_to_iri
+        let mut forward = self.iri_to_id.write().unwrap();
+        let mut reverse = self.id_to_iri.write().unwrap();
 
         let mut max_id = self.next_id.load(Ordering::SeqCst);
 
         for (id, iri) in entries {
-            iri_writer.insert(iri.clone(), id);
-            id_writer.insert(id, iri);
+            forward.insert(iri.clone(), id);
+            reverse.insert(id, iri);
             if id >= max_id {
                 max_id = id + 1;
             }
         }
 
+        // Update next_id while still holding locks
         self.next_id.store(max_id, Ordering::SeqCst);
         Ok(())
     }
 
     /// Clear all entries from the dictionary
+    ///
+    /// # Thread Safety
+    /// Acquires both write locks and resets next_id atomically.
     pub fn clear(&self) {
-        let mut iri_writer = self.iri_to_id.write().unwrap();
-        let mut id_writer = self.id_to_iri.write().unwrap();
-        iri_writer.clear();
-        id_writer.clear();
+        // Always acquire locks in same order: iri_to_id first, then id_to_iri
+        let mut forward = self.iri_to_id.write().unwrap();
+        let mut reverse = self.id_to_iri.write().unwrap();
+
+        // Reset next_id while holding both locks for consistency
         self.next_id.store(1, Ordering::SeqCst);
+
+        forward.clear();
+        reverse.clear();
     }
 }
 
@@ -247,5 +265,52 @@ mod tests {
 
         dict.clear();
         assert!(dict.is_empty());
+    }
+
+    #[test]
+    fn test_dictionary_concurrent_insert() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let dict = Arc::new(IriDictionary::new());
+        let mut handles = vec![];
+
+        // Spawn multiple threads inserting the same IRIs
+        for i in 0..4 {
+            let dict_clone = Arc::clone(&dict);
+            let handle = thread::spawn(move || {
+                for j in 0..100 {
+                    let iri = test_iri(&format!("http://example.org/resource/{}", j));
+                    dict_clone.get_or_insert(&iri);
+                }
+                // Also do some lookups
+                for j in 0..100 {
+                    let iri = test_iri(&format!("http://example.org/resource/{}", j));
+                    let id = dict_clone.get_or_insert(&iri);
+                    // Verify reverse lookup works
+                    let retrieved = dict_clone.get_iri(id);
+                    assert!(retrieved.is_some(), "Thread {} failed reverse lookup for {}", i, j);
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all threads
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Should have exactly 100 unique entries
+        assert_eq!(dict.len(), 100);
+
+        // Verify all entries have valid forward and reverse mappings
+        for j in 0..100 {
+            let iri = test_iri(&format!("http://example.org/resource/{}", j));
+            let id = dict.get_id(&iri);
+            assert!(id.is_some(), "Missing ID for resource {}", j);
+            let retrieved = dict.get_iri(id.unwrap());
+            assert!(retrieved.is_some(), "Missing reverse mapping for resource {}", j);
+            assert_eq!(retrieved.unwrap().as_str(), iri.as_str());
+        }
     }
 }

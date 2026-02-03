@@ -5,7 +5,8 @@
 use falkorsemantic_parser::rdf::{Literal, Object, Quad, Subject, Triple};
 
 use super::schema::{
-    rdf_predicates, sanitize_identifier, Edge, LiteralNode, PropertyValue, ResourceNode,
+    escape_cypher_string, rdf_predicates, sanitize_identifier, Edge, LiteralNode, PropertyValue,
+    ResourceNode,
 };
 use crate::MapperError;
 
@@ -387,15 +388,6 @@ struct RelationshipData {
     local_name: String,
     target_uri: String,
     target_is_blank: bool,
-}
-
-/// Escape a string for use in Cypher queries
-fn escape_cypher_string(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('\'', "\\'")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }
 
 /// Builder for constructing graph elements from RDF

@@ -7,6 +7,7 @@ use std::fmt::Write;
 
 use falkorsemantic_parser::sparql::{GraphPattern, Query, SelectQuery, Variable};
 
+use crate::graph::escape_cypher_string;
 use crate::MapperError;
 
 /// Translates SPARQL queries to Cypher
@@ -306,7 +307,7 @@ impl SparqlToCypher {
             TP::Variable(v) => Ok((v.as_str().to_string(), None)),
             TP::NamedNode(n) => {
                 let var = self.next_var("n");
-                let condition = format!("{}.uri = '{}'", var, escape_cypher(n.as_str()));
+                let condition = format!("{}.uri = '{}'", var, escape_cypher_string(n.as_str()));
                 Ok((var, Some(condition)))
             }
             TP::BlankNode(b) => {
@@ -316,7 +317,7 @@ impl SparqlToCypher {
             }
             TP::Literal(lit) => {
                 let var = self.next_var("l");
-                let value = escape_cypher(lit.value());
+                let value = escape_cypher_string(lit.value());
                 let condition = format!("{}.value = '{}'", var, value);
                 Ok((var, Some(condition)))
             }
@@ -335,7 +336,7 @@ impl SparqlToCypher {
         match pred {
             NNP::NamedNode(n) => {
                 // Use predicate property for matching
-                Ok(format!("{{predicate: '{}'}}", escape_cypher(n.as_str())))
+                Ok(format!("{{predicate: '{}'}}", escape_cypher_string(n.as_str())))
             }
             NNP::Variable(_v) => {
                 // Variable predicate - no type constraint
@@ -448,9 +449,9 @@ impl SparqlToCypher {
             E::Variable(v) => Some(v.as_str().to_string()),
             E::Literal(lit) => {
                 let value = lit.value();
-                Some(format!("'{}'", escape_cypher(value)))
+                Some(format!("'{}'", escape_cypher_string(value)))
             }
-            E::NamedNode(node) => Some(format!("'{}'", escape_cypher(node.as_str()))),
+            E::NamedNode(node) => Some(format!("'{}'", escape_cypher_string(node.as_str()))),
             E::Bound(v) => Some(format!("{} IS NOT NULL", v.as_str())),
             E::If(cond, then_expr, else_expr) => {
                 let c = self.translate_expression(cond)?;
@@ -606,15 +607,6 @@ pub enum CypherQueryType {
     Ask,
     /// CONSTRUCT query returning triples
     Construct,
-}
-
-/// Escape a string for Cypher
-fn escape_cypher(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('\'', "\\'")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }
 
 #[cfg(test)]
