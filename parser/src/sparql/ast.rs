@@ -377,10 +377,27 @@ impl GraphPattern {
     }
 }
 
+/// Maximum recursion depth for extracting variables from graph patterns.
+/// This prevents stack overflow from maliciously crafted deeply nested queries.
+const MAX_EXTRACT_DEPTH: usize = 128;
+
 /// Extract variables from a spargebra graph pattern
 fn extract_variables(pattern: &spargebra::algebra::GraphPattern) -> HashSet<Variable> {
+    extract_variables_with_depth(pattern, 0)
+}
+
+/// Extract variables from a spargebra graph pattern with depth tracking
+fn extract_variables_with_depth(
+    pattern: &spargebra::algebra::GraphPattern,
+    depth: usize,
+) -> HashSet<Variable> {
     use spargebra::algebra::GraphPattern as GP;
     use spargebra::term::TermPattern as TP;
+
+    // Stop recursion if depth limit exceeded to prevent stack overflow
+    if depth > MAX_EXTRACT_DEPTH {
+        return HashSet::new();
+    }
 
     let mut vars = HashSet::new();
 
@@ -417,22 +434,22 @@ fn extract_variables(pattern: &spargebra::algebra::GraphPattern) -> HashSet<Vari
         | GP::LeftJoin { left, right, .. }
         | GP::Minus { left, right }
         | GP::Union { left, right } => {
-            vars.extend(extract_variables(left));
-            vars.extend(extract_variables(right));
+            vars.extend(extract_variables_with_depth(left, depth + 1));
+            vars.extend(extract_variables_with_depth(right, depth + 1));
         }
         GP::Filter { inner, .. } | GP::Graph { inner, .. } => {
-            vars.extend(extract_variables(inner));
+            vars.extend(extract_variables_with_depth(inner, depth + 1));
         }
         GP::Extend {
             inner, variable, ..
         } => {
-            vars.extend(extract_variables(inner));
+            vars.extend(extract_variables_with_depth(inner, depth + 1));
             vars.insert(Variable::from(variable.clone()));
         }
         GP::Group {
             inner, variables, ..
         } => {
-            vars.extend(extract_variables(inner));
+            vars.extend(extract_variables_with_depth(inner, depth + 1));
             for v in variables {
                 vars.insert(Variable::from(v.clone()));
             }
@@ -443,19 +460,19 @@ fn extract_variables(pattern: &spargebra::algebra::GraphPattern) -> HashSet<Vari
             }
         }
         GP::OrderBy { inner, .. } | GP::Distinct { inner } | GP::Reduced { inner } => {
-            vars.extend(extract_variables(inner));
+            vars.extend(extract_variables_with_depth(inner, depth + 1));
         }
         GP::Project { inner, variables } => {
-            vars.extend(extract_variables(inner));
+            vars.extend(extract_variables_with_depth(inner, depth + 1));
             for v in variables {
                 vars.insert(Variable::from(v.clone()));
             }
         }
         GP::Slice { inner, .. } => {
-            vars.extend(extract_variables(inner));
+            vars.extend(extract_variables_with_depth(inner, depth + 1));
         }
         GP::Service { inner, .. } => {
-            vars.extend(extract_variables(inner));
+            vars.extend(extract_variables_with_depth(inner, depth + 1));
         }
     }
 
@@ -465,8 +482,14 @@ fn extract_variables(pattern: &spargebra::algebra::GraphPattern) -> HashSet<Vari
 /// An expression in SPARQL
 #[derive(Debug, Clone)]
 pub struct Expression {
-    #[allow(dead_code)]
     pub(crate) inner: spargebra::algebra::Expression,
+}
+
+impl Expression {
+    /// Get the underlying spargebra expression for advanced translation
+    pub fn inner(&self) -> &spargebra::algebra::Expression {
+        &self.inner
+    }
 }
 
 /// An ordering condition

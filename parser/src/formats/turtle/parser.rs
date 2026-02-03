@@ -12,6 +12,10 @@ use crate::{ParserError, Result};
 
 /// RDF type predicate IRI
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+/// Maximum nesting depth for collections and blank nodes.
+/// This prevents stack overflow from maliciously crafted deeply nested input.
+const MAX_NESTING_DEPTH: usize = 128;
 /// RDF first predicate IRI
 const RDF_FIRST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
 /// RDF rest predicate IRI
@@ -147,11 +151,11 @@ impl TurtleParser {
         pos: usize,
         triples: &mut Vec<Triple>,
     ) -> Result<usize> {
-        // Parse subject
-        let (subject, mut pos) = self.parse_subject(tokens, pos, triples)?;
+        // Parse subject (start at depth 0)
+        let (subject, mut pos) = self.parse_subject(tokens, pos, triples, 0)?;
 
         // Parse predicate-object list
-        pos = self.parse_predicate_object_list(tokens, pos, &subject, triples)?;
+        pos = self.parse_predicate_object_list(tokens, pos, &subject, triples, 0)?;
 
         // Expect dot
         if pos < tokens.len() && tokens[pos].kind == TokenKind::Dot {
@@ -162,12 +166,22 @@ impl TurtleParser {
     }
 
     /// Parse subject (IRI, blank node, or collection)
+    ///
+    /// The `depth` parameter tracks nesting level to prevent stack overflow.
     fn parse_subject(
         &mut self,
         tokens: &[Token],
         pos: usize,
         triples: &mut Vec<Triple>,
+        depth: usize,
     ) -> Result<(Subject, usize)> {
+        if depth > MAX_NESTING_DEPTH {
+            return Err(ParserError::ParseError(format!(
+                "Maximum nesting depth ({}) exceeded at line {}, column {}",
+                MAX_NESTING_DEPTH, tokens[pos].line, tokens[pos].column
+            )));
+        }
+
         match &tokens[pos].kind {
             TokenKind::IriRef(iri) => {
                 let iri = self.resolve_iri(iri)?;
@@ -184,12 +198,12 @@ impl TurtleParser {
             TokenKind::OpenBracket => {
                 // Blank node with properties
                 let (bn, new_pos) =
-                    self.parse_blank_node_property_list(tokens, pos + 1, triples)?;
+                    self.parse_blank_node_property_list(tokens, pos + 1, triples, depth + 1)?;
                 Ok((Subject::BlankNode(bn), new_pos))
             }
             TokenKind::OpenParen => {
                 // Collection
-                let (subject, new_pos) = self.parse_collection(tokens, pos + 1, triples)?;
+                let (subject, new_pos) = self.parse_collection(tokens, pos + 1, triples, depth + 1)?;
                 Ok((subject, new_pos))
             }
             _ => Err(ParserError::ParseError(format!(
@@ -222,12 +236,22 @@ impl TurtleParser {
     }
 
     /// Parse object (IRI, blank node, literal, or collection)
+    ///
+    /// The `depth` parameter tracks nesting level to prevent stack overflow.
     fn parse_object(
         &mut self,
         tokens: &[Token],
         pos: usize,
         triples: &mut Vec<Triple>,
+        depth: usize,
     ) -> Result<(Object, usize)> {
+        if depth > MAX_NESTING_DEPTH {
+            return Err(ParserError::ParseError(format!(
+                "Maximum nesting depth ({}) exceeded at line {}, column {}",
+                MAX_NESTING_DEPTH, tokens[pos].line, tokens[pos].column
+            )));
+        }
+
         match &tokens[pos].kind {
             TokenKind::IriRef(iri) => {
                 let iri = self.resolve_iri(iri)?;
@@ -243,11 +267,11 @@ impl TurtleParser {
             }
             TokenKind::OpenBracket => {
                 let (bn, new_pos) =
-                    self.parse_blank_node_property_list(tokens, pos + 1, triples)?;
+                    self.parse_blank_node_property_list(tokens, pos + 1, triples, depth + 1)?;
                 Ok((Object::BlankNode(bn), new_pos))
             }
             TokenKind::OpenParen => {
-                let (subject, new_pos) = self.parse_collection(tokens, pos + 1, triples)?;
+                let (subject, new_pos) = self.parse_collection(tokens, pos + 1, triples, depth + 1)?;
                 let object = match subject {
                     Subject::Iri(iri) => Object::Iri(iri),
                     Subject::BlankNode(bn) => Object::BlankNode(bn),
@@ -326,12 +350,15 @@ impl TurtleParser {
     }
 
     /// Parse predicate-object list (handles ; and ,)
+    ///
+    /// The `depth` parameter tracks nesting level to prevent stack overflow.
     fn parse_predicate_object_list(
         &mut self,
         tokens: &[Token],
         mut pos: usize,
         subject: &Subject,
         triples: &mut Vec<Triple>,
+        depth: usize,
     ) -> Result<usize> {
         loop {
             // Parse predicate
@@ -339,7 +366,7 @@ impl TurtleParser {
             pos = new_pos;
 
             // Parse object list (handles ,)
-            pos = self.parse_object_list(tokens, pos, subject, &predicate, triples)?;
+            pos = self.parse_object_list(tokens, pos, subject, &predicate, triples, depth)?;
 
             // Check for semicolon (more predicate-object pairs)
             if pos < tokens.len() && tokens[pos].kind == TokenKind::Semicolon {
@@ -365,6 +392,8 @@ impl TurtleParser {
     }
 
     /// Parse object list (handles ,)
+    ///
+    /// The `depth` parameter tracks nesting level to prevent stack overflow.
     fn parse_object_list(
         &mut self,
         tokens: &[Token],
@@ -372,10 +401,11 @@ impl TurtleParser {
         subject: &Subject,
         predicate: &Predicate,
         triples: &mut Vec<Triple>,
+        depth: usize,
     ) -> Result<usize> {
         loop {
             // Parse object
-            let (object, new_pos) = self.parse_object(tokens, pos, triples)?;
+            let (object, new_pos) = self.parse_object(tokens, pos, triples, depth)?;
             pos = new_pos;
 
             // Create triple
@@ -393,12 +423,24 @@ impl TurtleParser {
     }
 
     /// Parse blank node property list: [ predicate object ; ... ]
+    ///
+    /// The `depth` parameter tracks nesting level to prevent stack overflow.
     fn parse_blank_node_property_list(
         &mut self,
         tokens: &[Token],
         mut pos: usize,
         triples: &mut Vec<Triple>,
+        depth: usize,
     ) -> Result<(BlankNode, usize)> {
+        if depth > MAX_NESTING_DEPTH {
+            return Err(ParserError::ParseError(format!(
+                "Maximum nesting depth ({}) exceeded at line {}, column {}",
+                MAX_NESTING_DEPTH,
+                tokens.get(pos).map(|t| t.line).unwrap_or(0),
+                tokens.get(pos).map(|t| t.column).unwrap_or(0)
+            )));
+        }
+
         let bn = self.blank_node_scope.next();
 
         // Check for empty blank node []
@@ -408,7 +450,7 @@ impl TurtleParser {
 
         // Parse predicate-object list
         let subject = Subject::BlankNode(bn.clone());
-        pos = self.parse_predicate_object_list(tokens, pos, &subject, triples)?;
+        pos = self.parse_predicate_object_list(tokens, pos, &subject, triples, depth)?;
 
         // Expect closing bracket
         if pos >= tokens.len() || tokens[pos].kind != TokenKind::CloseBracket {
@@ -424,12 +466,24 @@ impl TurtleParser {
     }
 
     /// Parse collection: ( item1 item2 ... )
+    ///
+    /// The `depth` parameter tracks nesting level to prevent stack overflow.
     fn parse_collection(
         &mut self,
         tokens: &[Token],
         mut pos: usize,
         triples: &mut Vec<Triple>,
+        depth: usize,
     ) -> Result<(Subject, usize)> {
+        if depth > MAX_NESTING_DEPTH {
+            return Err(ParserError::ParseError(format!(
+                "Maximum nesting depth ({}) exceeded at line {}, column {}",
+                MAX_NESTING_DEPTH,
+                tokens.get(pos).map(|t| t.line).unwrap_or(0),
+                tokens.get(pos).map(|t| t.column).unwrap_or(0)
+            )));
+        }
+
         // Check for empty collection
         if pos < tokens.len() && tokens[pos].kind == TokenKind::CloseParen {
             let nil = Iri::new_unchecked(RDF_NIL);
@@ -444,8 +498,8 @@ impl TurtleParser {
         let mut current = head.clone();
 
         loop {
-            // Parse item as object
-            let (item, new_pos) = self.parse_object(tokens, pos, triples)?;
+            // Parse item as object (increment depth for nested items)
+            let (item, new_pos) = self.parse_object(tokens, pos, triples, depth + 1)?;
             pos = new_pos;
 
             // Add rdf:first triple
@@ -898,5 +952,45 @@ mod tests {
         // _:b1 ex:inner _:b2
         // _:b2 ex:value "deep"
         assert_eq!(triples.len(), 3);
+    }
+
+    #[test]
+    fn test_max_nesting_depth_exceeded() {
+        let mut parser = TurtleParser::new();
+
+        // Generate deeply nested blank nodes that exceed MAX_NESTING_DEPTH
+        let mut input = String::from("@prefix ex: <http://example.org/> .\nex:subject ex:prop ");
+        for _ in 0..150 {
+            input.push_str("[ ex:nested ");
+        }
+        input.push_str("\"value\"");
+        for _ in 0..150 {
+            input.push_str(" ]");
+        }
+        input.push_str(" .");
+
+        let result = parser.parse(&input);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Maximum nesting depth"));
+    }
+
+    #[test]
+    fn test_moderate_nesting_allowed() {
+        let mut parser = TurtleParser::new();
+
+        // Generate nested blank nodes within limits (10 levels is fine)
+        let mut input = String::from("@prefix ex: <http://example.org/> .\nex:subject ex:prop ");
+        for i in 0..10 {
+            input.push_str(&format!("[ ex:level{} ", i));
+        }
+        input.push_str("\"deep\"");
+        for _ in 0..10 {
+            input.push_str(" ]");
+        }
+        input.push_str(" .");
+
+        let result = parser.parse(&input);
+        assert!(result.is_ok());
     }
 }

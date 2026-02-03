@@ -6,6 +6,7 @@ mod rdf_graph;
 mod rdf_insert;
 mod rdf_namespaces;
 mod rdf_query;
+mod utils;
 
 pub use rdf_bulk_insert::rdf_bulk_insert;
 pub use rdf_delete::rdf_delete;

@@ -175,10 +175,15 @@ impl SparqlToCypher {
                     where_parts.push(filter);
                 }
             }
-            GP::Union { left, right: _ } => {
-                // Cypher UNION requires separate queries - simplify to first branch for now
-                // TODO: Implement proper UNION support with UNION ALL
-                self.process_pattern(left, match_parts, where_parts, bound_vars)?;
+            GP::Union { .. } => {
+                // UNION queries require generating multiple separate Cypher queries
+                // and combining results, which is not yet implemented.
+                // Return an error rather than silently dropping the right branch.
+                return Err(MapperError::MappingError(
+                    "SPARQL UNION queries are not yet supported. \
+                     Consider rewriting as separate queries."
+                        .into(),
+                ));
             }
             GP::Extend {
                 inner,
@@ -565,10 +570,14 @@ impl SparqlToCypher {
     ) -> String {
         let parts: Vec<String> = order_by
             .iter()
-            .map(|cond| {
-                // Simplified - just use variable name if available
+            .filter_map(|cond| {
+                // Translate the expression to Cypher
+                let expr_str = self
+                    .translate_expression(cond.expression.inner())
+                    .ok()
+                    .flatten()?;
                 let dir = if cond.descending { " DESC" } else { "" };
-                format!("_{}{}", 0, dir) // Placeholder
+                Some(format!("{}{}", expr_str, dir))
             })
             .collect();
 
@@ -694,5 +703,31 @@ mod tests {
         let cypher = result.unwrap();
         assert!(cypher.variables.contains(&"name".to_string()));
         assert!(cypher.variables.contains(&"age".to_string()));
+    }
+
+    #[test]
+    fn test_select_with_order_by() {
+        let result = translate("SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name } ORDER BY ?name");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("ORDER BY"), "Should contain ORDER BY clause");
+        assert!(cypher.query.contains("name"), "ORDER BY should reference the name variable");
+    }
+
+    #[test]
+    fn test_select_with_order_by_desc() {
+        let result = translate("SELECT ?s ?age WHERE { ?s <http://example.org/age> ?age } ORDER BY DESC(?age)");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("ORDER BY"), "Should contain ORDER BY clause");
+        assert!(cypher.query.contains("DESC"), "Should contain DESC for descending order");
+    }
+
+    #[test]
+    fn test_union_returns_error() {
+        let result = translate("SELECT ?s WHERE { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } }");
+        assert!(result.is_err(), "UNION queries should return an error");
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("UNION"), "Error should mention UNION");
     }
 }

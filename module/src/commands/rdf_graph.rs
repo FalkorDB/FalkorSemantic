@@ -121,15 +121,12 @@ fn drop_graph(ctx: &Context, graph_name: &str) -> RedisResult {
     ctx.call("SREM", &[RDF_GRAPHS_SET, graph_name])?;
 
     // Also clean up any namespace mappings for this graph
+    // Use SCAN instead of KEYS for production safety (non-blocking)
     let ns_pattern = format!("rdf:ns:{}:*", graph_name);
-    let keys_result = ctx.call("KEYS", &[&ns_pattern]);
+    let keys = super::utils::scan_keys(ctx, &ns_pattern);
 
-    if let Ok(RedisValue::Array(keys)) = keys_result {
-        for key in keys {
-            if let RedisValue::SimpleString(key_str) = key {
-                let _ = ctx.call("DEL", &[key_str.as_str()]);
-            }
-        }
+    for key_str in keys {
+        let _ = ctx.call("DEL", &[key_str.as_str()]);
     }
 
     log::info!("Dropped RDF graph: {}", graph_name);

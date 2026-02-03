@@ -103,24 +103,19 @@ fn namespace_pattern(graph_key: &str) -> String {
 fn list_namespaces(ctx: &Context, graph_key: &str) -> RedisResult {
     let pattern = namespace_pattern(graph_key);
 
-    // Use KEYS to find all namespace keys (SCAN would be better for large datasets)
-    let keys_result = ctx.call("KEYS", &[&pattern])?;
-
-    let keys = match keys_result {
-        RedisValue::Array(arr) => arr,
-        _ => return Ok(RedisValue::Array(vec![])),
-    };
+    // Use SCAN to find namespace keys (non-blocking, production-safe)
+    let keys = super::utils::scan_keys(ctx, &pattern);
 
     let mut namespaces: Vec<RedisValue> = Vec::new();
     let prefix_offset = format!("{}{}:", NAMESPACE_KEY_PREFIX, graph_key).len();
 
-    for key in keys {
-        if let RedisValue::SimpleString(key_str) = key {
-            // Extract prefix from key
+    for key_str in keys {
+        // Extract prefix from key
+        if key_str.len() > prefix_offset {
             let prefix = &key_str[prefix_offset..];
 
             // Get the URI value
-            let uri_result = ctx.call("GET", &[&key_str])?;
+            let uri_result = ctx.call("GET", &[key_str.as_str()])?;
 
             if let RedisValue::SimpleString(uri) = uri_result {
                 namespaces.push(RedisValue::Array(vec![
