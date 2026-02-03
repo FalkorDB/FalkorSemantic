@@ -86,7 +86,7 @@ jobs:
         run: cargo build --release --package falkorsemantic-module
       
       - name: Upload module artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: redis-module
           path: target/release/libfalkorsemantic_module.so
