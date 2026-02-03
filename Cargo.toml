@@ -22,7 +22,7 @@ rust-version = "1.75"
 redis-module = "2.0"
 
 # Redis client for testing
-redis = "0.27"
+redis = "1.0"
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
