@@ -5,14 +5,43 @@
 
 mod commands;
 
-use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, Status};
+use redis_module::{redis_module, Context, RedisError, RedisResult, RedisString, RedisValue, Status};
 
 /// Initialize the module with Redis
-fn init(_ctx: &Context, _args: &[RedisString]) -> Status {
+fn init(ctx: &Context, _args: &[RedisString]) -> Status {
     // Try to initialize logging, ignore if it fails
     let _ = env_logger::try_init();
 
+    // Check if FalkorDB module is loaded - this is required
+    if !check_falkordb_module(ctx) {
+        log::error!("FalkorDB module not detected. FalkorSemantic requires FalkorDB to be loaded first.");
+        return Status::Err;
+    }
+    
+    log::info!("FalkorDB module detected. FalkorSemantic initialized successfully.");
     Status::Ok
+}
+
+/// Check if FalkorDB module is loaded
+fn check_falkordb_module(ctx: &Context) -> bool {
+    match ctx.call("MODULE", &["LIST"]) {
+        Ok(RedisValue::Array(modules)) => {
+            for module in modules {
+                if let RedisValue::Array(module_info) = module {
+                    for field in module_info {
+                        if let RedisValue::BulkString(name) = field {
+                            let name_str = name.to_lowercase();
+                            if name_str.contains("graph") || name_str.contains("falkor") {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        }
+        _ => false,
+    }
 }
 
 /// Parse semantic data command

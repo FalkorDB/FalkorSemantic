@@ -224,7 +224,7 @@ fn execute_cypher(
         let result = ctx.call("GRAPH.QUERY", &[graph_key, query.as_str()]);
 
         match result {
-            Ok(_) => {
+            Ok(_) => {  
                 if atomic {
                     stats.statements_executed = statements.len();
                 } else {
