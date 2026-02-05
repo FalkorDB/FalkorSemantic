@@ -207,7 +207,8 @@ impl Literal {
     /// Try to parse the value as a date in ISO 8601 format (YYYY-MM-DD)
     ///
     /// Returns the original string if it's a valid ISO 8601 date format.
-    /// This is a simple validation that checks the format and basic validity.
+    /// This validates the basic ISO 8601 format with 4-digit years (0000-9999).
+    /// Extended year representations are not supported.
     pub fn as_date(&self) -> Option<&str> {
         let s = self.value.as_str();
         
@@ -217,8 +218,13 @@ impl Literal {
         }
         
         let bytes = s.as_bytes();
-        // Check format: YYYY-MM-DD
+        // Check format: YYYY-MM-DD (year must be 4 digits)
         if bytes[4] != b'-' || bytes[7] != b'-' {
+            return None;
+        }
+        
+        // Verify year portion is exactly 4 digits
+        if !bytes[0..4].iter().all(|b| b.is_ascii_digit()) {
             return None;
         }
         
@@ -228,7 +234,7 @@ impl Literal {
         let day = s[8..10].parse::<u32>().ok()?;
         
         // Basic validation
-        if year < 0 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
             return None;
         }
         
@@ -404,5 +410,9 @@ mod tests {
         // Not a date at all
         let lit6 = Literal::new("hello");
         assert_eq!(lit6.as_date(), None);
+
+        // Negative year (extended format not supported)
+        let lit7 = Literal::with_datatype("-123-01-01", xsd::date());
+        assert_eq!(lit7.as_date(), None);
     }
 }
