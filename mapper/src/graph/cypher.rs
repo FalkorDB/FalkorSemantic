@@ -54,31 +54,20 @@ impl CypherGenerator {
                 let subject_uri = self.subject_uri(&triple.subject);
                 let is_blank = matches!(triple.subject, Subject::BlankNode(_));
 
-                // For blank nodes with a type, use the type as the primary label
-                // For resources, keep using Resource as the base label
-                let node_label = if is_blank { &label } else { "Resource" };
+                // Use consistent base label for MERGE to prevent duplicate nodes
+                // For blank nodes, always use BlankNode as primary to ensure same URI matches same node
+                // For resources, use Resource as primary
+                let node_label = if is_blank { "BlankNode" } else { "Resource" };
 
-                // Use consistent MERGE pattern with other node creations
-                let statement = if is_blank {
-                    // For blank nodes, use the type label directly without adding it again via SET
-                    format!(
-                        "{} (n:{} {{uri: '{}'}}) SET n.isBlank = {}",
-                        self.operation(),
-                        node_label,
-                        escape_cypher_string(&subject_uri),
-                        is_blank
-                    )
-                } else {
-                    // For resources, add the type as an additional label
-                    format!(
-                        "{} (n:{} {{uri: '{}'}}) SET n:{}, n.isBlank = {}",
-                        self.operation(),
-                        node_label,
-                        escape_cypher_string(&subject_uri),
-                        label,
-                        is_blank
-                    )
-                };
+                // Add the type as an additional label via SET
+                let statement = format!(
+                    "{} (n:{} {{uri: '{}'}}) SET n:{}, n.isBlank = {}",
+                    self.operation(),
+                    node_label,
+                    escape_cypher_string(&subject_uri),
+                    label,
+                    is_blank
+                );
                 return Ok(vec![statement]);
             }
         }
@@ -321,29 +310,22 @@ impl CypherGenerator {
         let mut parts = Vec::new();
 
         // Determine the primary node label
-        // Handle resources first, then blank nodes with types, then blank nodes without types
-        let (node_label, additional_labels): (String, Vec<String>) = if !data.is_blank {
-            // Resource node - use Resource as primary, all types as additional
-            ("Resource".to_string(), data.labels.clone())
-        } else if !data.labels.is_empty() {
-            // Blank node with types - use the first type (alphabetically sorted) as primary
-            // and the rest as additional labels
-            // Sort labels to ensure deterministic ordering
-            let mut sorted_labels = data.labels.clone();
-            sorted_labels.sort();
-            let primary = sorted_labels[0].clone();
-            let additional = sorted_labels[1..].to_vec();
-            (primary, additional)
+        // Use consistent base label for MERGE to prevent duplicate nodes when types are in different batches
+        // For blank nodes: always use BlankNode as primary
+        // For resources: always use Resource as primary
+        let node_label = if data.is_blank {
+            "BlankNode"
         } else {
-            // Blank node with no type - use BlankNode
-            ("BlankNode".to_string(), vec![])
+            "Resource"
         };
 
         // Build the SET clause with labels and properties
         let mut set_parts = Vec::new();
 
-        // Add additional type labels (for resources, this is all labels; for blank nodes, this is labels after the first)
-        for label in &additional_labels {
+        // Add all type labels (sorted for deterministic output)
+        let mut sorted_labels = data.labels.clone();
+        sorted_labels.sort();
+        for label in &sorted_labels {
             set_parts.push(format!("s:{}", label));
         }
 
@@ -605,19 +587,17 @@ mod tests {
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
 
-        // The blank node should be created with Address as the primary label
-        // not BlankNode, to match the semantic meaning
+        // The blank node should use BlankNode as primary label for MERGE (to prevent duplicates)
+        // and Address as an additional label via SET
         assert!(
-            stmt.contains(":Address"),
-            "Statement should contain :Address label. Statement: {}",
+            stmt.contains("MERGE (n:BlankNode"),
+            "Statement should MERGE with BlankNode label to prevent duplicates. Statement: {}",
             stmt
         );
 
-        // The MERGE should use Address label, not BlankNode
-        // This is the key fix: blank nodes with a type should use that type as the primary label
         assert!(
-            stmt.contains("MERGE (n:Address"),
-            "Statement should MERGE with Address label, not BlankNode. Statement: {}",
+            stmt.contains("SET n:Address"),
+            "Statement should SET Address as additional label. Statement: {}",
             stmt
         );
 
@@ -658,10 +638,17 @@ mod tests {
         let stmt = &statements[0];
         println!("Batch statement: {}", stmt);
 
-        // The blank node should use Address as the primary label
+        // The blank node should use BlankNode as primary label for MERGE (to prevent duplicates)
+        // and Address as an additional label via SET
         assert!(
-            stmt.contains("MERGE (s:Address"),
-            "Batch statement should use Address as primary label. Statement: {}",
+            stmt.contains("MERGE (s:BlankNode"),
+            "Batch statement should use BlankNode as primary label to prevent duplicates. Statement: {}",
+            stmt
+        );
+
+        assert!(
+            stmt.contains("s:Address"),
+            "Batch statement should add Address as additional label. Statement: {}",
             stmt
         );
 
@@ -715,14 +702,18 @@ mod tests {
         let stmt = &statements[0];
         println!("Multiple types statement: {}", stmt);
 
-        // AppleType should be the primary label (alphabetically first)
+        // BlankNode should be the primary label for MERGE (to prevent duplicates)
         assert!(
-            stmt.contains("MERGE (s:AppleType"),
-            "Should use AppleType as primary label (alphabetically first). Statement: {}",
+            stmt.contains("MERGE (s:BlankNode"),
+            "Should use BlankNode as primary label to prevent duplicates. Statement: {}",
             stmt
         );
 
-        // Other types should be added as additional labels
+        // All types should be added as additional labels (sorted alphabetically)
+        assert!(
+            stmt.contains("s:AppleType"),
+            "Should add AppleType as additional label"
+        );
         assert!(
             stmt.contains("s:MangoType"),
             "Should add MangoType as additional label"
@@ -730,6 +721,54 @@ mod tests {
         assert!(
             stmt.contains("s:ZebraType"),
             "Should add ZebraType as additional label"
+        );
+    }
+
+    #[test]
+    fn test_blank_node_multiple_batches_no_duplicates() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Batch 1: Blank node with Address type
+        let batch1 = vec![Triple {
+            subject: Subject::BlankNode(blank_node.clone()),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Address")),
+        }];
+
+        // Batch 2: Same blank node with Location type
+        let batch2 = vec![Triple {
+            subject: Subject::BlankNode(blank_node.clone()),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Location")),
+        }];
+
+        let stmt1 = gen.generate_batch(&batch1).unwrap();
+        let stmt2 = gen.generate_batch(&batch2).unwrap();
+
+        println!("Batch 1 statement: {}", stmt1[0]);
+        println!("Batch 2 statement: {}", stmt2[0]);
+
+        // Both should use BlankNode as primary label, ensuring they MERGE to the same node
+        assert!(
+            stmt1[0].contains("MERGE (s:BlankNode {uri: '_:b1'})"),
+            "Batch 1 should use BlankNode as primary label"
+        );
+        assert!(
+            stmt2[0].contains("MERGE (s:BlankNode {uri: '_:b1'})"),
+            "Batch 2 should use BlankNode as primary label"
+        );
+
+        // The labels should be added via SET
+        assert!(
+            stmt1[0].contains("s:Address"),
+            "Batch 1 should add Address label"
+        );
+        assert!(
+            stmt2[0].contains("s:Location"),
+            "Batch 2 should add Location label"
         );
     }
 
