@@ -85,13 +85,14 @@ Datatype information is preserved in Literal nodes:
 | `xsd:double` | Float |
 | `xsd:boolean` | Boolean |
 | `xsd:dateTime` | String (ISO 8601) |
-| `xsd:date` | String (ISO 8601) |
+| `xsd:date` | Date (using `date()` function) |
 
 **RDF:**
 ```turtle
 ex:product ex:price "29.99"^^xsd:decimal ;
            ex:inStock "true"^^xsd:boolean ;
            ex:quantity "100"^^xsd:integer .
+ex:university ex:established "1995-10-01"^^xsd:date .
 ```
 
 **Cypher:**
@@ -103,6 +104,8 @@ MERGE (inStock:Literal {value: true, datatype: 'http://www.w3.org/2001/XMLSchema
 MERGE (p)-[:inStock{predicate: 'http://example.org/inStock', value: true}]->(inStock)
 MERGE (qty:Literal {value: 100, datatype: 'http://www.w3.org/2001/XMLSchema#integer'})
 MERGE (p)-[:quantity{predicate: 'http://example.org/quantity', value: 100}]->(qty)
+MERGE (uni:Resource {uri: 'http://example.org/university'})
+SET uni.established = date('1995-10-01')
 ```
 
 ### Language-Tagged Literals

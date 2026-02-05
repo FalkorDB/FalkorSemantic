@@ -228,7 +228,7 @@ impl Literal {
         let day = s[8..10].parse::<u32>().ok()?;
         
         // Basic validation
-        if year < 0 || month < 1 || month > 12 || day < 1 || day > 31 {
+        if year < 0 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
             return None;
         }
         
