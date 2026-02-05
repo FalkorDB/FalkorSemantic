@@ -144,7 +144,7 @@ impl ComplianceReport {
     }
 
     /// Calculate compliance percentage
-    #[must_use] 
+    #[must_use]
     pub fn compliance_percentage(&self) -> f64 {
         if self.total == 0 {
             return 100.0;
@@ -153,7 +153,7 @@ impl ComplianceReport {
     }
 
     /// Generate a summary string
-    #[must_use] 
+    #[must_use]
     pub fn summary(&self) -> String {
         format!(
             "{}: {}/{} passed ({:.1}% compliant), {} failed, {} skipped",
@@ -168,7 +168,7 @@ impl ComplianceReport {
 }
 
 /// Get the fixtures directory path
-#[must_use] 
+#[must_use]
 pub fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
 }

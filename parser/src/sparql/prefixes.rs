@@ -13,13 +13,13 @@ pub struct PrefixMap {
 
 impl PrefixMap {
     /// Create a new empty prefix map
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a prefix map with standard prefixes pre-populated
-    #[must_use] 
+    #[must_use]
     pub fn with_common_prefixes() -> Self {
         let mut map = Self::new();
         map.add("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
@@ -39,7 +39,7 @@ impl PrefixMap {
     }
 
     /// Get the base IRI
-    #[must_use] 
+    #[must_use]
     pub fn base(&self) -> Option<&str> {
         self.base.as_deref()
     }
@@ -50,13 +50,13 @@ impl PrefixMap {
     }
 
     /// Get the IRI for a prefix
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, prefix: &str) -> Option<&str> {
         self.prefixes.get(prefix).map(std::string::String::as_str)
     }
 
     /// Check if a prefix exists
-    #[must_use] 
+    #[must_use]
     pub fn contains(&self, prefix: &str) -> bool {
         self.prefixes.contains_key(prefix)
     }
@@ -64,7 +64,7 @@ impl PrefixMap {
     /// Expand a prefixed name to a full IRI
     ///
     /// Returns None if the prefix is not defined.
-    #[must_use] 
+    #[must_use]
     pub fn expand(&self, prefixed_name: &str) -> Option<String> {
         if let Some((prefix, local)) = prefixed_name.split_once(':') {
             if let Some(ns) = self.prefixes.get(prefix) {
@@ -75,7 +75,7 @@ impl PrefixMap {
     }
 
     /// Compact a full IRI to a prefixed name if possible
-    #[must_use] 
+    #[must_use]
     pub fn compact(&self, iri: &str) -> Option<String> {
         for (prefix, ns) in &self.prefixes {
             if let Some(local) = iri.strip_prefix(ns.as_str()) {
@@ -94,13 +94,13 @@ impl PrefixMap {
     }
 
     /// Number of prefixes
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.prefixes.len()
     }
 
     /// Check if empty
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.prefixes.is_empty()
     }
@@ -117,7 +117,7 @@ impl PrefixMap {
     }
 
     /// Extract prefixes from a spargebra Query
-    #[must_use] 
+    #[must_use]
     pub fn from_spargebra_query(query: &spargebra::Query) -> Self {
         let map = Self::new();
 

@@ -27,7 +27,7 @@ pub struct SparqlParser {
 
 impl SparqlParser {
     /// Create a new SPARQL parser
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -39,14 +39,14 @@ impl SparqlParser {
     }
 
     /// Enable query validation after parsing
-    #[must_use] 
+    #[must_use]
     pub const fn with_validation(mut self, validate: bool) -> Self {
         self.validate = validate;
         self
     }
 
     /// Set a custom validator
-    #[must_use] 
+    #[must_use]
     pub const fn with_validator(mut self, validator: QueryValidator) -> Self {
         self.validator = Some(validator);
         self.validate = true;
@@ -101,13 +101,13 @@ impl SparqlParser {
     }
 
     /// Check if a query string is syntactically valid
-    #[must_use] 
+    #[must_use]
     pub fn is_valid(&self, query: &str) -> bool {
         self.parse(query).is_ok()
     }
 
     /// Get the query type without full parsing
-    #[must_use] 
+    #[must_use]
     pub fn query_type(query: &str) -> Option<QueryType> {
         let trimmed = query.trim_start();
 

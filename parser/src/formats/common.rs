@@ -90,7 +90,7 @@ pub struct ParserConfig {
 
 impl ParserConfig {
     /// Create a new parser configuration
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -140,7 +140,7 @@ pub struct RioConverter {
 
 impl RioConverter {
     /// Create a new converter
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             blank_node_prefix: None,
@@ -155,7 +155,7 @@ impl RioConverter {
     }
 
     /// Get the blank node prefix
-    #[must_use] 
+    #[must_use]
     pub fn blank_node_prefix(&self) -> Option<&str> {
         self.blank_node_prefix.as_deref()
     }
@@ -268,7 +268,7 @@ impl Default for RioConverter {
 }
 
 /// Helper to create a `TurtleError` from a `ParserError`
-#[must_use] 
+#[must_use]
 pub fn parser_error_to_turtle_error(e: ParserError) -> rio_turtle::TurtleError {
     rio_turtle::TurtleError::from(std::io::Error::new(
         std::io::ErrorKind::InvalidData,

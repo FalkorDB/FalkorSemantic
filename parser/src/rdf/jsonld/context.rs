@@ -80,7 +80,7 @@ pub struct ContextResolver {
 
 impl ContextResolver {
     /// Create a new context resolver
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             cache: HashMap::new(),

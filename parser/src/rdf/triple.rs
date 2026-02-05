@@ -19,19 +19,19 @@ pub enum Subject {
 
 impl Subject {
     /// Check if this subject is an IRI
-    #[must_use] 
+    #[must_use]
     pub const fn is_iri(&self) -> bool {
         matches!(self, Self::Iri(_))
     }
 
     /// Check if this subject is a blank node
-    #[must_use] 
+    #[must_use]
     pub const fn is_blank_node(&self) -> bool {
         matches!(self, Self::BlankNode(_))
     }
 
     /// Get the IRI if this is an IRI subject
-    #[must_use] 
+    #[must_use]
     pub const fn as_iri(&self) -> Option<&Iri> {
         match self {
             Self::Iri(iri) => Some(iri),
@@ -40,7 +40,7 @@ impl Subject {
     }
 
     /// Get the blank node if this is a blank node subject
-    #[must_use] 
+    #[must_use]
     pub const fn as_blank_node(&self) -> Option<&BlankNode> {
         match self {
             Self::BlankNode(bn) => Some(bn),
@@ -90,25 +90,25 @@ pub enum Object {
 
 impl Object {
     /// Check if this object is an IRI
-    #[must_use] 
+    #[must_use]
     pub const fn is_iri(&self) -> bool {
         matches!(self, Self::Iri(_))
     }
 
     /// Check if this object is a blank node
-    #[must_use] 
+    #[must_use]
     pub const fn is_blank_node(&self) -> bool {
         matches!(self, Self::BlankNode(_))
     }
 
     /// Check if this object is a literal
-    #[must_use] 
+    #[must_use]
     pub const fn is_literal(&self) -> bool {
         matches!(self, Self::Literal(_))
     }
 
     /// Get the IRI if this is an IRI object
-    #[must_use] 
+    #[must_use]
     pub const fn as_iri(&self) -> Option<&Iri> {
         match self {
             Self::Iri(iri) => Some(iri),
@@ -117,7 +117,7 @@ impl Object {
     }
 
     /// Get the blank node if this is a blank node object
-    #[must_use] 
+    #[must_use]
     pub const fn as_blank_node(&self) -> Option<&BlankNode> {
         match self {
             Self::BlankNode(bn) => Some(bn),
@@ -126,7 +126,7 @@ impl Object {
     }
 
     /// Get the literal if this is a literal object
-    #[must_use] 
+    #[must_use]
     pub const fn as_literal(&self) -> Option<&Literal> {
         match self {
             Self::Literal(lit) => Some(lit),
@@ -189,19 +189,19 @@ impl Triple {
     }
 
     /// Get the subject
-    #[must_use] 
+    #[must_use]
     pub const fn subject(&self) -> &Subject {
         &self.subject
     }
 
     /// Get the predicate
-    #[must_use] 
+    #[must_use]
     pub const fn predicate(&self) -> &Predicate {
         &self.predicate
     }
 
     /// Get the object
-    #[must_use] 
+    #[must_use]
     pub const fn object(&self) -> &Object {
         &self.object
     }
@@ -258,13 +258,13 @@ pub struct Quad {
 
 impl Quad {
     /// Create a new quad
-    #[must_use] 
+    #[must_use]
     pub const fn new(triple: Triple, graph: Option<GraphName>) -> Self {
         Self { triple, graph }
     }
 
     /// Create a quad in the default graph
-    #[must_use] 
+    #[must_use]
     pub const fn in_default_graph(triple: Triple) -> Self {
         Self {
             triple,
@@ -281,31 +281,31 @@ impl Quad {
     }
 
     /// Get the subject
-    #[must_use] 
+    #[must_use]
     pub const fn subject(&self) -> &Subject {
         &self.triple.subject
     }
 
     /// Get the predicate
-    #[must_use] 
+    #[must_use]
     pub const fn predicate(&self) -> &Predicate {
         &self.triple.predicate
     }
 
     /// Get the object
-    #[must_use] 
+    #[must_use]
     pub const fn object(&self) -> &Object {
         &self.triple.object
     }
 
     /// Get the graph name
-    #[must_use] 
+    #[must_use]
     pub const fn graph(&self) -> Option<&GraphName> {
         self.graph.as_ref()
     }
 
     /// Check if this quad is in the default graph
-    #[must_use] 
+    #[must_use]
     pub const fn is_default_graph(&self) -> bool {
         self.graph.is_none()
     }
@@ -347,13 +347,13 @@ pub struct TriplePattern {
 
 impl TriplePattern {
     /// Create a new triple pattern with all wildcards
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a pattern matching a specific triple exactly
-    #[must_use] 
+    #[must_use]
     pub fn from_triple(triple: &Triple) -> Self {
         Self {
             subject: Some(triple.subject.clone()),
@@ -372,7 +372,7 @@ impl TriplePattern {
     }
 
     /// Create a pattern with a specific predicate (wildcard subject/object)
-    #[must_use] 
+    #[must_use]
     pub const fn with_predicate(predicate: Predicate) -> Self {
         Self {
             subject: None,
@@ -397,7 +397,7 @@ impl TriplePattern {
     }
 
     /// Set the predicate pattern
-    #[must_use] 
+    #[must_use]
     pub fn predicate(mut self, predicate: Predicate) -> Self {
         self.predicate = Some(predicate);
         self
@@ -410,7 +410,7 @@ impl TriplePattern {
     }
 
     /// Check if this pattern matches a given triple
-    #[must_use] 
+    #[must_use]
     pub fn matches(&self, triple: &Triple) -> bool {
         let subject_matches = self.subject.as_ref().map_or(true, |s| s == &triple.subject);
         let predicate_matches = self
@@ -423,19 +423,19 @@ impl TriplePattern {
     }
 
     /// Check if all components are wildcards
-    #[must_use] 
+    #[must_use]
     pub const fn is_all_wildcard(&self) -> bool {
         self.subject.is_none() && self.predicate.is_none() && self.object.is_none()
     }
 
     /// Check if this pattern has any wildcards
-    #[must_use] 
+    #[must_use]
     pub const fn has_wildcard(&self) -> bool {
         self.subject.is_none() || self.predicate.is_none() || self.object.is_none()
     }
 
     /// Check if this is an exact pattern (no wildcards)
-    #[must_use] 
+    #[must_use]
     pub const fn is_exact(&self) -> bool {
         self.subject.is_some() && self.predicate.is_some() && self.object.is_some()
     }
@@ -484,13 +484,13 @@ pub enum GraphScope {
 
 impl QuadPattern {
     /// Create a new quad pattern with all wildcards in the default graph
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a quad pattern from a triple pattern (default graph)
-    #[must_use] 
+    #[must_use]
     pub const fn from_triple_pattern(pattern: TriplePattern) -> Self {
         Self {
             pattern,
@@ -499,7 +499,7 @@ impl QuadPattern {
     }
 
     /// Create a quad pattern matching a specific quad exactly
-    #[must_use] 
+    #[must_use]
     pub fn from_quad(quad: &Quad) -> Self {
         Self {
             pattern: TriplePattern::from_triple(&quad.triple),
@@ -516,7 +516,7 @@ impl QuadPattern {
     }
 
     /// Create a pattern that matches across all graphs
-    #[must_use] 
+    #[must_use]
     pub const fn in_all_graphs(pattern: TriplePattern) -> Self {
         Self {
             pattern,
@@ -525,7 +525,7 @@ impl QuadPattern {
     }
 
     /// Get the graph scope for this pattern
-    #[must_use] 
+    #[must_use]
     pub fn graph_scope(&self) -> GraphScope {
         match &self.graph {
             None => GraphScope::Default,
@@ -535,7 +535,7 @@ impl QuadPattern {
     }
 
     /// Check if this pattern matches a given quad
-    #[must_use] 
+    #[must_use]
     pub fn matches(&self, quad: &Quad) -> bool {
         if !self.pattern.matches(&quad.triple) {
             return false;
@@ -555,7 +555,7 @@ impl QuadPattern {
     }
 
     /// Set the predicate pattern
-    #[must_use] 
+    #[must_use]
     pub fn predicate(mut self, predicate: Predicate) -> Self {
         self.pattern.predicate = Some(predicate);
         self

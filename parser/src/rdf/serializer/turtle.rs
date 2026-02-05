@@ -34,7 +34,7 @@ impl Default for TurtleSerializer {
 
 impl TurtleSerializer {
     /// Create a new Turtle serializer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -45,7 +45,7 @@ impl TurtleSerializer {
     }
 
     /// Create a Turtle serializer with common prefixes
-    #[must_use] 
+    #[must_use]
     pub fn with_common_prefixes() -> Self {
         let mut serializer = Self::new();
         serializer.add_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
@@ -83,7 +83,7 @@ impl TurtleSerializer {
     }
 
     /// Check if a string is a valid Turtle local name
-    #[must_use] 
+    #[must_use]
     pub fn is_valid_local_name(s: &str) -> bool {
         if s.is_empty() {
             return true; // Empty local name is valid (just prefix:)

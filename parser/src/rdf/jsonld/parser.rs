@@ -29,7 +29,7 @@ pub struct JsonLdParser {
 
 impl JsonLdParser {
     /// Create a new JSON-LD parser
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             context_resolver: ContextResolver::new(),
@@ -217,11 +217,10 @@ impl JsonLdParser {
             }
             if iri.starts_with('/') {
                 // Absolute path - find authority
-                if let Some(authority_end) = base.find("://").map(|i| {
-                    base[i + 3..]
-                        .find('/')
-                        .map_or(base.len(), |j| i + 3 + j)
-                }) {
+                if let Some(authority_end) = base
+                    .find("://")
+                    .map(|i| base[i + 3..].find('/').map_or(base.len(), |j| i + 3 + j))
+                {
                     return Ok(format!("{}{}", &base[..authority_end], iri));
                 }
             }

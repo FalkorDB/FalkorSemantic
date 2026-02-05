@@ -86,20 +86,20 @@ impl Iri {
     }
 
     /// Get the full IRI as a string
-    #[must_use] 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.value
     }
 
     /// Get the scheme part of the IRI (e.g., "http", "https", "urn")
-    #[must_use] 
+    #[must_use]
     pub fn scheme(&self) -> &str {
         let end = self.value.find(':').unwrap_or(self.scheme_end);
         &self.value[..end]
     }
 
     /// Get the fragment part of the IRI (after '#'), if present
-    #[must_use] 
+    #[must_use]
     pub fn fragment(&self) -> Option<&str> {
         self.fragment_start.map(|start| &self.value[start..])
     }
@@ -107,7 +107,7 @@ impl Iri {
     /// Get the namespace part of the IRI (everything before the local name)
     ///
     /// The namespace is everything up to and including the last '#' or '/'
-    #[must_use] 
+    #[must_use]
     pub fn namespace(&self) -> &str {
         if let Some(pos) = self.value.rfind('#') {
             &self.value[..=pos]
@@ -119,7 +119,7 @@ impl Iri {
     }
 
     /// Get the local name part of the IRI (after the last '#' or '/')
-    #[must_use] 
+    #[must_use]
     pub fn local_name(&self) -> &str {
         if let Some(pos) = self.value.rfind('#') {
             &self.value[pos + 1..]

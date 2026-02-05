@@ -36,7 +36,7 @@ impl BlankNode {
     }
 
     /// Get the blank node label (without "_:" prefix)
-    #[must_use] 
+    #[must_use]
     pub fn label(&self) -> &str {
         &self.label
     }

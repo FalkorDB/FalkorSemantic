@@ -26,7 +26,7 @@ pub struct NTriplesReader {
 
 impl NTriplesReader {
     /// Create a new N-Triples reader
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             blank_node_prefix: None,
@@ -86,7 +86,7 @@ impl NTriplesReader {
     }
 
     /// Parse N-Triples from a string
-    #[must_use] 
+    #[must_use]
     pub fn parse_str<'a>(&self, input: &'a str) -> TripleCollector<&'a [u8]> {
         TripleCollector::new(input.as_bytes(), self.blank_node_prefix.clone())
     }

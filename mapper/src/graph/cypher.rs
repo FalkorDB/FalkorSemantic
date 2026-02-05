@@ -22,13 +22,13 @@ pub struct CypherGenerator {
 
 impl CypherGenerator {
     /// Create a new Cypher generator
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self { use_merge: true }
     }
 
     /// Create a generator that uses CREATE instead of MERGE
-    #[must_use] 
+    #[must_use]
     pub const fn with_create() -> Self {
         Self { use_merge: false }
     }
@@ -454,7 +454,7 @@ pub struct GraphBuilder {
 
 impl GraphBuilder {
     /// Create a new graph builder
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }

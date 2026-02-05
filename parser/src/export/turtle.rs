@@ -30,7 +30,7 @@ impl Default for TurtleWriter {
 
 impl TurtleWriter {
     /// Create a new Turtle writer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -40,7 +40,7 @@ impl TurtleWriter {
     }
 
     /// Add a prefix mapping
-    #[must_use] 
+    #[must_use]
     pub fn with_prefix(mut self, prefix: &str, namespace: &str) -> Self {
         self.prefixes
             .insert(prefix.to_string(), namespace.to_string());
@@ -48,7 +48,7 @@ impl TurtleWriter {
     }
 
     /// Add common prefixes (rdf, rdfs, xsd, owl)
-    #[must_use] 
+    #[must_use]
     pub fn with_common_prefixes(self) -> Self {
         self.with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
             .with_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
@@ -57,14 +57,14 @@ impl TurtleWriter {
     }
 
     /// Disable subject grouping (write each triple on its own line)
-    #[must_use] 
+    #[must_use]
     pub const fn without_grouping(mut self) -> Self {
         self.group_by_subject = false;
         self
     }
 
     /// Set custom indentation
-    #[must_use] 
+    #[must_use]
     pub fn with_indent(mut self, indent: &str) -> Self {
         self.indent = indent.to_string();
         self

@@ -16,67 +16,67 @@ pub mod xsd {
     pub const NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema#";
 
     /// Create an XSD datatype IRI
-    #[must_use] 
+    #[must_use]
     pub fn datatype(local_name: &str) -> Iri {
         Iri::new_unchecked(format!("{NAMESPACE}{local_name}"))
     }
 
     /// xsd:string
-    #[must_use] 
+    #[must_use]
     pub fn string() -> Iri {
         datatype("string")
     }
 
     /// xsd:boolean
-    #[must_use] 
+    #[must_use]
     pub fn boolean() -> Iri {
         datatype("boolean")
     }
 
     /// xsd:integer
-    #[must_use] 
+    #[must_use]
     pub fn integer() -> Iri {
         datatype("integer")
     }
 
     /// xsd:decimal
-    #[must_use] 
+    #[must_use]
     pub fn decimal() -> Iri {
         datatype("decimal")
     }
 
     /// xsd:double
-    #[must_use] 
+    #[must_use]
     pub fn double() -> Iri {
         datatype("double")
     }
 
     /// xsd:float
-    #[must_use] 
+    #[must_use]
     pub fn float() -> Iri {
         datatype("float")
     }
 
     /// xsd:date
-    #[must_use] 
+    #[must_use]
     pub fn date() -> Iri {
         datatype("date")
     }
 
     /// xsd:dateTime
-    #[must_use] 
+    #[must_use]
     pub fn date_time() -> Iri {
         datatype("dateTime")
     }
 
     /// xsd:time
-    #[must_use] 
+    #[must_use]
     pub fn time() -> Iri {
         datatype("time")
     }
 
     /// xsd:anyURI
-    #[must_use] 
+    #[must_use]
     pub fn any_uri() -> Iri {
         datatype("anyURI")
     }
@@ -160,7 +160,7 @@ impl Literal {
     }
 
     /// Get the lexical value
-    #[must_use] 
+    #[must_use]
     pub fn value(&self) -> &str {
         &self.value
     }
@@ -177,31 +177,31 @@ impl Literal {
     }
 
     /// Get the explicit datatype if one was set
-    #[must_use] 
+    #[must_use]
     pub const fn explicit_datatype(&self) -> Option<&Iri> {
         self.datatype.as_ref()
     }
 
     /// Get the language tag, if present
-    #[must_use] 
+    #[must_use]
     pub fn language(&self) -> Option<&str> {
         self.language.as_deref()
     }
 
     /// Check if this is a plain literal (no explicit datatype or language)
-    #[must_use] 
+    #[must_use]
     pub const fn is_plain(&self) -> bool {
         self.datatype.is_none() && self.language.is_none()
     }
 
     /// Check if this is a language-tagged literal
-    #[must_use] 
+    #[must_use]
     pub const fn is_language_tagged(&self) -> bool {
         self.language.is_some()
     }
 
     /// Try to parse the value as a boolean
-    #[must_use] 
+    #[must_use]
     pub fn as_bool(&self) -> Option<bool> {
         match self.value.as_str() {
             "true" | "1" => Some(true),
@@ -211,13 +211,13 @@ impl Literal {
     }
 
     /// Try to parse the value as an integer
-    #[must_use] 
+    #[must_use]
     pub fn as_integer(&self) -> Option<i64> {
         self.value.parse().ok()
     }
 
     /// Try to parse the value as a float
-    #[must_use] 
+    #[must_use]
     pub fn as_float(&self) -> Option<f64> {
         self.value.parse().ok()
     }
@@ -229,7 +229,7 @@ impl Literal {
     ///
     /// This validates the basic ISO 8601 format with 4-digit years (0000-9999).
     /// Extended year representations are not supported.
-    #[must_use] 
+    #[must_use]
     pub fn as_date(&self) -> Option<&str> {
         let s = self.value.as_str();
 
@@ -308,25 +308,25 @@ impl fmt::Display for Literal {
 /// Convenience constructors for common literal types
 impl Literal {
     /// Create a boolean literal
-    #[must_use] 
+    #[must_use]
     pub fn boolean(value: bool) -> Self {
         Self::with_datatype(if value { "true" } else { "false" }, xsd::boolean())
     }
 
     /// Create an integer literal
-    #[must_use] 
+    #[must_use]
     pub fn integer(value: i64) -> Self {
         Self::with_datatype(value.to_string(), xsd::integer())
     }
 
     /// Create a decimal literal
-    #[must_use] 
+    #[must_use]
     pub fn decimal(value: f64) -> Self {
         Self::with_datatype(value.to_string(), xsd::decimal())
     }
 
     /// Create a double literal
-    #[must_use] 
+    #[must_use]
     pub fn double(value: f64) -> Self {
         Self::with_datatype(value.to_string(), xsd::double())
     }

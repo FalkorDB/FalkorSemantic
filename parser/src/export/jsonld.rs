@@ -42,7 +42,7 @@ impl Default for JsonLdWriter {
 
 impl JsonLdWriter {
     /// Create a new JSON-LD writer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             context: HashMap::new(),
@@ -52,7 +52,7 @@ impl JsonLdWriter {
     }
 
     /// Add a term to the context
-    #[must_use] 
+    #[must_use]
     pub fn with_term(mut self, term: &str, iri: &str) -> Self {
         self.context
             .insert(term.to_string(), ContextEntry::Iri(iri.to_string()));
@@ -60,7 +60,7 @@ impl JsonLdWriter {
     }
 
     /// Add a prefix to the context
-    #[must_use] 
+    #[must_use]
     pub fn with_prefix(mut self, prefix: &str, namespace: &str) -> Self {
         self.context
             .insert(prefix.to_string(), ContextEntry::Iri(namespace.to_string()));
@@ -68,7 +68,7 @@ impl JsonLdWriter {
     }
 
     /// Add common prefixes
-    #[must_use] 
+    #[must_use]
     pub fn with_common_prefixes(self) -> Self {
         self.with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
             .with_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
@@ -76,7 +76,7 @@ impl JsonLdWriter {
     }
 
     /// Disable pretty-printing
-    #[must_use] 
+    #[must_use]
     pub const fn compact(mut self) -> Self {
         self.pretty = false;
         self

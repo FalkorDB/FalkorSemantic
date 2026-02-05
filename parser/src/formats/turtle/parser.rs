@@ -43,7 +43,7 @@ pub struct TurtleParser {
 
 impl TurtleParser {
     /// Create a new Turtle parser
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             namespaces: NamespaceRegistry::with_defaults(),
@@ -54,7 +54,7 @@ impl TurtleParser {
     }
 
     /// Create a parser with a base IRI
-    #[must_use] 
+    #[must_use]
     pub fn with_base(base_iri: Iri) -> Self {
         Self {
             namespaces: NamespaceRegistry::with_defaults(),

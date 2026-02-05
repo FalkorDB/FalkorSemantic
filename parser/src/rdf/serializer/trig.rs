@@ -35,7 +35,7 @@ impl Default for TriGSerializer {
 
 impl TriGSerializer {
     /// Create a new `TriG` serializer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -46,7 +46,7 @@ impl TriGSerializer {
     }
 
     /// Create a `TriG` serializer with common prefixes
-    #[must_use] 
+    #[must_use]
     pub fn with_common_prefixes() -> Self {
         let mut serializer = Self::new();
         serializer.add_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");

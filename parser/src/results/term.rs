@@ -46,25 +46,25 @@ impl Term {
     }
 
     /// Check if this is an IRI
-    #[must_use] 
+    #[must_use]
     pub const fn is_iri(&self) -> bool {
         matches!(self, Self::Iri(_))
     }
 
     /// Check if this is a literal
-    #[must_use] 
+    #[must_use]
     pub const fn is_literal(&self) -> bool {
         matches!(self, Self::Literal(_))
     }
 
     /// Check if this is a blank node
-    #[must_use] 
+    #[must_use]
     pub const fn is_blank_node(&self) -> bool {
         matches!(self, Self::BlankNode(_))
     }
 
     /// Get as IRI if this is an IRI term
-    #[must_use] 
+    #[must_use]
     pub const fn as_iri(&self) -> Option<&Iri> {
         match self {
             Self::Iri(iri) => Some(iri),
@@ -73,7 +73,7 @@ impl Term {
     }
 
     /// Get as literal if this is a literal term
-    #[must_use] 
+    #[must_use]
     pub const fn as_literal(&self) -> Option<&Literal> {
         match self {
             Self::Literal(lit) => Some(lit),
@@ -82,7 +82,7 @@ impl Term {
     }
 
     /// Get as blank node if this is a blank node term
-    #[must_use] 
+    #[must_use]
     pub const fn as_blank_node(&self) -> Option<&BlankNode> {
         match self {
             Self::BlankNode(bn) => Some(bn),
@@ -91,7 +91,7 @@ impl Term {
     }
 
     /// Get the term type as a string (for JSON serialization)
-    #[must_use] 
+    #[must_use]
     pub const fn term_type(&self) -> &'static str {
         match self {
             Self::Iri(_) => "uri",
@@ -101,7 +101,7 @@ impl Term {
     }
 
     /// Get the value as a string
-    #[must_use] 
+    #[must_use]
     pub fn value(&self) -> &str {
         match self {
             Self::Iri(iri) => iri.as_str(),

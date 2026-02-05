@@ -17,7 +17,7 @@ pub struct JsonLdToRdf {
 
 impl JsonLdToRdf {
     /// Create a new converter
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             blank_node_scope: BlankNodeScope::generate(),
@@ -101,8 +101,7 @@ impl JsonLdToRdf {
                 Value::String(type_iri) => {
                     let type_iri = Iri::new(type_iri)
                         .map_err(|e| JsonLdError::rdf_conversion(e.to_string()))?;
-                    let triple =
-                        Triple::new(subject.clone(), rdf_type, Object::Iri(type_iri));
+                    let triple = Triple::new(subject.clone(), rdf_type, Object::Iri(type_iri));
                     quads.push(Quad::in_default_graph(triple));
                 }
                 _ => {}

@@ -8,7 +8,7 @@ use falkorsemantic_parser::formats::NTriplesReader;
 use falkorsemantic_parser::TurtleParser;
 
 /// Run Turtle parser compliance tests
-#[must_use] 
+#[must_use]
 pub fn run_turtle_tests() -> ComplianceReport {
     let mut report = ComplianceReport::new("RDF 1.1 Turtle");
 
@@ -110,7 +110,7 @@ pub fn run_turtle_tests() -> ComplianceReport {
 }
 
 /// Run N-Triples parser compliance tests
-#[must_use] 
+#[must_use]
 pub fn run_ntriples_tests() -> ComplianceReport {
     let mut report = ComplianceReport::new("RDF 1.1 N-Triples");
 
@@ -191,7 +191,7 @@ pub fn run_ntriples_tests() -> ComplianceReport {
 }
 
 /// Run N-Quads parser compliance tests
-#[must_use] 
+#[must_use]
 pub fn run_nquads_tests() -> ComplianceReport {
     let mut report = ComplianceReport::new("RDF 1.1 N-Quads");
 

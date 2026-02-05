@@ -12,7 +12,7 @@ pub struct CsvResultsWriter;
 
 impl CsvResultsWriter {
     /// Create a new CSV results writer
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }
@@ -89,7 +89,7 @@ pub struct TsvResultsWriter;
 
 impl TsvResultsWriter {
     /// Create a new TSV results writer
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

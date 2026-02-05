@@ -138,9 +138,7 @@ fn add_namespace(ctx: &Context, graph_key: &str, prefix: &str, uri: &str) -> Red
     // Store the mapping
     ctx.call("SET", &[&key, uri])?;
 
-    log::debug!(
-        "Added namespace: {prefix} -> {uri} (graph: {graph_key})"
-    );
+    log::debug!("Added namespace: {prefix} -> {uri} (graph: {graph_key})");
 
     Ok(RedisValue::SimpleStringStatic("OK"))
 }

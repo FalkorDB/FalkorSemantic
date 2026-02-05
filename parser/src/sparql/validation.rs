@@ -54,20 +54,20 @@ pub struct QueryValidator {
 
 impl QueryValidator {
     /// Create a new validator with default settings
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set whether to allow undefined variables in projection
-    #[must_use] 
+    #[must_use]
     pub const fn allow_undefined_projection(mut self, allow: bool) -> Self {
         self.allow_undefined_projection = allow;
         self
     }
 
     /// Set maximum pattern depth
-    #[must_use] 
+    #[must_use]
     pub const fn max_pattern_depth(mut self, depth: usize) -> Self {
         self.max_pattern_depth = Some(depth);
         self
@@ -79,13 +79,16 @@ impl QueryValidator {
         if errors.is_empty() {
             Ok(())
         } else {
-            let messages: Vec<String> = errors.iter().map(std::string::ToString::to_string).collect();
+            let messages: Vec<String> = errors
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect();
             Err(SparqlError::validation(messages.join("; ")))
         }
     }
 
     /// Collect all validation errors
-    #[must_use] 
+    #[must_use]
     pub fn collect_errors(&self, query: &Query) -> Vec<ValidationError> {
         let mut errors = Vec::new();
 
@@ -125,7 +128,7 @@ impl QueryValidator {
     }
 
     /// Check if a query is valid
-    #[must_use] 
+    #[must_use]
     pub fn is_valid(&self, query: &Query) -> bool {
         self.collect_errors(query).is_empty()
     }

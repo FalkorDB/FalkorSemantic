@@ -27,7 +27,7 @@ pub struct NQuadsReader {
 
 impl NQuadsReader {
     /// Create a new N-Quads reader
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             blank_node_prefix: None,
@@ -87,7 +87,7 @@ impl NQuadsReader {
     }
 
     /// Parse N-Quads from a string, returning an iterator
-    #[must_use] 
+    #[must_use]
     pub fn parse_str<'a>(&self, input: &'a str) -> QuadCollector<&'a [u8]> {
         QuadCollector::new(input.as_bytes(), self.blank_node_prefix.clone())
     }

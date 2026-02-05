@@ -28,7 +28,7 @@ pub struct Mapper {
 
 impl Mapper {
     /// Create a new mapper instance
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             cypher_gen: graph::CypherGenerator::new(),
@@ -37,7 +37,7 @@ impl Mapper {
     }
 
     /// Create a mapper with custom delete options
-    #[must_use] 
+    #[must_use]
     pub fn with_delete_options(options: graph::DeleteOptions) -> Self {
         Self {
             cypher_gen: graph::CypherGenerator::new(),
@@ -99,13 +99,13 @@ impl Mapper {
     }
 
     /// Get a reference to the Cypher generator for advanced usage
-    #[must_use] 
+    #[must_use]
     pub const fn cypher_generator(&self) -> &graph::CypherGenerator {
         &self.cypher_gen
     }
 
     /// Get a reference to the delete generator for advanced usage
-    #[must_use] 
+    #[must_use]
     pub const fn delete_generator(&self) -> &graph::DeleteGenerator {
         &self.delete_gen
     }

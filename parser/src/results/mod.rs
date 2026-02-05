@@ -77,7 +77,7 @@ pub enum ResultFormat {
 
 impl ResultFormat {
     /// Get the MIME type for this format
-    #[must_use] 
+    #[must_use]
     pub const fn mime_type(&self) -> &'static str {
         match self {
             Self::Json => "application/sparql-results+json",
@@ -90,7 +90,7 @@ impl ResultFormat {
     }
 
     /// Get the file extension for this format
-    #[must_use] 
+    #[must_use]
     pub const fn extension(&self) -> &'static str {
         match self {
             Self::Json => "json",

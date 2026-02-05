@@ -5,7 +5,7 @@
 use crate::{ComplianceReport, GapSeverity};
 
 /// Generate a markdown compliance report
-#[must_use] 
+#[must_use]
 pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
     let mut md = String::new();
 
@@ -86,7 +86,7 @@ pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
 }
 
 /// Generate a JSON compliance report
-#[must_use] 
+#[must_use]
 pub fn generate_json_report(reports: &[ComplianceReport]) -> String {
     use serde_json::{json, Value};
 

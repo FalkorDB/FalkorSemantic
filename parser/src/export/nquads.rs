@@ -18,7 +18,7 @@ pub struct NQuadsWriter {
 
 impl NQuadsWriter {
     /// Create a new N-Quads writer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             nt_writer: NTriplesWriter::new(),

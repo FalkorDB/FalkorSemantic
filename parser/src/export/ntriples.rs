@@ -15,7 +15,7 @@ pub struct NTriplesWriter;
 
 impl NTriplesWriter {
     /// Create a new N-Triples writer
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

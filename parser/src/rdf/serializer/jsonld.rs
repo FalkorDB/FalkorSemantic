@@ -62,7 +62,7 @@ impl Default for JsonLdSerializer {
 
 impl JsonLdSerializer {
     /// Create a new JSON-LD serializer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -74,7 +74,7 @@ impl JsonLdSerializer {
     }
 
     /// Create a JSON-LD serializer with expanded form (no @context)
-    #[must_use] 
+    #[must_use]
     pub fn expanded() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -86,7 +86,7 @@ impl JsonLdSerializer {
     }
 
     /// Set whether to use pretty printing
-    #[must_use] 
+    #[must_use]
     pub const fn pretty(mut self, pretty: bool) -> Self {
         self.pretty = pretty;
         self
@@ -211,18 +211,9 @@ impl JsonLdSerializer {
             for (graph_id, nodes) in &self.named_graphs {
                 write!(writer, ",")?;
                 write!(writer, "{newline}{indent}{{")?;
-                write!(
-                    writer,
-                    "{newline}{indent}{indent}\"@id\": \"{graph_id}\","
-                )?;
+                write!(writer, "{newline}{indent}{indent}\"@id\": \"{graph_id}\",")?;
                 write!(writer, "{newline}{indent}{indent}\"@graph\": [")?;
-                self.write_nodes_array(
-                    nodes,
-                    writer,
-                    &format!("{indent}{indent}"),
-                    newline,
-                    true,
-                )?;
+                self.write_nodes_array(nodes, writer, &format!("{indent}{indent}"), newline, true)?;
                 write!(writer, "{newline}{indent}{indent}]")?;
                 write!(writer, "{newline}{indent}}}")?;
             }

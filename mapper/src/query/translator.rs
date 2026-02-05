@@ -19,7 +19,7 @@ pub struct SparqlToCypher {
 
 impl SparqlToCypher {
     /// Create a new translator
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }

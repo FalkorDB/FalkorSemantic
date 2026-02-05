@@ -57,7 +57,7 @@ impl SparqlError {
     }
 
     /// Add position information from byte offset
-    #[must_use] 
+    #[must_use]
     pub fn with_position(mut self, input: &str, offset: usize) -> Self {
         self.offset = Some(offset);
 
@@ -73,7 +73,7 @@ impl SparqlError {
     }
 
     /// Add explicit line/column information
-    #[must_use] 
+    #[must_use]
     pub const fn with_location(mut self, line: usize, column: usize) -> Self {
         self.line = Some(line);
         self.column = Some(column);

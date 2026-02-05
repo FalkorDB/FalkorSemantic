@@ -29,7 +29,7 @@ struct CacheEntry<V> {
 
 impl<K: Eq + Hash + Clone, V: Clone> LruCache<K, V> {
     /// Create a new LRU cache with given capacity
-    #[must_use] 
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
@@ -39,7 +39,7 @@ impl<K: Eq + Hash + Clone, V: Clone> LruCache<K, V> {
     }
 
     /// Create a new LRU cache with TTL
-    #[must_use] 
+    #[must_use]
     pub fn with_ttl(capacity: usize, ttl: Duration) -> Self {
         Self {
             capacity,
@@ -168,7 +168,7 @@ pub struct NamespaceCache {
 
 impl NamespaceCache {
     /// Create a new namespace cache
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             expansion_cache: LruCache::new(1000),
@@ -177,7 +177,7 @@ impl NamespaceCache {
     }
 
     /// Create with custom capacity
-    #[must_use] 
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             expansion_cache: LruCache::new(capacity),
@@ -251,7 +251,7 @@ pub struct CachedPlan {
 
 impl QueryPlanCache {
     /// Create a new query plan cache
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             cache: LruCache::new(500),
@@ -259,7 +259,7 @@ impl QueryPlanCache {
     }
 
     /// Create with custom capacity
-    #[must_use] 
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             cache: LruCache::new(capacity),
@@ -267,7 +267,7 @@ impl QueryPlanCache {
     }
 
     /// Create with TTL
-    #[must_use] 
+    #[must_use]
     pub fn with_ttl(capacity: usize, ttl: Duration) -> Self {
         Self {
             cache: LruCache::with_ttl(capacity, ttl),

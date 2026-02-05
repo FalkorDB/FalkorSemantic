@@ -21,31 +21,31 @@ pub enum Query {
 
 impl Query {
     /// Check if this is a SELECT query
-    #[must_use] 
+    #[must_use]
     pub const fn is_select(&self) -> bool {
         matches!(self, Self::Select(_))
     }
 
     /// Check if this is a CONSTRUCT query
-    #[must_use] 
+    #[must_use]
     pub const fn is_construct(&self) -> bool {
         matches!(self, Self::Construct(_))
     }
 
     /// Check if this is an ASK query
-    #[must_use] 
+    #[must_use]
     pub const fn is_ask(&self) -> bool {
         matches!(self, Self::Ask(_))
     }
 
     /// Check if this is a DESCRIBE query
-    #[must_use] 
+    #[must_use]
     pub const fn is_describe(&self) -> bool {
         matches!(self, Self::Describe(_))
     }
 
     /// Get as SELECT query
-    #[must_use] 
+    #[must_use]
     pub const fn as_select(&self) -> Option<&SelectQuery> {
         match self {
             Self::Select(q) => Some(q),
@@ -54,7 +54,7 @@ impl Query {
     }
 
     /// Get as CONSTRUCT query
-    #[must_use] 
+    #[must_use]
     pub const fn as_construct(&self) -> Option<&ConstructQuery> {
         match self {
             Self::Construct(q) => Some(q),
@@ -63,7 +63,7 @@ impl Query {
     }
 
     /// Get as ASK query
-    #[must_use] 
+    #[must_use]
     pub const fn as_ask(&self) -> Option<&AskQuery> {
         match self {
             Self::Ask(q) => Some(q),
@@ -72,7 +72,7 @@ impl Query {
     }
 
     /// Get as DESCRIBE query
-    #[must_use] 
+    #[must_use]
     pub const fn as_describe(&self) -> Option<&DescribeQuery> {
         match self {
             Self::Describe(q) => Some(q),
@@ -81,7 +81,7 @@ impl Query {
     }
 
     /// Get all variables used in the query
-    #[must_use] 
+    #[must_use]
     pub fn variables(&self) -> HashSet<Variable> {
         match self {
             Self::Select(q) => q.variables(),
@@ -92,7 +92,7 @@ impl Query {
     }
 
     /// Get the graph pattern (WHERE clause)
-    #[must_use] 
+    #[must_use]
     pub const fn pattern(&self) -> Option<&GraphPattern> {
         match self {
             Self::Select(q) => Some(&q.pattern),
@@ -103,7 +103,7 @@ impl Query {
     }
 
     /// Get the dataset clause if any
-    #[must_use] 
+    #[must_use]
     pub const fn dataset(&self) -> Option<&QueryDataset> {
         match self {
             Self::Select(q) => q.dataset.as_ref(),
@@ -114,7 +114,7 @@ impl Query {
     }
 
     /// Get the original spargebra query
-    #[must_use] 
+    #[must_use]
     pub fn inner(&self) -> spargebra::Query {
         match self {
             Self::Select(q) => q.inner.clone(),
@@ -160,13 +160,13 @@ pub struct SelectQuery {
 
 impl SelectQuery {
     /// Check if this is SELECT *
-    #[must_use] 
+    #[must_use]
     pub const fn is_select_all(&self) -> bool {
         self.projection.is_none()
     }
 
     /// Get projected variables (returns owned values for consistency)
-    #[must_use] 
+    #[must_use]
     pub fn projected_variables(&self) -> Vec<Variable> {
         match &self.projection {
             Some(vars) => vars.clone(),
@@ -175,7 +175,7 @@ impl SelectQuery {
     }
 
     /// Get all variables used in the query
-    #[must_use] 
+    #[must_use]
     pub fn variables(&self) -> HashSet<Variable> {
         let mut vars = self.pattern.variables();
         if let Some(proj) = &self.projection {
@@ -202,7 +202,7 @@ pub struct ConstructQuery {
 
 impl ConstructQuery {
     /// Get all variables used in the query
-    #[must_use] 
+    #[must_use]
     pub fn variables(&self) -> HashSet<Variable> {
         let mut vars = self.pattern.variables();
         for triple in &self.template {
@@ -225,7 +225,7 @@ pub struct AskQuery {
 
 impl AskQuery {
     /// Get all variables used in the query
-    #[must_use] 
+    #[must_use]
     pub fn variables(&self) -> HashSet<Variable> {
         self.pattern.variables()
     }
@@ -246,7 +246,7 @@ pub struct DescribeQuery {
 
 impl DescribeQuery {
     /// Get all variables used in the query
-    #[must_use] 
+    #[must_use]
     pub fn variables(&self) -> HashSet<Variable> {
         let mut vars = self.pattern.variables();
         for resource in &self.resources {
@@ -272,7 +272,7 @@ impl Variable {
     }
 
     /// Get the variable name with ? prefix
-    #[must_use] 
+    #[must_use]
     pub fn with_prefix(&self) -> String {
         format!("?{}", self.name)
     }
@@ -331,13 +331,13 @@ pub enum TermPattern {
 
 impl TermPattern {
     /// Check if this is a variable
-    #[must_use] 
+    #[must_use]
     pub const fn is_variable(&self) -> bool {
         matches!(self, Self::Variable(_))
     }
 
     /// Get as variable if it is one
-    #[must_use] 
+    #[must_use]
     pub const fn as_variable(&self) -> Option<&Variable> {
         match self {
             Self::Variable(v) => Some(v),
@@ -359,7 +359,7 @@ pub struct TriplePattern {
 
 impl TriplePattern {
     /// Get all variables in this triple pattern
-    #[must_use] 
+    #[must_use]
     pub fn variables(&self) -> HashSet<Variable> {
         let mut vars = HashSet::new();
         if let TermPattern::Variable(v) = &self.subject {
@@ -384,19 +384,19 @@ pub struct GraphPattern {
 
 impl GraphPattern {
     /// Get all variables in this pattern
-    #[must_use] 
+    #[must_use]
     pub fn variables(&self) -> HashSet<Variable> {
         extract_variables(&self.inner)
     }
 
     /// Check if the pattern is empty (no patterns)
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         matches!(&self.inner, spargebra::algebra::GraphPattern::Bgp { patterns } if patterns.is_empty())
     }
 
     /// Get the underlying spargebra pattern for advanced translation
-    #[must_use] 
+    #[must_use]
     pub const fn inner(&self) -> &spargebra::algebra::GraphPattern {
         &self.inner
     }
@@ -512,7 +512,7 @@ pub struct Expression {
 
 impl Expression {
     /// Get the underlying spargebra expression for advanced translation
-    #[must_use] 
+    #[must_use]
     pub const fn inner(&self) -> &spargebra::algebra::Expression {
         &self.inner
     }
@@ -538,7 +538,7 @@ pub struct QueryDataset {
 
 impl QueryDataset {
     /// Check if the dataset is empty
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.default_graphs.is_empty() && self.named_graphs.is_empty()
     }

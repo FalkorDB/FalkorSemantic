@@ -16,13 +16,13 @@ pub struct TurtleResultsWriter {
 
 impl TurtleResultsWriter {
     /// Create a new Turtle results writer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    #[must_use] 
+    #[must_use]
     pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self
@@ -135,13 +135,13 @@ pub struct RdfJsonResultsWriter {
 
 impl RdfJsonResultsWriter {
     /// Create a new RDF/JSON results writer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    #[must_use] 
+    #[must_use]
     pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self

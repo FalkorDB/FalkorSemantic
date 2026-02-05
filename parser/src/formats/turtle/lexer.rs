@@ -86,7 +86,7 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     /// Create a new lexer for the given input
-    #[must_use] 
+    #[must_use]
     pub fn new(input: &'a str) -> Self {
         Self {
             input: input.chars().peekable(),

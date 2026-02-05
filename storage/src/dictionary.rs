@@ -32,7 +32,7 @@ pub struct IriDictionary {
 
 impl IriDictionary {
     /// Create a new empty dictionary
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             iri_to_id: RwLock::new(HashMap::new()),

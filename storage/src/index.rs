@@ -28,7 +28,7 @@ pub struct NamespaceIndex {
 
 impl NamespaceIndex {
     /// Create a new empty namespace index
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -69,7 +69,9 @@ impl NamespaceIndex {
     /// Get the count of IRIs in a namespace
     pub fn namespace_count(&self, namespace: &str) -> usize {
         let reader = self.namespace_to_ids.read().unwrap();
-        reader.get(namespace).map_or(0, std::collections::HashSet::len)
+        reader
+            .get(namespace)
+            .map_or(0, std::collections::HashSet::len)
     }
 
     /// Remove an IRI from the index
@@ -116,7 +118,7 @@ pub struct LocalNameIndex {
 
 impl LocalNameIndex {
     /// Create a new empty local name index
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -161,7 +163,7 @@ pub struct TypeIndex {
 
 impl TypeIndex {
     /// Create a new empty type index
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -207,7 +209,9 @@ impl TypeIndex {
     /// Get count of subjects with a given type
     pub fn type_count(&self, type_id: IriId) -> usize {
         let reader = self.type_to_subjects.read().unwrap();
-        reader.get(&type_id).map_or(0, std::collections::HashSet::len)
+        reader
+            .get(&type_id)
+            .map_or(0, std::collections::HashSet::len)
     }
 
     /// Get all distinct types in the index
@@ -289,7 +293,7 @@ pub struct PredicateIndex {
 
 impl PredicateIndex {
     /// Create a new empty predicate index
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -452,7 +456,7 @@ pub enum IndexHint {
 
 impl IndexHint {
     /// Get the estimated cost of this hint (lower is better)
-    #[must_use] 
+    #[must_use]
     pub const fn estimated_cost(&self) -> f64 {
         match self {
             Self::UseTypeIndex { .. } => 0.1,
@@ -463,7 +467,7 @@ impl IndexHint {
     }
 
     /// Check if this hint uses an index
-    #[must_use] 
+    #[must_use]
     pub const fn uses_index(&self) -> bool {
         !matches!(self, Self::FullScan)
     }
@@ -484,7 +488,7 @@ pub struct IndexManager {
 
 impl IndexManager {
     /// Create a new index manager
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }

@@ -32,27 +32,27 @@ impl Default for QueryConfig {
 
 impl QueryConfig {
     /// Create a new config with default values
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set query timeout
-    #[must_use] 
+    #[must_use]
     pub const fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
     /// Set no timeout
-    #[must_use] 
+    #[must_use]
     pub const fn without_timeout(mut self) -> Self {
         self.timeout = None;
         self
     }
 
     /// Set maximum results
-    #[must_use] 
+    #[must_use]
     pub const fn with_max_results(mut self, max: usize) -> Self {
         self.max_results = Some(max);
         self
@@ -138,7 +138,7 @@ pub enum CypherValue {
 
 impl CypherValue {
     /// Convert to SPARQL Term
-    #[must_use] 
+    #[must_use]
     pub fn to_term(&self) -> Option<Term> {
         match self {
             Self::Null => None,
@@ -246,7 +246,7 @@ pub struct ResultConverter;
 
 impl ResultConverter {
     /// Convert Cypher result to SELECT results
-    #[must_use] 
+    #[must_use]
     pub fn to_select_results(
         cypher_query: &CypherQuery,
         cypher_result: CypherResult,
@@ -271,7 +271,7 @@ impl ResultConverter {
     }
 
     /// Convert Cypher result to ASK result
-    #[must_use] 
+    #[must_use]
     pub fn to_ask_result(cypher_result: CypherResult) -> AskResult {
         // Look for the boolean result in first row, first column
         let result = cypher_result

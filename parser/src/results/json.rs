@@ -15,13 +15,13 @@ pub struct JsonResultsWriter {
 
 impl JsonResultsWriter {
     /// Create a new JSON results writer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    #[must_use] 
+    #[must_use]
     pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self

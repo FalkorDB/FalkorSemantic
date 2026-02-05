@@ -15,13 +15,13 @@ pub struct XmlResultsWriter {
 
 impl XmlResultsWriter {
     /// Create a new XML results writer
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    #[must_use] 
+    #[must_use]
     pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self

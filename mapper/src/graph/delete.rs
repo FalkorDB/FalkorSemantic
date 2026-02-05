@@ -22,27 +22,27 @@ pub struct DeleteOptions {
 
 impl DeleteOptions {
     /// Create new delete options with defaults (no cascading)
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable cascading deletion of orphaned literals
-    #[must_use] 
+    #[must_use]
     pub const fn with_cascade_literals(mut self) -> Self {
         self.cascade_literals = true;
         self
     }
 
     /// Enable cascading deletion of orphaned blank nodes
-    #[must_use] 
+    #[must_use]
     pub const fn with_cascade_blank_nodes(mut self) -> Self {
         self.cascade_blank_nodes = true;
         self
     }
 
     /// Enable full cascading (literals and blank nodes)
-    #[must_use] 
+    #[must_use]
     pub const fn with_cascade_all(mut self) -> Self {
         self.cascade_literals = true;
         self.cascade_blank_nodes = true;
@@ -50,7 +50,7 @@ impl DeleteOptions {
     }
 
     /// Enable DETACH DELETE for nodes
-    #[must_use] 
+    #[must_use]
     pub const fn with_detach(mut self) -> Self {
         self.detach = true;
         self
@@ -66,13 +66,13 @@ pub struct DeleteGenerator {
 
 impl DeleteGenerator {
     /// Create a new delete generator with default options
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a delete generator with specific options
-    #[must_use] 
+    #[must_use]
     pub const fn with_options(options: DeleteOptions) -> Self {
         Self { options }
     }
@@ -83,7 +83,7 @@ impl DeleteGenerator {
     }
 
     /// Get the current delete options
-    #[must_use] 
+    #[must_use]
     pub const fn options(&self) -> &DeleteOptions {
         &self.options
     }
@@ -239,13 +239,13 @@ impl DeleteGenerator {
     }
 
     /// Generate Cypher to clean up orphaned Literal nodes
-    #[must_use] 
+    #[must_use]
     pub fn generate_orphan_literal_cleanup(&self) -> String {
         "MATCH (l:Literal) WHERE NOT ()-[]->(l) DELETE l".to_string()
     }
 
     /// Generate Cypher to clean up orphaned `BlankNode` nodes
-    #[must_use] 
+    #[must_use]
     pub fn generate_orphan_blank_node_cleanup(&self) -> String {
         "MATCH (b:BlankNode) WHERE NOT ()-[]->(b) AND NOT (b)-[]->() DELETE b".to_string()
     }

@@ -78,7 +78,7 @@ pub struct NamespaceRegistry {
 
 impl NamespaceRegistry {
     /// Create an empty namespace registry
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             prefix_to_ns: HashMap::new(),
@@ -87,7 +87,7 @@ impl NamespaceRegistry {
     }
 
     /// Create a registry with standard prefixes (rdf, rdfs, xsd, owl)
-    #[must_use] 
+    #[must_use]
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.add("rdf", well_known::RDF);
@@ -98,7 +98,7 @@ impl NamespaceRegistry {
     }
 
     /// Create a registry with extended defaults (includes common vocabularies)
-    #[must_use] 
+    #[must_use]
     pub fn with_extended_defaults() -> Self {
         let mut registry = Self::with_defaults();
         registry.add("skos", well_known::SKOS);
@@ -133,19 +133,23 @@ impl NamespaceRegistry {
     }
 
     /// Get the namespace for a prefix
-    #[must_use] 
+    #[must_use]
     pub fn get_namespace(&self, prefix: &str) -> Option<&str> {
-        self.prefix_to_ns.get(prefix).map(std::string::String::as_str)
+        self.prefix_to_ns
+            .get(prefix)
+            .map(std::string::String::as_str)
     }
 
     /// Get the prefix for a namespace
-    #[must_use] 
+    #[must_use]
     pub fn get_prefix(&self, namespace: &str) -> Option<&str> {
-        self.ns_to_prefix.get(namespace).map(std::string::String::as_str)
+        self.ns_to_prefix
+            .get(namespace)
+            .map(std::string::String::as_str)
     }
 
     /// Check if a prefix is registered
-    #[must_use] 
+    #[must_use]
     pub fn has_prefix(&self, prefix: &str) -> bool {
         self.prefix_to_ns.contains_key(prefix)
     }
@@ -165,7 +169,7 @@ impl NamespaceRegistry {
     }
 
     /// Contract an IRI to a prefixed name, if possible
-    #[must_use] 
+    #[must_use]
     pub fn contract(&self, iri: &Iri) -> Option<PrefixedName> {
         let iri_str = iri.as_str();
 
@@ -190,13 +194,13 @@ impl NamespaceRegistry {
     }
 
     /// Get the number of registered prefixes
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.prefix_to_ns.len()
     }
 
     /// Check if the registry is empty
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.prefix_to_ns.is_empty()
     }
