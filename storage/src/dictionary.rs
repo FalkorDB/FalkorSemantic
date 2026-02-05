@@ -289,7 +289,12 @@ mod tests {
                     let id = dict_clone.get_or_insert(&iri);
                     // Verify reverse lookup works
                     let retrieved = dict_clone.get_iri(id);
-                    assert!(retrieved.is_some(), "Thread {} failed reverse lookup for {}", i, j);
+                    assert!(
+                        retrieved.is_some(),
+                        "Thread {} failed reverse lookup for {}",
+                        i,
+                        j
+                    );
                 }
             });
             handles.push(handle);
@@ -309,7 +314,11 @@ mod tests {
             let id = dict.get_id(&iri);
             assert!(id.is_some(), "Missing ID for resource {}", j);
             let retrieved = dict.get_iri(id.unwrap());
-            assert!(retrieved.is_some(), "Missing reverse mapping for resource {}", j);
+            assert!(
+                retrieved.is_some(),
+                "Missing reverse mapping for resource {}",
+                j
+            );
             assert_eq!(retrieved.unwrap().as_str(), iri.as_str());
         }
     }

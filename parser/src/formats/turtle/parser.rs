@@ -203,7 +203,8 @@ impl TurtleParser {
             }
             TokenKind::OpenParen => {
                 // Collection
-                let (subject, new_pos) = self.parse_collection(tokens, pos + 1, triples, depth + 1)?;
+                let (subject, new_pos) =
+                    self.parse_collection(tokens, pos + 1, triples, depth + 1)?;
                 Ok((subject, new_pos))
             }
             _ => Err(ParserError::ParseError(format!(
@@ -271,7 +272,8 @@ impl TurtleParser {
                 Ok((Object::BlankNode(bn), new_pos))
             }
             TokenKind::OpenParen => {
-                let (subject, new_pos) = self.parse_collection(tokens, pos + 1, triples, depth + 1)?;
+                let (subject, new_pos) =
+                    self.parse_collection(tokens, pos + 1, triples, depth + 1)?;
                 let object = match subject {
                     Subject::Iri(iri) => Object::Iri(iri),
                     Subject::BlankNode(bn) => Object::BlankNode(bn),

@@ -75,7 +75,10 @@ fn validate_file_path(path: &str) -> Result<PathBuf, String> {
 
     // Verify it's a regular file, not a directory or special file
     if !canonical.is_file() {
-        return Err(format!("Path is not a regular file: {}", canonical.display()));
+        return Err(format!(
+            "Path is not a regular file: {}",
+            canonical.display()
+        ));
     }
 
     Ok(canonical)
@@ -460,8 +463,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     );
 
     // Validate and sanitize file path (prevents path traversal attacks)
-    let validated_path = validate_file_path(parsed_args.file_path)
-        .map_err(RedisError::String)?;
+    let validated_path = validate_file_path(parsed_args.file_path).map_err(RedisError::String)?;
 
     // Detect format from validated path
     let format = parsed_args

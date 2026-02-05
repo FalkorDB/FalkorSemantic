@@ -341,7 +341,10 @@ impl SparqlToCypher {
         match pred {
             NNP::NamedNode(n) => {
                 // Use predicate property for matching
-                Ok(format!("{{predicate: '{}'}}", escape_cypher_string(n.as_str())))
+                Ok(format!(
+                    "{{predicate: '{}'}}",
+                    escape_cypher_string(n.as_str())
+                ))
             }
             NNP::Variable(_v) => {
                 // Variable predicate - no type constraint
@@ -707,20 +710,36 @@ mod tests {
 
     #[test]
     fn test_select_with_order_by() {
-        let result = translate("SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name } ORDER BY ?name");
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name } ORDER BY ?name",
+        );
         assert!(result.is_ok());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains("ORDER BY"), "Should contain ORDER BY clause");
-        assert!(cypher.query.contains("name"), "ORDER BY should reference the name variable");
+        assert!(
+            cypher.query.contains("ORDER BY"),
+            "Should contain ORDER BY clause"
+        );
+        assert!(
+            cypher.query.contains("name"),
+            "ORDER BY should reference the name variable"
+        );
     }
 
     #[test]
     fn test_select_with_order_by_desc() {
-        let result = translate("SELECT ?s ?age WHERE { ?s <http://example.org/age> ?age } ORDER BY DESC(?age)");
+        let result = translate(
+            "SELECT ?s ?age WHERE { ?s <http://example.org/age> ?age } ORDER BY DESC(?age)",
+        );
         assert!(result.is_ok());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains("ORDER BY"), "Should contain ORDER BY clause");
-        assert!(cypher.query.contains("DESC"), "Should contain DESC for descending order");
+        assert!(
+            cypher.query.contains("ORDER BY"),
+            "Should contain ORDER BY clause"
+        );
+        assert!(
+            cypher.query.contains("DESC"),
+            "Should contain DESC for descending order"
+        );
     }
 
     #[test]
@@ -728,6 +747,9 @@ mod tests {
         let result = translate("SELECT ?s WHERE { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } }");
         assert!(result.is_err(), "UNION queries should return an error");
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("UNION"), "Error should mention UNION");
+        assert!(
+            err.to_string().contains("UNION"),
+            "Error should mention UNION"
+        );
     }
 }
