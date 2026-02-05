@@ -296,11 +296,8 @@ impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
         // Convert timeout to milliseconds, clamping to u64::MAX if needed
         let timeout_ms = timeout.as_millis().min(u64::MAX as u128) as u64;
         let timeout_str = timeout_ms.to_string();
-        
-        self.execute_graph_query(
-            &[self.graph_key, query, "TIMEOUT", &timeout_str],
-            query,
-        )
+
+        self.execute_graph_query(&[self.graph_key, query, "TIMEOUT", &timeout_str], query)
     }
 }
 
