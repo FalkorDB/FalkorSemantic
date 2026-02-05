@@ -53,14 +53,10 @@ impl CypherGenerator {
                 let label = sanitize_identifier(type_iri.local_name());
                 let subject_uri = self.subject_uri(&triple.subject);
                 let is_blank = matches!(triple.subject, Subject::BlankNode(_));
-                
+
                 // For blank nodes with a type, use the type as the primary label
                 // For resources, keep using Resource as the base label
-                let node_label = if is_blank {
-                    &label
-                } else {
-                    "Resource"
-                };
+                let node_label = if is_blank { &label } else { "Resource" };
 
                 // Use consistent MERGE pattern with other node creations
                 let statement = if is_blank {
@@ -323,7 +319,7 @@ impl CypherGenerator {
     /// Generate a combined Cypher query for a subject with all its data
     fn generate_subject_query(&self, data: &SubjectData) -> String {
         let mut parts = Vec::new();
-        
+
         // Determine the primary node label
         let (node_label, additional_labels) = if data.is_blank && !data.labels.is_empty() {
             // For blank nodes with types, use the first type as the primary label
@@ -592,7 +588,7 @@ mod tests {
     #[test]
     fn test_blank_node_with_rdf_type() {
         use falkorsemantic_parser::rdf::BlankNode;
-        
+
         let gen = CypherGenerator::new();
         let blank_node = BlankNode::new("b1");
         let triple = Triple {
@@ -604,27 +600,38 @@ mod tests {
         let statements = gen.generate_triple(&triple).unwrap();
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
-        
+
         // The blank node should be created with Address as the primary label
         // not BlankNode, to match the semantic meaning
-        assert!(stmt.contains(":Address"), "Statement should contain :Address label. Statement: {}", stmt);
-        
+        assert!(
+            stmt.contains(":Address"),
+            "Statement should contain :Address label. Statement: {}",
+            stmt
+        );
+
         // The MERGE should use Address label, not BlankNode
         // This is the key fix: blank nodes with a type should use that type as the primary label
-        assert!(stmt.contains("MERGE (n:Address"), 
-            "Statement should MERGE with Address label, not BlankNode. Statement: {}", stmt);
-        
+        assert!(
+            stmt.contains("MERGE (n:Address"),
+            "Statement should MERGE with Address label, not BlankNode. Statement: {}",
+            stmt
+        );
+
         // Blank nodes should still be identifiable as blank via the isBlank property
-        assert!(stmt.contains("isBlank = true"), "Statement should mark node as blank. Statement: {}", stmt);
+        assert!(
+            stmt.contains("isBlank = true"),
+            "Statement should mark node as blank. Statement: {}",
+            stmt
+        );
     }
 
     #[test]
     fn test_blank_node_batch_with_type() {
         use falkorsemantic_parser::rdf::BlankNode;
-        
+
         let gen = CypherGenerator::new();
         let blank_node = BlankNode::new("b1");
-        
+
         // Create multiple triples for the same blank node
         let triples = vec![
             // Type triple
@@ -640,21 +647,30 @@ mod tests {
                 object: Object::Literal(Literal::new("123 Main St")),
             },
         ];
-        
+
         let statements = gen.generate_batch(&triples).unwrap();
         assert_eq!(statements.len(), 1); // Should combine into one statement
-        
+
         let stmt = &statements[0];
         println!("Batch statement: {}", stmt);
-        
+
         // The blank node should use Address as the primary label
-        assert!(stmt.contains("MERGE (s:Address"), 
-            "Batch statement should use Address as primary label. Statement: {}", stmt);
-        
+        assert!(
+            stmt.contains("MERGE (s:Address"),
+            "Batch statement should use Address as primary label. Statement: {}",
+            stmt
+        );
+
         // Should have the property (sanitized to use underscore)
-        assert!(stmt.contains("street_address") || stmt.contains("street-address"), "Should contain property");
-        assert!(stmt.contains("123 Main St"), "Should contain property value");
-        
+        assert!(
+            stmt.contains("street_address") || stmt.contains("street-address"),
+            "Should contain property"
+        );
+        assert!(
+            stmt.contains("123 Main St"),
+            "Should contain property value"
+        );
+
         // Should mark as blank
         assert!(stmt.contains("isBlank = true"), "Should mark as blank");
     }
