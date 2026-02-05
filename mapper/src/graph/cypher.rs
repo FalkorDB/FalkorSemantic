@@ -56,9 +56,13 @@ impl CypherGenerator {
                 let label = sanitize_identifier(type_iri.local_name());
                 let subject_uri = self.subject_uri(&triple.subject);
                 let is_blank = matches!(triple.subject, Subject::BlankNode(_));
+
+                // Use consistent base label for MERGE to prevent duplicate nodes
+                // For blank nodes, always use BlankNode as primary to ensure same URI matches same node
+                // For resources, use Resource as primary
                 let node_label = if is_blank { "BlankNode" } else { "Resource" };
 
-                // Use consistent MERGE pattern with other node creations
+                // Add the type as an additional label via SET
                 let statement = format!(
                     "{} (n:{} {{uri: '{}'}}) SET n:{}, n.isBlank = {}",
                     self.operation(),
@@ -344,6 +348,11 @@ impl CypherGenerator {
     /// Generate a combined Cypher query for a subject with all its data
     fn generate_subject_query(&self, data: &SubjectData) -> String {
         let mut parts = Vec::new();
+
+        // Determine the primary node label
+        // Use consistent base label for MERGE to prevent duplicate nodes when types are in different batches
+        // For blank nodes: always use BlankNode as primary
+        // For resources: always use Resource as primary
         let node_label = if data.is_blank {
             "BlankNode"
         } else {
@@ -353,8 +362,10 @@ impl CypherGenerator {
         // Build the SET clause with labels and properties
         let mut set_parts = Vec::new();
 
-        // Add labels
-        for label in &data.labels {
+        // Add all type labels (sorted for deterministic output)
+        let mut sorted_labels = data.labels.clone();
+        sorted_labels.sort();
+        for label in &sorted_labels {
             set_parts.push(format!("s:{}", label));
         }
 
@@ -598,6 +609,207 @@ mod tests {
 
         let statements = gen.generate_triple(&triple).unwrap();
         assert!(statements.iter().any(|s| s.contains(":Person")));
+    }
+
+    #[test]
+    fn test_blank_node_with_rdf_type() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+        let triple = Triple {
+            subject: Subject::BlankNode(blank_node),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Address")),
+        };
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+
+        // The blank node should use BlankNode as primary label for MERGE (to prevent duplicates)
+        // and Address as an additional label via SET
+        assert!(
+            stmt.contains("MERGE (n:BlankNode"),
+            "Statement should MERGE with BlankNode label to prevent duplicates. Statement: {}",
+            stmt
+        );
+
+        assert!(
+            stmt.contains("SET n:Address"),
+            "Statement should SET Address as additional label. Statement: {}",
+            stmt
+        );
+
+        // Blank nodes should still be identifiable as blank via the isBlank property
+        assert!(
+            stmt.contains("isBlank = true"),
+            "Statement should mark node as blank. Statement: {}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_blank_node_batch_with_type() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Create multiple triples for the same blank node
+        let triples = vec![
+            // Type triple
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Address")),
+            },
+            // Property triple
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/2006/vcard/ns#street-address"),
+                object: Object::Literal(Literal::new("123 Main St")),
+            },
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+        assert_eq!(statements.len(), 1); // Should combine into one statement
+
+        let stmt = &statements[0];
+        println!("Batch statement: {}", stmt);
+
+        // The blank node should use BlankNode as primary label for MERGE (to prevent duplicates)
+        // and Address as an additional label via SET
+        assert!(
+            stmt.contains("MERGE (s:BlankNode"),
+            "Batch statement should use BlankNode as primary label to prevent duplicates. Statement: {}",
+            stmt
+        );
+
+        assert!(
+            stmt.contains("s:Address"),
+            "Batch statement should add Address as additional label. Statement: {}",
+            stmt
+        );
+
+        // Should have the property (sanitized to use underscore)
+        assert!(
+            stmt.contains("street_address") || stmt.contains("street-address"),
+            "Should contain property"
+        );
+        assert!(
+            stmt.contains("123 Main St"),
+            "Should contain property value"
+        );
+
+        // Should mark as blank
+        assert!(stmt.contains("isBlank = true"), "Should mark as blank");
+    }
+
+    #[test]
+    fn test_blank_node_with_multiple_types_deterministic() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Create triples with multiple types in different orders
+        // The primary label should always be the alphabetically first one
+        let triples = vec![
+            // Type triple - ZebraType (should not be primary)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/ZebraType")),
+            },
+            // Type triple - AppleType (should be primary - alphabetically first)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/AppleType")),
+            },
+            // Type triple - MangoType (should be additional)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/MangoType")),
+            },
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+        assert_eq!(statements.len(), 1);
+
+        let stmt = &statements[0];
+        println!("Multiple types statement: {}", stmt);
+
+        // BlankNode should be the primary label for MERGE (to prevent duplicates)
+        assert!(
+            stmt.contains("MERGE (s:BlankNode"),
+            "Should use BlankNode as primary label to prevent duplicates. Statement: {}",
+            stmt
+        );
+
+        // All types should be added as additional labels (sorted alphabetically)
+        assert!(
+            stmt.contains("s:AppleType"),
+            "Should add AppleType as additional label"
+        );
+        assert!(
+            stmt.contains("s:MangoType"),
+            "Should add MangoType as additional label"
+        );
+        assert!(
+            stmt.contains("s:ZebraType"),
+            "Should add ZebraType as additional label"
+        );
+    }
+
+    #[test]
+    fn test_blank_node_multiple_batches_no_duplicates() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Batch 1: Blank node with Address type
+        let batch1 = vec![Triple {
+            subject: Subject::BlankNode(blank_node.clone()),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Address")),
+        }];
+
+        // Batch 2: Same blank node with Location type
+        let batch2 = vec![Triple {
+            subject: Subject::BlankNode(blank_node.clone()),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Location")),
+        }];
+
+        let stmt1 = gen.generate_batch(&batch1).unwrap();
+        let stmt2 = gen.generate_batch(&batch2).unwrap();
+
+        println!("Batch 1 statement: {}", stmt1[0]);
+        println!("Batch 2 statement: {}", stmt2[0]);
+
+        // Both should use BlankNode as primary label, ensuring they MERGE to the same node
+        assert!(
+            stmt1[0].contains("MERGE (s:BlankNode {uri: '_:b1'})"),
+            "Batch 1 should use BlankNode as primary label"
+        );
+        assert!(
+            stmt2[0].contains("MERGE (s:BlankNode {uri: '_:b1'})"),
+            "Batch 2 should use BlankNode as primary label"
+        );
+
+        // The labels should be added via SET
+        assert!(
+            stmt1[0].contains("s:Address"),
+            "Batch 1 should add Address label"
+        );
+        assert!(
+            stmt2[0].contains("s:Location"),
+            "Batch 2 should add Location label"
+        );
     }
 
     #[test]
