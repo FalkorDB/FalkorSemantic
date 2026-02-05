@@ -266,9 +266,10 @@ impl<'a> RedisCypherExecutor<'a> {
     }
 }
 
-impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
-    fn execute(&self, query: &str) -> Result<CypherResult, QueryError> {
-        let result = self.ctx.call("GRAPH.QUERY", &[self.graph_key, query]);
+impl<'a> RedisCypherExecutor<'a> {
+    /// Execute a GRAPH.QUERY command with the given arguments and handle errors
+    fn execute_graph_query(&self, args: &[&str], query: &str) -> Result<CypherResult, QueryError> {
+        let result = self.ctx.call("GRAPH.QUERY", args);
 
         match result {
             Ok(value) => self.parse_result(value),
@@ -279,17 +280,24 @@ impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
             }),
         }
     }
+}
+
+impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
+    fn execute(&self, query: &str) -> Result<CypherResult, QueryError> {
+        self.execute_graph_query(&[self.graph_key, query], query)
+    }
 
     fn execute_with_timeout(
         &self,
         query: &str,
         timeout: Duration,
     ) -> Result<CypherResult, QueryError> {
-        // FalkorDB supports TIMEOUT as part of query options
-        let timeout_ms = timeout.as_millis();
-        let query_with_timeout = format!("{} TIMEOUT {}", query, timeout_ms);
+        // FalkorDB supports TIMEOUT as a separate parameter to GRAPH.QUERY
+        // Convert timeout to milliseconds, clamping to u64::MAX if needed
+        let timeout_ms = timeout.as_millis().min(u64::MAX as u128) as u64;
+        let timeout_str = timeout_ms.to_string();
 
-        self.execute(&query_with_timeout)
+        self.execute_graph_query(&[self.graph_key, query, "TIMEOUT", &timeout_str], query)
     }
 }
 
