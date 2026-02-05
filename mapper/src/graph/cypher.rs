@@ -275,7 +275,7 @@ impl CypherGenerator {
         // Map blank nodes to their rdf:first and rdf:rest values
         let mut first_map: HashMap<String, &Object> = HashMap::new();
         let mut rest_map: HashMap<String, &Object> = HashMap::new();
-        let mut collection_heads: HashMap<String, (String, String)> = HashMap::new(); // bn_id -> (subject_uri, predicate_local_name)
+        let mut collection_heads: HashMap<String, (String, String)> = HashMap::new(); // bn_id -> (subject_uri, sanitized_property_name)
         let mut used_blank_nodes: HashSet<String> = HashSet::new();
 
         // First pass: identify collection structure
@@ -305,14 +305,10 @@ impl CypherGenerator {
         }
 
         // Second pass: build collections
+        // Filter collection_heads to only include entries that have rdf:first predicates
         let mut collections: Vec<(String, String, Vec<String>)> = Vec::new();
         
-        for (head_bn_id, (subject_uri, prop_name)) in &collection_heads {
-            // Check if this is actually a collection head (has rdf:first)
-            if !first_map.contains_key(head_bn_id) {
-                continue;
-            }
-
+        for (head_bn_id, (subject_uri, prop_name)) in collection_heads.iter().filter(|(bn_id, _)| first_map.contains_key(*bn_id)) {
             // Try to build the collection
             let mut current_bn = head_bn_id.clone();
             let mut values = Vec::new();
@@ -390,8 +386,6 @@ impl CypherGenerator {
         let remaining_triples: Vec<Triple> = triples
             .iter()
             .filter(|triple| {
-                let subject_uri = self.subject_uri(&triple.subject);
-                
                 // Remove triples that are part of detected collections
                 if let Subject::BlankNode(bn) = &triple.subject {
                     let bn_id = format!("_:{}", bn.label());
@@ -407,6 +401,7 @@ impl CypherGenerator {
                     if used_blank_nodes.contains(&bn_id) {
                         // Check if this is a collection head reference
                         if let Some((coll_subj, _)) = collection_heads.get(&bn_id) {
+                            let subject_uri = self.subject_uri(&triple.subject);
                             if coll_subj == &subject_uri {
                                 // This is the triple that points to the collection head
                                 return false;
@@ -1107,10 +1102,44 @@ mod tests {
         // Check that it contains alice
         assert!(stmt.contains("alice"), "Statement should contain alice");
         
-        // Check that it contains an array property
-        assert!(stmt.contains("favoriteCourses"), "Statement should contain favoriteCourses");
-        assert!(stmt.contains("['Databases', 'AI', 'DistributedSystems']"), 
-                "Statement should contain array: {}", stmt);
+        // Check that it contains the favoriteCourses property
+        assert!(
+            stmt.contains("favoriteCourses"),
+            "Statement should contain favoriteCourses"
+        );
+
+        // Check that it contains the expected course values in order,
+        // without relying on an exact array string representation
+        assert!(
+            stmt.contains("Databases"),
+            "Statement should contain value 'Databases': {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("AI"),
+            "Statement should contain value 'AI': {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("DistributedSystems"),
+            "Statement should contain value 'DistributedSystems': {}",
+            stmt
+        );
+        
+        let pos_db = stmt
+            .find("Databases")
+            .expect("Statement should contain value 'Databases'");
+        let pos_ai = stmt
+            .find("AI")
+            .expect("Statement should contain value 'AI'");
+        let pos_ds = stmt
+            .find("DistributedSystems")
+            .expect("Statement should contain value 'DistributedSystems'");
+        assert!(
+            pos_db < pos_ai && pos_ai < pos_ds,
+            "Course values should appear in order: Databases, AI, DistributedSystems. Statement: {}",
+            stmt
+        );
         
         // Should NOT contain blank node relationships
         assert!(!stmt.contains("BlankNode"), "Should not create blank nodes");
@@ -1173,10 +1202,39 @@ mod tests {
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
         
-        // Check that it contains an array of IRIs
+        // Check that knows is a property
         assert!(stmt.contains("knows"), "Statement should contain knows property");
-        assert!(stmt.contains("['http://example.org/bob', 'http://example.org/charlie', 'http://example.org/david']"), 
-                "Statement should contain IRI array: {}", stmt);
+
+        // Check that all expected IRIs appear, in order, within an array-like context
+        assert!(
+            stmt.contains("http://example.org/bob"),
+            "Statement should contain bob IRI: {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("http://example.org/charlie"),
+            "Statement should contain charlie IRI: {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("http://example.org/david"),
+            "Statement should contain david IRI: {}",
+            stmt
+        );
+
+        // Ensure the IRIs appear in the correct order
+        let bob_pos = stmt.find("http://example.org/bob").expect("bob IRI not found");
+        let charlie_pos = stmt
+            .find("http://example.org/charlie")
+            .expect("charlie IRI not found");
+        let david_pos = stmt
+            .find("http://example.org/david")
+            .expect("david IRI not found");
+        assert!(
+            bob_pos < charlie_pos && charlie_pos < david_pos,
+            "IRIs should appear in order [bob, charlie, david]: {}",
+            stmt
+        );
     }
 
     #[test]

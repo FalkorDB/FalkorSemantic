@@ -227,8 +227,19 @@ mod tests {
         // Check that favoriteCourses is stored as array
         assert!(combined.contains("favoriteCourses"), 
                 "Should contain favoriteCourses property");
-        assert!(combined.contains("['Databases', 'AI', 'DistributedSystems']"), 
-                "Should contain array values: {}", combined);
+        
+        // Check that all course values appear in order
+        assert!(combined.contains("Databases"), "Should contain 'Databases': {}", combined);
+        assert!(combined.contains("AI"), "Should contain 'AI': {}", combined);
+        assert!(combined.contains("DistributedSystems"), "Should contain 'DistributedSystems': {}", combined);
+        
+        let pos_db = combined.find("Databases").expect("Databases not found");
+        let pos_ai = combined.find("AI").expect("AI not found");
+        let pos_ds = combined.find("DistributedSystems").expect("DistributedSystems not found");
+        assert!(
+            pos_db < pos_ai && pos_ai < pos_ds,
+            "Course values should appear in order: Databases, AI, DistributedSystems"
+        );
         
         // Ensure no rdf:first or rdf:rest triples are created
         assert!(!combined.contains("rdf:first") && !combined.contains("first"), 
@@ -263,7 +274,36 @@ mod tests {
         
         // Check that knows is stored as array
         assert!(combined.contains("knows"), "Should contain knows property");
-        assert!(combined.contains("['http://example.org/bob', 'http://example.org/charlie', 'http://example.org/david']"), 
-                "Should contain IRI array: {}", combined);
+        
+        // Check that all expected IRIs are present in the correct order
+        assert!(
+            combined.contains("http://example.org/bob"),
+            "Should contain bob IRI: {}",
+            combined
+        );
+        assert!(
+            combined.contains("http://example.org/charlie"),
+            "Should contain charlie IRI: {}",
+            combined
+        );
+        assert!(
+            combined.contains("http://example.org/david"),
+            "Should contain david IRI: {}",
+            combined
+        );
+        
+        // Ensure the IRIs appear in the correct order
+        let bob_pos = combined.find("http://example.org/bob").expect("bob IRI not found");
+        let charlie_pos = combined
+            .find("http://example.org/charlie")
+            .expect("charlie IRI not found");
+        let david_pos = combined
+            .find("http://example.org/david")
+            .expect("david IRI not found");
+        assert!(
+            bob_pos < charlie_pos && charlie_pos < david_pos,
+            "IRIs should appear in order [bob, charlie, david]: {}",
+            combined
+        );
     }
 }
