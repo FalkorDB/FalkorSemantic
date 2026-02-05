@@ -286,10 +286,13 @@ impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
         timeout: Duration,
     ) -> Result<CypherResult, QueryError> {
         // FalkorDB supports TIMEOUT as a separate parameter to GRAPH.QUERY
-        let timeout_ms = timeout.as_millis() as u64;
+        // Convert timeout to milliseconds, clamping to u64::MAX if needed
+        let timeout_ms = timeout.as_millis().min(u64::MAX as u128) as u64;
+        let timeout_str = timeout_ms.to_string();
+        
         let result = self.ctx.call(
             "GRAPH.QUERY",
-            &[self.graph_key, query, "TIMEOUT", &timeout_ms.to_string()],
+            &[self.graph_key, query, "TIMEOUT", &timeout_str],
         );
 
         match result {
