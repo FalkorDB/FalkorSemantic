@@ -285,11 +285,21 @@ impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
         query: &str,
         timeout: Duration,
     ) -> Result<CypherResult, QueryError> {
-        // FalkorDB supports TIMEOUT as part of query options
-        let timeout_ms = timeout.as_millis();
-        let query_with_timeout = format!("{} TIMEOUT {}", query, timeout_ms);
+        // FalkorDB supports TIMEOUT as a separate parameter to GRAPH.QUERY
+        let timeout_ms = timeout.as_millis() as u64;
+        let result = self.ctx.call(
+            "GRAPH.QUERY",
+            &[self.graph_key, query, "TIMEOUT", &timeout_ms.to_string()],
+        );
 
-        self.execute(&query_with_timeout)
+        match result {
+            Ok(value) => self.parse_result(value),
+            Err(e) => Err(QueryError {
+                message: format!("FalkorDB error: {:?}", e),
+                code: Some("EXECUTE_ERROR".into()),
+                query: Some(query.to_string()),
+            }),
+        }
     }
 }
 
