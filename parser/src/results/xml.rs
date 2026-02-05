@@ -1,7 +1,7 @@
 //! SPARQL XML Results Format
 //!
 //! Implements the SPARQL Query Results XML Format as per:
-//! https://www.w3.org/TR/rdf-sparql-XMLres/
+//! <https://www.w3.org/TR/rdf-sparql-XMLres>/
 
 use super::{AskResult, ResultsError, ResultsResult, ResultsWriter, SelectResults, Term};
 use std::io::Write;
@@ -15,12 +15,14 @@ pub struct XmlResultsWriter {
 
 impl XmlResultsWriter {
     /// Create a new XML results writer
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    pub fn pretty(mut self) -> Self {
+    #[must_use] 
+    pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self
     }
@@ -34,7 +36,7 @@ impl XmlResultsWriter {
                 '>' => write!(writer, "&gt;")?,
                 '"' => write!(writer, "&quot;")?,
                 '\'' => write!(writer, "&apos;")?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -90,12 +92,12 @@ impl XmlResultsWriter {
                     write!(writer, r#"">"#)?;
                 } else if let Some(dt) = lit.explicit_datatype() {
                     let dt_str = dt.as_str();
-                    if dt_str != "http://www.w3.org/2001/XMLSchema#string" {
+                    if dt_str == "http://www.w3.org/2001/XMLSchema#string" {
+                        write!(writer, "<literal>")?;
+                    } else {
                         write!(writer, r#"<literal datatype=""#)?;
                         self.write_escaped(dt_str, writer)?;
                         write!(writer, r#"">"#)?;
-                    } else {
-                        write!(writer, "<literal>")?;
                     }
                 } else {
                     write!(writer, "<literal>")?;

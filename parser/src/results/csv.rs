@@ -1,7 +1,7 @@
 //! CSV and TSV Results Formats
 //!
 //! Implements CSV (RFC 4180) and TSV result formats for SPARQL:
-//! https://www.w3.org/TR/sparql11-results-csv-tsv/
+//! <https://www.w3.org/TR/sparql11-results-csv-tsv>/
 
 use super::{AskResult, ResultsResult, ResultsWriter, SelectResults, Term};
 use std::io::Write;
@@ -12,7 +12,8 @@ pub struct CsvResultsWriter;
 
 impl CsvResultsWriter {
     /// Create a new CSV results writer
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self
     }
 
@@ -30,12 +31,12 @@ impl CsvResultsWriter {
                 if c == '"' {
                     write!(writer, "\"\"")?;
                 } else {
-                    write!(writer, "{}", c)?;
+                    write!(writer, "{c}")?;
                 }
             }
             write!(writer, "\"")?;
         } else {
-            write!(writer, "{}", value)?;
+            write!(writer, "{value}")?;
         }
         Ok(())
     }
@@ -52,7 +53,7 @@ impl ResultsWriter for CsvResultsWriter {
             if var.contains(',') || var.contains('"') {
                 write!(writer, "\"{}\"", var.replace('"', "\"\""))?;
             } else {
-                write!(writer, "{}", var)?;
+                write!(writer, "{var}")?;
             }
         }
         writeln!(writer)?;
@@ -88,7 +89,8 @@ pub struct TsvResultsWriter;
 
 impl TsvResultsWriter {
     /// Create a new TSV results writer
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self
     }
 
@@ -107,11 +109,11 @@ impl TsvResultsWriter {
                 self.write_escaped(lit.value(), writer)?;
                 write!(writer, "\"")?;
                 if let Some(lang) = lit.language() {
-                    write!(writer, "@{}", lang)?;
+                    write!(writer, "@{lang}")?;
                 } else if let Some(dt) = lit.explicit_datatype() {
                     let dt_str = dt.as_str();
                     if dt_str != "http://www.w3.org/2001/XMLSchema#string" {
-                        write!(writer, "^^<{}>", dt_str)?;
+                        write!(writer, "^^<{dt_str}>")?;
                     }
                 }
             }
@@ -130,7 +132,7 @@ impl TsvResultsWriter {
                 '\r' => write!(writer, "\\r")?,
                 '\\' => write!(writer, "\\\\")?,
                 '"' => write!(writer, "\\\"")?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -144,7 +146,7 @@ impl ResultsWriter for TsvResultsWriter {
             if i > 0 {
                 write!(writer, "\t")?;
             }
-            write!(writer, "?{}", var)?;
+            write!(writer, "?{var}")?;
         }
         writeln!(writer)?;
 

@@ -19,27 +19,31 @@ pub enum Subject {
 
 impl Subject {
     /// Check if this subject is an IRI
-    pub fn is_iri(&self) -> bool {
-        matches!(self, Subject::Iri(_))
+    #[must_use] 
+    pub const fn is_iri(&self) -> bool {
+        matches!(self, Self::Iri(_))
     }
 
     /// Check if this subject is a blank node
-    pub fn is_blank_node(&self) -> bool {
-        matches!(self, Subject::BlankNode(_))
+    #[must_use] 
+    pub const fn is_blank_node(&self) -> bool {
+        matches!(self, Self::BlankNode(_))
     }
 
     /// Get the IRI if this is an IRI subject
-    pub fn as_iri(&self) -> Option<&Iri> {
+    #[must_use] 
+    pub const fn as_iri(&self) -> Option<&Iri> {
         match self {
-            Subject::Iri(iri) => Some(iri),
+            Self::Iri(iri) => Some(iri),
             _ => None,
         }
     }
 
     /// Get the blank node if this is a blank node subject
-    pub fn as_blank_node(&self) -> Option<&BlankNode> {
+    #[must_use] 
+    pub const fn as_blank_node(&self) -> Option<&BlankNode> {
         match self {
-            Subject::BlankNode(bn) => Some(bn),
+            Self::BlankNode(bn) => Some(bn),
             _ => None,
         }
     }
@@ -47,21 +51,21 @@ impl Subject {
 
 impl From<Iri> for Subject {
     fn from(iri: Iri) -> Self {
-        Subject::Iri(iri)
+        Self::Iri(iri)
     }
 }
 
 impl From<BlankNode> for Subject {
     fn from(bn: BlankNode) -> Self {
-        Subject::BlankNode(bn)
+        Self::BlankNode(bn)
     }
 }
 
 impl fmt::Display for Subject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Subject::Iri(iri) => write!(f, "{}", iri),
-            Subject::BlankNode(bn) => write!(f, "{}", bn),
+            Self::Iri(iri) => write!(f, "{iri}"),
+            Self::BlankNode(bn) => write!(f, "{bn}"),
         }
     }
 }
@@ -86,40 +90,46 @@ pub enum Object {
 
 impl Object {
     /// Check if this object is an IRI
-    pub fn is_iri(&self) -> bool {
-        matches!(self, Object::Iri(_))
+    #[must_use] 
+    pub const fn is_iri(&self) -> bool {
+        matches!(self, Self::Iri(_))
     }
 
     /// Check if this object is a blank node
-    pub fn is_blank_node(&self) -> bool {
-        matches!(self, Object::BlankNode(_))
+    #[must_use] 
+    pub const fn is_blank_node(&self) -> bool {
+        matches!(self, Self::BlankNode(_))
     }
 
     /// Check if this object is a literal
-    pub fn is_literal(&self) -> bool {
-        matches!(self, Object::Literal(_))
+    #[must_use] 
+    pub const fn is_literal(&self) -> bool {
+        matches!(self, Self::Literal(_))
     }
 
     /// Get the IRI if this is an IRI object
-    pub fn as_iri(&self) -> Option<&Iri> {
+    #[must_use] 
+    pub const fn as_iri(&self) -> Option<&Iri> {
         match self {
-            Object::Iri(iri) => Some(iri),
+            Self::Iri(iri) => Some(iri),
             _ => None,
         }
     }
 
     /// Get the blank node if this is a blank node object
-    pub fn as_blank_node(&self) -> Option<&BlankNode> {
+    #[must_use] 
+    pub const fn as_blank_node(&self) -> Option<&BlankNode> {
         match self {
-            Object::BlankNode(bn) => Some(bn),
+            Self::BlankNode(bn) => Some(bn),
             _ => None,
         }
     }
 
     /// Get the literal if this is a literal object
-    pub fn as_literal(&self) -> Option<&Literal> {
+    #[must_use] 
+    pub const fn as_literal(&self) -> Option<&Literal> {
         match self {
-            Object::Literal(lit) => Some(lit),
+            Self::Literal(lit) => Some(lit),
             _ => None,
         }
     }
@@ -127,28 +137,28 @@ impl Object {
 
 impl From<Iri> for Object {
     fn from(iri: Iri) -> Self {
-        Object::Iri(iri)
+        Self::Iri(iri)
     }
 }
 
 impl From<BlankNode> for Object {
     fn from(bn: BlankNode) -> Self {
-        Object::BlankNode(bn)
+        Self::BlankNode(bn)
     }
 }
 
 impl From<Literal> for Object {
     fn from(lit: Literal) -> Self {
-        Object::Literal(lit)
+        Self::Literal(lit)
     }
 }
 
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Object::Iri(iri) => write!(f, "{}", iri),
-            Object::BlankNode(bn) => write!(f, "{}", bn),
-            Object::Literal(lit) => write!(f, "{}", lit),
+            Self::Iri(iri) => write!(f, "{iri}"),
+            Self::BlankNode(bn) => write!(f, "{bn}"),
+            Self::Literal(lit) => write!(f, "{lit}"),
         }
     }
 }
@@ -179,17 +189,20 @@ impl Triple {
     }
 
     /// Get the subject
-    pub fn subject(&self) -> &Subject {
+    #[must_use] 
+    pub const fn subject(&self) -> &Subject {
         &self.subject
     }
 
     /// Get the predicate
-    pub fn predicate(&self) -> &Predicate {
+    #[must_use] 
+    pub const fn predicate(&self) -> &Predicate {
         &self.predicate
     }
 
     /// Get the object
-    pub fn object(&self) -> &Object {
+    #[must_use] 
+    pub const fn object(&self) -> &Object {
         &self.object
     }
 }
@@ -213,21 +226,21 @@ pub enum GraphName {
 
 impl From<Iri> for GraphName {
     fn from(iri: Iri) -> Self {
-        GraphName::Iri(iri)
+        Self::Iri(iri)
     }
 }
 
 impl From<BlankNode> for GraphName {
     fn from(bn: BlankNode) -> Self {
-        GraphName::BlankNode(bn)
+        Self::BlankNode(bn)
     }
 }
 
 impl fmt::Display for GraphName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphName::Iri(iri) => write!(f, "{}", iri),
-            GraphName::BlankNode(bn) => write!(f, "{}", bn),
+            Self::Iri(iri) => write!(f, "{iri}"),
+            Self::BlankNode(bn) => write!(f, "{bn}"),
         }
     }
 }
@@ -245,12 +258,14 @@ pub struct Quad {
 
 impl Quad {
     /// Create a new quad
-    pub fn new(triple: Triple, graph: Option<GraphName>) -> Self {
+    #[must_use] 
+    pub const fn new(triple: Triple, graph: Option<GraphName>) -> Self {
         Self { triple, graph }
     }
 
     /// Create a quad in the default graph
-    pub fn in_default_graph(triple: Triple) -> Self {
+    #[must_use] 
+    pub const fn in_default_graph(triple: Triple) -> Self {
         Self {
             triple,
             graph: None,
@@ -266,34 +281,39 @@ impl Quad {
     }
 
     /// Get the subject
-    pub fn subject(&self) -> &Subject {
+    #[must_use] 
+    pub const fn subject(&self) -> &Subject {
         &self.triple.subject
     }
 
     /// Get the predicate
-    pub fn predicate(&self) -> &Predicate {
+    #[must_use] 
+    pub const fn predicate(&self) -> &Predicate {
         &self.triple.predicate
     }
 
     /// Get the object
-    pub fn object(&self) -> &Object {
+    #[must_use] 
+    pub const fn object(&self) -> &Object {
         &self.triple.object
     }
 
     /// Get the graph name
-    pub fn graph(&self) -> Option<&GraphName> {
+    #[must_use] 
+    pub const fn graph(&self) -> Option<&GraphName> {
         self.graph.as_ref()
     }
 
     /// Check if this quad is in the default graph
-    pub fn is_default_graph(&self) -> bool {
+    #[must_use] 
+    pub const fn is_default_graph(&self) -> bool {
         self.graph.is_none()
     }
 }
 
 impl From<Triple> for Quad {
     fn from(triple: Triple) -> Self {
-        Quad::in_default_graph(triple)
+        Self::in_default_graph(triple)
     }
 }
 
@@ -327,11 +347,13 @@ pub struct TriplePattern {
 
 impl TriplePattern {
     /// Create a new triple pattern with all wildcards
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a pattern matching a specific triple exactly
+    #[must_use] 
     pub fn from_triple(triple: &Triple) -> Self {
         Self {
             subject: Some(triple.subject.clone()),
@@ -350,7 +372,8 @@ impl TriplePattern {
     }
 
     /// Create a pattern with a specific predicate (wildcard subject/object)
-    pub fn with_predicate(predicate: Predicate) -> Self {
+    #[must_use] 
+    pub const fn with_predicate(predicate: Predicate) -> Self {
         Self {
             subject: None,
             predicate: Some(predicate),
@@ -374,6 +397,7 @@ impl TriplePattern {
     }
 
     /// Set the predicate pattern
+    #[must_use] 
     pub fn predicate(mut self, predicate: Predicate) -> Self {
         self.predicate = Some(predicate);
         self
@@ -386,6 +410,7 @@ impl TriplePattern {
     }
 
     /// Check if this pattern matches a given triple
+    #[must_use] 
     pub fn matches(&self, triple: &Triple) -> bool {
         let subject_matches = self.subject.as_ref().map_or(true, |s| s == &triple.subject);
         let predicate_matches = self
@@ -398,17 +423,20 @@ impl TriplePattern {
     }
 
     /// Check if all components are wildcards
-    pub fn is_all_wildcard(&self) -> bool {
+    #[must_use] 
+    pub const fn is_all_wildcard(&self) -> bool {
         self.subject.is_none() && self.predicate.is_none() && self.object.is_none()
     }
 
     /// Check if this pattern has any wildcards
-    pub fn has_wildcard(&self) -> bool {
+    #[must_use] 
+    pub const fn has_wildcard(&self) -> bool {
         self.subject.is_none() || self.predicate.is_none() || self.object.is_none()
     }
 
     /// Check if this is an exact pattern (no wildcards)
-    pub fn is_exact(&self) -> bool {
+    #[must_use] 
+    pub const fn is_exact(&self) -> bool {
         self.subject.is_some() && self.predicate.is_some() && self.object.is_some()
     }
 }
@@ -418,16 +446,16 @@ impl fmt::Display for TriplePattern {
         let subject = self
             .subject
             .as_ref()
-            .map_or("*".to_string(), |s| s.to_string());
+            .map_or("*".to_string(), std::string::ToString::to_string);
         let predicate = self
             .predicate
             .as_ref()
-            .map_or("*".to_string(), |p| p.to_string());
+            .map_or("*".to_string(), std::string::ToString::to_string);
         let object = self
             .object
             .as_ref()
-            .map_or("*".to_string(), |o| o.to_string());
-        write!(f, "{} {} {} .", subject, predicate, object)
+            .map_or("*".to_string(), std::string::ToString::to_string);
+        write!(f, "{subject} {predicate} {object} .")
     }
 }
 
@@ -456,12 +484,14 @@ pub enum GraphScope {
 
 impl QuadPattern {
     /// Create a new quad pattern with all wildcards in the default graph
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a quad pattern from a triple pattern (default graph)
-    pub fn from_triple_pattern(pattern: TriplePattern) -> Self {
+    #[must_use] 
+    pub const fn from_triple_pattern(pattern: TriplePattern) -> Self {
         Self {
             pattern,
             graph: None,
@@ -469,6 +499,7 @@ impl QuadPattern {
     }
 
     /// Create a quad pattern matching a specific quad exactly
+    #[must_use] 
     pub fn from_quad(quad: &Quad) -> Self {
         Self {
             pattern: TriplePattern::from_triple(&quad.triple),
@@ -485,7 +516,8 @@ impl QuadPattern {
     }
 
     /// Create a pattern that matches across all graphs
-    pub fn in_all_graphs(pattern: TriplePattern) -> Self {
+    #[must_use] 
+    pub const fn in_all_graphs(pattern: TriplePattern) -> Self {
         Self {
             pattern,
             graph: Some(None), // Some(None) means "any graph"
@@ -493,6 +525,7 @@ impl QuadPattern {
     }
 
     /// Get the graph scope for this pattern
+    #[must_use] 
     pub fn graph_scope(&self) -> GraphScope {
         match &self.graph {
             None => GraphScope::Default,
@@ -502,6 +535,7 @@ impl QuadPattern {
     }
 
     /// Check if this pattern matches a given quad
+    #[must_use] 
     pub fn matches(&self, quad: &Quad) -> bool {
         if !self.pattern.matches(&quad.triple) {
             return false;
@@ -521,6 +555,7 @@ impl QuadPattern {
     }
 
     /// Set the predicate pattern
+    #[must_use] 
     pub fn predicate(mut self, predicate: Predicate) -> Self {
         self.pattern.predicate = Some(predicate);
         self
@@ -542,36 +577,36 @@ impl fmt::Display for QuadPattern {
                     .pattern
                     .subject
                     .as_ref()
-                    .map_or("*".to_string(), |s| s.to_string());
+                    .map_or("*".to_string(), std::string::ToString::to_string);
                 let p = self
                     .pattern
                     .predicate
                     .as_ref()
-                    .map_or("*".to_string(), |p| p.to_string());
+                    .map_or("*".to_string(), std::string::ToString::to_string);
                 let o = self
                     .pattern
                     .object
                     .as_ref()
-                    .map_or("*".to_string(), |o| o.to_string());
-                write!(f, "{} {} {} * .", s, p, o)
+                    .map_or("*".to_string(), std::string::ToString::to_string);
+                write!(f, "{s} {p} {o} * .")
             }
             Some(Some(g)) => {
                 let s = self
                     .pattern
                     .subject
                     .as_ref()
-                    .map_or("*".to_string(), |s| s.to_string());
+                    .map_or("*".to_string(), std::string::ToString::to_string);
                 let p = self
                     .pattern
                     .predicate
                     .as_ref()
-                    .map_or("*".to_string(), |p| p.to_string());
+                    .map_or("*".to_string(), std::string::ToString::to_string);
                 let o = self
                     .pattern
                     .object
                     .as_ref()
-                    .map_or("*".to_string(), |o| o.to_string());
-                write!(f, "{} {} {} {} .", s, p, o, g)
+                    .map_or("*".to_string(), std::string::ToString::to_string);
+                write!(f, "{s} {p} {o} {g} .")
             }
         }
     }

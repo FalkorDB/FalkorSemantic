@@ -45,32 +45,32 @@ pub enum JsonLdError {
 impl JsonLdError {
     /// Create a JSON parse error
     pub fn json_parse(msg: impl Into<String>) -> Self {
-        JsonLdError::JsonParseError(msg.into())
+        Self::JsonParseError(msg.into())
     }
 
     /// Create a context error
     pub fn context(msg: impl Into<String>) -> Self {
-        JsonLdError::ContextError(msg.into())
+        Self::ContextError(msg.into())
     }
 
     /// Create an expansion error
     pub fn expansion(msg: impl Into<String>) -> Self {
-        JsonLdError::ExpansionError(msg.into())
+        Self::ExpansionError(msg.into())
     }
 
     /// Create a compaction error
     pub fn compaction(msg: impl Into<String>) -> Self {
-        JsonLdError::CompactionError(msg.into())
+        Self::CompactionError(msg.into())
     }
 
     /// Create a framing error
     pub fn framing(msg: impl Into<String>) -> Self {
-        JsonLdError::FramingError(msg.into())
+        Self::FramingError(msg.into())
     }
 
     /// Create an RDF conversion error
     pub fn rdf_conversion(msg: impl Into<String>) -> Self {
-        JsonLdError::RdfConversionError(msg.into())
+        Self::RdfConversionError(msg.into())
     }
 }
 

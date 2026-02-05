@@ -1,4 +1,4 @@
-//! W3C Compliance Test Suite for FalkorSemantic
+//! W3C Compliance Test Suite for `FalkorSemantic`
 //!
 //! This crate provides compliance testing against W3C test suites for:
 //! - RDF 1.1 parsers (Turtle, N-Triples, N-Quads)
@@ -7,12 +7,12 @@
 //! # Test Suites
 //!
 //! ## RDF 1.1 Test Suites
-//! - Turtle: https://www.w3.org/2013/TurtleTests/
-//! - N-Triples: https://www.w3.org/2013/N-TriplesTests/
-//! - N-Quads: https://www.w3.org/2013/N-QuadsTests/
+//! - Turtle: <https://www.w3.org/2013/TurtleTests>/
+//! - N-Triples: <https://www.w3.org/2013/N-TriplesTests>/
+//! - N-Quads: <https://www.w3.org/2013/N-QuadsTests>/
 //!
 //! ## SPARQL 1.1 Test Suites
-//! - Query: https://www.w3.org/2009/sparql/docs/tests/
+//! - Query: <https://www.w3.org/2009/sparql/docs/tests>/
 //!
 //! # Running Tests
 //!
@@ -50,7 +50,7 @@ pub struct TestResult {
 }
 
 /// Type of test case
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TestType {
     /// Should parse successfully
     PositiveParser,
@@ -97,7 +97,7 @@ pub struct ComplianceGap {
 }
 
 /// Severity of a compliance gap
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GapSeverity {
     Low,
     Medium,
@@ -132,7 +132,7 @@ impl ComplianceReport {
             name,
             passed: false,
             test_type: TestType::PositiveParser,
-            error: Some(format!("Skipped: {}", reason)),
+            error: Some(format!("Skipped: {reason}")),
             expected: None,
             actual: None,
         });
@@ -144,6 +144,7 @@ impl ComplianceReport {
     }
 
     /// Calculate compliance percentage
+    #[must_use] 
     pub fn compliance_percentage(&self) -> f64 {
         if self.total == 0 {
             return 100.0;
@@ -152,6 +153,7 @@ impl ComplianceReport {
     }
 
     /// Generate a summary string
+    #[must_use] 
     pub fn summary(&self) -> String {
         format!(
             "{}: {}/{} passed ({:.1}% compliant), {} failed, {} skipped",
@@ -166,6 +168,7 @@ impl ComplianceReport {
 }
 
 /// Get the fixtures directory path
+#[must_use] 
 pub fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
 }

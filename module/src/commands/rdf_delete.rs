@@ -1,9 +1,9 @@
 //! RDF.DELETE Command Implementation
 //!
-//! Deletes RDF triples matching a pattern from a FalkorDB graph.
+//! Deletes RDF triples matching a pattern from a `FalkorDB` graph.
 //!
 //! Syntax:
-//!   RDF.DELETE <graph_key> <subject> <predicate> <object> [GRAPH <named_graph>] [ORPHANS]
+//!   RDF.DELETE <`graph_key`> <subject> <predicate> <object> [GRAPH <`named_graph`>] [ORPHANS]
 //!
 //! Where subject, predicate, and object can be:
 //!   - A full URI: <http://example.org/resource>
@@ -12,7 +12,7 @@
 //!   - A wildcard: * (matches anything)
 //!
 //! Options:
-//!   - GRAPH <named_graph>: Scope deletion to a specific named graph
+//!   - GRAPH <`named_graph>`: Scope deletion to a specific named graph
 //!   - ORPHANS: Also delete nodes that become orphaned (no connections)
 
 use redis_module::{Context, RedisError, RedisResult, RedisString, RedisValue};
@@ -44,7 +44,7 @@ impl PatternComponent {
 
         // Wildcard
         if s == "*" {
-            return Ok(PatternComponent::Wildcard);
+            return Ok(Self::Wildcard);
         }
 
         // Full IRI: <...>
@@ -53,7 +53,7 @@ impl PatternComponent {
             if iri.is_empty() {
                 return Err("Empty IRI".into());
             }
-            return Ok(PatternComponent::Iri(iri.to_string()));
+            return Ok(Self::Iri(iri.to_string()));
         }
 
         // Blank node: _:...
@@ -61,7 +61,7 @@ impl PatternComponent {
             if label.is_empty() {
                 return Err("Empty blank node label".into());
             }
-            return Ok(PatternComponent::BlankNode(format!("_:{}", label)));
+            return Ok(Self::BlankNode(format!("_:{label}")));
         }
 
         // Literal with language tag: "value"@lang
@@ -84,7 +84,7 @@ impl PatternComponent {
                 let rest = &quoted[end_pos + 1..];
 
                 if let Some(lang) = rest.strip_prefix('@') {
-                    return Ok(PatternComponent::Literal {
+                    return Ok(Self::Literal {
                         value,
                         language: Some(lang.to_string()),
                         datatype: None,
@@ -93,39 +93,38 @@ impl PatternComponent {
                     // Datatype: "value"^^<type>
                     if dtype_str.starts_with('<') && dtype_str.ends_with('>') {
                         let datatype = dtype_str[1..dtype_str.len() - 1].to_string();
-                        return Ok(PatternComponent::Literal {
+                        return Ok(Self::Literal {
                             value,
                             language: None,
                             datatype: Some(datatype),
                         });
                     }
-                    return Err(format!("Invalid datatype format: {}", dtype_str));
+                    return Err(format!("Invalid datatype format: {dtype_str}"));
                 } else if rest.is_empty() {
-                    return Ok(PatternComponent::Literal {
+                    return Ok(Self::Literal {
                         value,
                         language: None,
                         datatype: None,
                     });
                 }
             }
-            return Err(format!("Invalid literal format: {}", s));
+            return Err(format!("Invalid literal format: {s}"));
         }
 
         // Prefixed name: prefix:localname (treat as IRI placeholder)
         if s.contains(':') && !s.starts_with(':') {
             // This is a prefixed name - will be expanded later if namespace exists
-            return Ok(PatternComponent::Iri(s.to_string()));
+            return Ok(Self::Iri(s.to_string()));
         }
 
         Err(format!(
-            "Invalid pattern component: {}. Use <uri>, \"literal\", _:blank, or *",
-            s
+            "Invalid pattern component: {s}. Use <uri>, \"literal\", _:blank, or *"
         ))
     }
 
     /// Check if this is a wildcard
-    fn is_wildcard(&self) -> bool {
-        matches!(self, PatternComponent::Wildcard)
+    const fn is_wildcard(&self) -> bool {
+        matches!(self, Self::Wildcard)
     }
 }
 
@@ -158,19 +157,19 @@ impl DeleteArgs {
             .try_as_str()
             .map_err(|_| RedisError::String("Invalid subject".into()))?;
         let subject = PatternComponent::parse(subject_str)
-            .map_err(|e| RedisError::String(format!("Invalid subject: {}", e)))?;
+            .map_err(|e| RedisError::String(format!("Invalid subject: {e}")))?;
 
         let predicate_str = args[3]
             .try_as_str()
             .map_err(|_| RedisError::String("Invalid predicate".into()))?;
         let predicate = PatternComponent::parse(predicate_str)
-            .map_err(|e| RedisError::String(format!("Invalid predicate: {}", e)))?;
+            .map_err(|e| RedisError::String(format!("Invalid predicate: {e}")))?;
 
         let object_str = args[4]
             .try_as_str()
             .map_err(|_| RedisError::String("Invalid object".into()))?;
         let object = PatternComponent::parse(object_str)
-            .map_err(|e| RedisError::String(format!("Invalid object: {}", e)))?;
+            .map_err(|e| RedisError::String(format!("Invalid object: {e}")))?;
 
         // Parse optional arguments
         let mut named_graph = None;
@@ -198,13 +197,13 @@ impl DeleteArgs {
                     delete_orphans = true;
                 }
                 _ => {
-                    return Err(RedisError::String(format!("Unknown option: {}", arg)));
+                    return Err(RedisError::String(format!("Unknown option: {arg}")));
                 }
             }
             i += 1;
         }
 
-        Ok(DeleteArgs {
+        Ok(Self {
             graph_key,
             subject,
             predicate,
@@ -231,9 +230,9 @@ fn expand_prefix(ctx: &Context, graph_key: &str, prefixed: &str) -> Option<Strin
         let local = &prefixed[colon_pos + 1..];
 
         // Look up the namespace
-        let ns_key = format!("rdf:ns:{}:{}", graph_key, prefix);
+        let ns_key = format!("rdf:ns:{graph_key}:{prefix}");
         if let Ok(RedisValue::SimpleString(uri)) = ctx.call("GET", &[&ns_key]) {
-            return Some(format!("{}{}", uri, local));
+            return Some(format!("{uri}{local}"));
         }
     }
     None
@@ -574,11 +573,11 @@ fn generate_delete_query(args: &DeleteArgs, ctx: &Context) -> String {
 }
 
 /// Generate query to delete orphaned nodes
-fn generate_orphan_cleanup_query() -> &'static str {
+const fn generate_orphan_cleanup_query() -> &'static str {
     "MATCH (n) WHERE NOT EXISTS { (n)-[]-() } DELETE n"
 }
 
-/// Extract deletion statistics from FalkorDB result
+/// Extract deletion statistics from `FalkorDB` result
 fn extract_delete_stats(result: &RedisValue) -> (i64, i64) {
     let mut deleted_rels = 0i64;
     let mut deleted_nodes = 0i64;
@@ -608,7 +607,7 @@ fn extract_delete_stats(result: &RedisValue) -> (i64, i64) {
 /// RDF.DELETE command handler
 ///
 /// Syntax:
-///   RDF.DELETE <graph_key> <subject> <predicate> <object> [GRAPH <named_graph>] [ORPHANS]
+///   RDF.DELETE <`graph_key`> <subject> <predicate> <object> [GRAPH <`named_graph`>] [ORPHANS]
 ///
 /// Pattern components:
 ///   - <uri>: Full IRI
@@ -625,7 +624,7 @@ fn extract_delete_stats(result: &RedisValue) -> (i64, i64) {
 ///
 /// Returns:
 ///   - Integer: Number of relationships deleted
-///   - Or array [relationships_deleted, nodes_deleted] if ORPHANS specified
+///   - Or array [`relationships_deleted`, `nodes_deleted`] if ORPHANS specified
 pub fn rdf_delete(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let parsed = DeleteArgs::parse(&args)?;
 
@@ -639,7 +638,7 @@ pub fn rdf_delete(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
 
     // Generate and execute the delete query
     let delete_query = generate_delete_query(&parsed, ctx);
-    log::debug!("Executing delete query: {}", delete_query);
+    log::debug!("Executing delete query: {delete_query}");
 
     let result = ctx.call("GRAPH.QUERY", &[&parsed.graph_key, &delete_query])?;
     let (deleted_rels, deleted_literal_nodes) = extract_delete_stats(&result);
@@ -649,7 +648,7 @@ pub fn rdf_delete(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     // If ORPHANS flag is set, clean up orphaned nodes
     if parsed.delete_orphans {
         let orphan_query = generate_orphan_cleanup_query();
-        log::debug!("Cleaning up orphans: {}", orphan_query);
+        log::debug!("Cleaning up orphans: {orphan_query}");
 
         let orphan_result = ctx.call("GRAPH.QUERY", &[&parsed.graph_key, orphan_query])?;
         let (_, orphan_nodes) = extract_delete_stats(&orphan_result);

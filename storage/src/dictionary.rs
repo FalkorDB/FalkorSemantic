@@ -32,6 +32,7 @@ pub struct IriDictionary {
 
 impl IriDictionary {
     /// Create a new empty dictionary
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             iri_to_id: RwLock::new(HashMap::new()),
@@ -140,8 +141,8 @@ impl IriDictionary {
     /// Overwrites existing mappings if there are conflicts.
     ///
     /// # Thread Safety
-    /// Acquires both write locks in consistent order (iri_to_id first) and
-    /// updates next_id while still holding locks to ensure consistency.
+    /// Acquires both write locks in consistent order (`iri_to_id` first) and
+    /// updates `next_id` while still holding locks to ensure consistency.
     pub fn import(&self, entries: Vec<(IriId, String)>) -> Result<(), StorageError> {
         // Always acquire locks in same order: iri_to_id first, then id_to_iri
         let mut forward = self.iri_to_id.write().unwrap();
@@ -165,7 +166,7 @@ impl IriDictionary {
     /// Clear all entries from the dictionary
     ///
     /// # Thread Safety
-    /// Acquires both write locks and resets next_id atomically.
+    /// Acquires both write locks and resets `next_id` atomically.
     pub fn clear(&self) {
         // Always acquire locks in same order: iri_to_id first, then id_to_iri
         let mut forward = self.iri_to_id.write().unwrap();

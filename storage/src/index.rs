@@ -28,6 +28,7 @@ pub struct NamespaceIndex {
 
 impl NamespaceIndex {
     /// Create a new empty namespace index
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -68,7 +69,7 @@ impl NamespaceIndex {
     /// Get the count of IRIs in a namespace
     pub fn namespace_count(&self, namespace: &str) -> usize {
         let reader = self.namespace_to_ids.read().unwrap();
-        reader.get(namespace).map(|ids| ids.len()).unwrap_or(0)
+        reader.get(namespace).map_or(0, std::collections::HashSet::len)
     }
 
     /// Remove an IRI from the index
@@ -115,6 +116,7 @@ pub struct LocalNameIndex {
 
 impl LocalNameIndex {
     /// Create a new empty local name index
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -159,6 +161,7 @@ pub struct TypeIndex {
 
 impl TypeIndex {
     /// Create a new empty type index
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -198,14 +201,13 @@ impl TypeIndex {
         let reader = self.subject_to_types.read().unwrap();
         reader
             .get(&subject_id)
-            .map(|types| types.contains(&type_id))
-            .unwrap_or(false)
+            .is_some_and(|types| types.contains(&type_id))
     }
 
     /// Get count of subjects with a given type
     pub fn type_count(&self, type_id: IriId) -> usize {
         let reader = self.type_to_subjects.read().unwrap();
-        reader.get(&type_id).map(|ids| ids.len()).unwrap_or(0)
+        reader.get(&type_id).map_or(0, std::collections::HashSet::len)
     }
 
     /// Get all distinct types in the index
@@ -265,7 +267,7 @@ impl TypeIndex {
     /// Get total number of type assertions
     pub fn len(&self) -> usize {
         let reader = self.type_to_subjects.read().unwrap();
-        reader.values().map(|s| s.len()).sum()
+        reader.values().map(std::collections::HashSet::len).sum()
     }
 
     /// Check if index is empty
@@ -287,6 +289,7 @@ pub struct PredicateIndex {
 
 impl PredicateIndex {
     /// Create a new empty predicate index
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -449,18 +452,20 @@ pub enum IndexHint {
 
 impl IndexHint {
     /// Get the estimated cost of this hint (lower is better)
-    pub fn estimated_cost(&self) -> f64 {
+    #[must_use] 
+    pub const fn estimated_cost(&self) -> f64 {
         match self {
-            IndexHint::UseTypeIndex { .. } => 0.1,
-            IndexHint::UsePredicateIndex { selectivity, .. } => *selectivity,
-            IndexHint::UseNamespaceIndex { .. } => 0.5,
-            IndexHint::FullScan => 1.0,
+            Self::UseTypeIndex { .. } => 0.1,
+            Self::UsePredicateIndex { selectivity, .. } => *selectivity,
+            Self::UseNamespaceIndex { .. } => 0.5,
+            Self::FullScan => 1.0,
         }
     }
 
     /// Check if this hint uses an index
-    pub fn uses_index(&self) -> bool {
-        !matches!(self, IndexHint::FullScan)
+    #[must_use] 
+    pub const fn uses_index(&self) -> bool {
+        !matches!(self, Self::FullScan)
     }
 }
 
@@ -479,6 +484,7 @@ pub struct IndexManager {
 
 impl IndexManager {
     /// Create a new index manager
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }

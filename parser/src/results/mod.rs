@@ -77,26 +77,28 @@ pub enum ResultFormat {
 
 impl ResultFormat {
     /// Get the MIME type for this format
-    pub fn mime_type(&self) -> &'static str {
+    #[must_use] 
+    pub const fn mime_type(&self) -> &'static str {
         match self {
-            ResultFormat::Json => "application/sparql-results+json",
-            ResultFormat::Xml => "application/sparql-results+xml",
-            ResultFormat::Csv => "text/csv",
-            ResultFormat::Tsv => "text/tab-separated-values",
-            ResultFormat::Turtle => "text/turtle",
-            ResultFormat::RdfJson => "application/rdf+json",
+            Self::Json => "application/sparql-results+json",
+            Self::Xml => "application/sparql-results+xml",
+            Self::Csv => "text/csv",
+            Self::Tsv => "text/tab-separated-values",
+            Self::Turtle => "text/turtle",
+            Self::RdfJson => "application/rdf+json",
         }
     }
 
     /// Get the file extension for this format
-    pub fn extension(&self) -> &'static str {
+    #[must_use] 
+    pub const fn extension(&self) -> &'static str {
         match self {
-            ResultFormat::Json => "json",
-            ResultFormat::Xml => "xml",
-            ResultFormat::Csv => "csv",
-            ResultFormat::Tsv => "tsv",
-            ResultFormat::Turtle => "ttl",
-            ResultFormat::RdfJson => "rj",
+            Self::Json => "json",
+            Self::Xml => "xml",
+            Self::Csv => "csv",
+            Self::Tsv => "tsv",
+            Self::Turtle => "ttl",
+            Self::RdfJson => "rj",
         }
     }
 }

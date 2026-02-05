@@ -43,6 +43,7 @@ pub struct TurtleParser {
 
 impl TurtleParser {
     /// Create a new Turtle parser
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             namespaces: NamespaceRegistry::with_defaults(),
@@ -53,6 +54,7 @@ impl TurtleParser {
     }
 
     /// Create a parser with a base IRI
+    #[must_use] 
     pub fn with_base(base_iri: Iri) -> Self {
         Self {
             namespaces: NamespaceRegistry::with_defaults(),
@@ -385,9 +387,8 @@ impl TurtleParser {
                     TokenKind::Dot | TokenKind::CloseBracket | TokenKind::Eof => break,
                     _ => continue,
                 }
-            } else {
-                break;
             }
+            break;
         }
 
         Ok(pos)
@@ -438,8 +439,8 @@ impl TurtleParser {
             return Err(ParserError::ParseError(format!(
                 "Maximum nesting depth ({}) exceeded at line {}, column {}",
                 MAX_NESTING_DEPTH,
-                tokens.get(pos).map(|t| t.line).unwrap_or(0),
-                tokens.get(pos).map(|t| t.column).unwrap_or(0)
+                tokens.get(pos).map_or(0, |t| t.line),
+                tokens.get(pos).map_or(0, |t| t.column)
             )));
         }
 
@@ -458,8 +459,8 @@ impl TurtleParser {
         if pos >= tokens.len() || tokens[pos].kind != TokenKind::CloseBracket {
             return Err(ParserError::ParseError(format!(
                 "Expected ']' at line {}, column {}",
-                tokens.get(pos).map(|t| t.line).unwrap_or(0),
-                tokens.get(pos).map(|t| t.column).unwrap_or(0)
+                tokens.get(pos).map_or(0, |t| t.line),
+                tokens.get(pos).map_or(0, |t| t.column)
             )));
         }
         pos += 1;
@@ -481,8 +482,8 @@ impl TurtleParser {
             return Err(ParserError::ParseError(format!(
                 "Maximum nesting depth ({}) exceeded at line {}, column {}",
                 MAX_NESTING_DEPTH,
-                tokens.get(pos).map(|t| t.line).unwrap_or(0),
-                tokens.get(pos).map(|t| t.column).unwrap_or(0)
+                tokens.get(pos).map_or(0, |t| t.line),
+                tokens.get(pos).map_or(0, |t| t.column)
             )));
         }
 
@@ -516,7 +517,7 @@ impl TurtleParser {
                 // Add rdf:rest rdf:nil
                 triples.push(Triple::new(
                     Subject::BlankNode(current),
-                    rest_pred.clone(),
+                    rest_pred,
                     Object::Iri(nil),
                 ));
                 pos += 1;
@@ -561,8 +562,8 @@ impl TurtleParser {
         let namespace = self
             .namespaces
             .get_namespace(prefix)
-            .ok_or_else(|| ParserError::InvalidInput(format!("Unknown prefix: {}", prefix)))?;
-        Iri::new(format!("{}{}", namespace, local))
+            .ok_or_else(|| ParserError::InvalidInput(format!("Unknown prefix: {prefix}")))?;
+        Iri::new(format!("{namespace}{local}"))
     }
 
     /// Expect a prefix declaration (prefix:)
@@ -593,7 +594,7 @@ impl TurtleParser {
     }
 
     /// Get the namespace registry
-    pub fn namespaces(&self) -> &NamespaceRegistry {
+    pub const fn namespaces(&self) -> &NamespaceRegistry {
         &self.namespaces
     }
 
@@ -603,7 +604,7 @@ impl TurtleParser {
     }
 
     /// Get the base IRI
-    pub fn base_iri(&self) -> Option<&Iri> {
+    pub const fn base_iri(&self) -> Option<&Iri> {
         self.base_iri.as_ref()
     }
 }

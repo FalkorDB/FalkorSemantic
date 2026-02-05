@@ -1,6 +1,6 @@
 //! DELETE Cypher Statement Generator
 //!
-//! Generates Cypher DELETE statements for removing RDF data from FalkorDB.
+//! Generates Cypher DELETE statements for removing RDF data from `FalkorDB`.
 
 use falkorsemantic_parser::rdf::{
     GraphName, GraphScope, Object, QuadPattern, Subject, Triple, TriplePattern,
@@ -22,31 +22,36 @@ pub struct DeleteOptions {
 
 impl DeleteOptions {
     /// Create new delete options with defaults (no cascading)
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable cascading deletion of orphaned literals
-    pub fn with_cascade_literals(mut self) -> Self {
+    #[must_use] 
+    pub const fn with_cascade_literals(mut self) -> Self {
         self.cascade_literals = true;
         self
     }
 
     /// Enable cascading deletion of orphaned blank nodes
-    pub fn with_cascade_blank_nodes(mut self) -> Self {
+    #[must_use] 
+    pub const fn with_cascade_blank_nodes(mut self) -> Self {
         self.cascade_blank_nodes = true;
         self
     }
 
     /// Enable full cascading (literals and blank nodes)
-    pub fn with_cascade_all(mut self) -> Self {
+    #[must_use] 
+    pub const fn with_cascade_all(mut self) -> Self {
         self.cascade_literals = true;
         self.cascade_blank_nodes = true;
         self
     }
 
     /// Enable DETACH DELETE for nodes
-    pub fn with_detach(mut self) -> Self {
+    #[must_use] 
+    pub const fn with_detach(mut self) -> Self {
         self.detach = true;
         self
     }
@@ -61,12 +66,14 @@ pub struct DeleteGenerator {
 
 impl DeleteGenerator {
     /// Create a new delete generator with default options
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a delete generator with specific options
-    pub fn with_options(options: DeleteOptions) -> Self {
+    #[must_use] 
+    pub const fn with_options(options: DeleteOptions) -> Self {
         Self { options }
     }
 
@@ -76,7 +83,8 @@ impl DeleteGenerator {
     }
 
     /// Get the current delete options
-    pub fn options(&self) -> &DeleteOptions {
+    #[must_use] 
+    pub const fn options(&self) -> &DeleteOptions {
         &self.options
     }
 
@@ -100,7 +108,7 @@ impl DeleteGenerator {
         // Build DELETE clause
         let delete_clause = self.build_delete_clause(pattern);
 
-        statements.push(format!("{}\n{}", match_clause, delete_clause));
+        statements.push(format!("{match_clause}\n{delete_clause}"));
 
         // Add cascading cleanup if enabled
         if self.options.cascade_literals {
@@ -183,7 +191,7 @@ impl DeleteGenerator {
             }
             Some(Object::Literal(lit)) => {
                 let value_repr = format!("'{}'", escape_cypher_string(lit.value()));
-                format!("(o:Literal {{value: {}}})", value_repr)
+                format!("(o:Literal {{value: {value_repr}}})")
             }
             None => "(o)".to_string(),
         };
@@ -206,10 +214,10 @@ impl DeleteGenerator {
             }
         }
 
-        let pattern_str = format!("{}{}{}", subject_match, edge_match, object_match);
+        let pattern_str = format!("{subject_match}{edge_match}{object_match}");
 
         if conditions.is_empty() {
-            Ok(format!("MATCH {}", pattern_str))
+            Ok(format!("MATCH {pattern_str}"))
         } else {
             Ok(format!(
                 "MATCH {}\nWHERE {}",
@@ -231,11 +239,13 @@ impl DeleteGenerator {
     }
 
     /// Generate Cypher to clean up orphaned Literal nodes
+    #[must_use] 
     pub fn generate_orphan_literal_cleanup(&self) -> String {
         "MATCH (l:Literal) WHERE NOT ()-[]->(l) DELETE l".to_string()
     }
 
-    /// Generate Cypher to clean up orphaned BlankNode nodes
+    /// Generate Cypher to clean up orphaned `BlankNode` nodes
+    #[must_use] 
     pub fn generate_orphan_blank_node_cleanup(&self) -> String {
         "MATCH (b:BlankNode) WHERE NOT ()-[]->(b) AND NOT (b)-[]->() DELETE b".to_string()
     }

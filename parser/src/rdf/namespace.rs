@@ -52,8 +52,7 @@ impl PrefixedName {
         let parts: Vec<&str> = s.splitn(2, ':').collect();
         if parts.len() != 2 {
             return Err(ParserError::InvalidInput(format!(
-                "Invalid prefixed name: {}",
-                s
+                "Invalid prefixed name: {s}"
             )));
         }
         Ok(Self::new(parts[0], parts[1]))
@@ -79,6 +78,7 @@ pub struct NamespaceRegistry {
 
 impl NamespaceRegistry {
     /// Create an empty namespace registry
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             prefix_to_ns: HashMap::new(),
@@ -87,6 +87,7 @@ impl NamespaceRegistry {
     }
 
     /// Create a registry with standard prefixes (rdf, rdfs, xsd, owl)
+    #[must_use] 
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.add("rdf", well_known::RDF);
@@ -97,6 +98,7 @@ impl NamespaceRegistry {
     }
 
     /// Create a registry with extended defaults (includes common vocabularies)
+    #[must_use] 
     pub fn with_extended_defaults() -> Self {
         let mut registry = Self::with_defaults();
         registry.add("skos", well_known::SKOS);
@@ -131,16 +133,19 @@ impl NamespaceRegistry {
     }
 
     /// Get the namespace for a prefix
+    #[must_use] 
     pub fn get_namespace(&self, prefix: &str) -> Option<&str> {
-        self.prefix_to_ns.get(prefix).map(|s| s.as_str())
+        self.prefix_to_ns.get(prefix).map(std::string::String::as_str)
     }
 
     /// Get the prefix for a namespace
+    #[must_use] 
     pub fn get_prefix(&self, namespace: &str) -> Option<&str> {
-        self.ns_to_prefix.get(namespace).map(|s| s.as_str())
+        self.ns_to_prefix.get(namespace).map(std::string::String::as_str)
     }
 
     /// Check if a prefix is registered
+    #[must_use] 
     pub fn has_prefix(&self, prefix: &str) -> bool {
         self.prefix_to_ns.contains_key(prefix)
     }
@@ -160,6 +165,7 @@ impl NamespaceRegistry {
     }
 
     /// Contract an IRI to a prefixed name, if possible
+    #[must_use] 
     pub fn contract(&self, iri: &Iri) -> Option<PrefixedName> {
         let iri_str = iri.as_str();
 
@@ -184,11 +190,13 @@ impl NamespaceRegistry {
     }
 
     /// Get the number of registered prefixes
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.prefix_to_ns.len()
     }
 
     /// Check if the registry is empty
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.prefix_to_ns.is_empty()
     }
@@ -196,7 +204,7 @@ impl NamespaceRegistry {
     /// Merge another registry into this one
     ///
     /// If there are conflicts, the other registry's mappings take precedence.
-    pub fn merge(&mut self, other: &NamespaceRegistry) {
+    pub fn merge(&mut self, other: &Self) {
         for (prefix, namespace) in &other.prefix_to_ns {
             self.add(prefix.clone(), namespace.clone());
         }
@@ -212,7 +220,7 @@ impl Default for NamespaceRegistry {
 impl fmt::Display for NamespaceRegistry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (prefix, namespace) in &self.prefix_to_ns {
-            writeln!(f, "@prefix {}: <{}> .", prefix, namespace)?;
+            writeln!(f, "@prefix {prefix}: <{namespace}> .")?;
         }
         Ok(())
     }

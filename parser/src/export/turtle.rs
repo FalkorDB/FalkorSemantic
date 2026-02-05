@@ -1,7 +1,7 @@
 //! Turtle Serializer
 //!
 //! Implements the Turtle format as per:
-//! https://www.w3.org/TR/turtle/
+//! <https://www.w3.org/TR/turtle>/
 //!
 //! Turtle is a compact, human-readable format for RDF graphs that
 //! supports prefixes, subject/predicate grouping, and shorthand notations.
@@ -30,6 +30,7 @@ impl Default for TurtleWriter {
 
 impl TurtleWriter {
     /// Create a new Turtle writer
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -39,6 +40,7 @@ impl TurtleWriter {
     }
 
     /// Add a prefix mapping
+    #[must_use] 
     pub fn with_prefix(mut self, prefix: &str, namespace: &str) -> Self {
         self.prefixes
             .insert(prefix.to_string(), namespace.to_string());
@@ -46,6 +48,7 @@ impl TurtleWriter {
     }
 
     /// Add common prefixes (rdf, rdfs, xsd, owl)
+    #[must_use] 
     pub fn with_common_prefixes(self) -> Self {
         self.with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
             .with_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
@@ -54,12 +57,14 @@ impl TurtleWriter {
     }
 
     /// Disable subject grouping (write each triple on its own line)
-    pub fn without_grouping(mut self) -> Self {
+    #[must_use] 
+    pub const fn without_grouping(mut self) -> Self {
         self.group_by_subject = false;
         self
     }
 
     /// Set custom indentation
+    #[must_use] 
     pub fn with_indent(mut self, indent: &str) -> Self {
         self.indent = indent.to_string();
         self
@@ -68,7 +73,7 @@ impl TurtleWriter {
     /// Write prefix declarations
     fn write_prefixes<W: Write>(&self, writer: &mut W) -> ExportResult<()> {
         for (prefix, namespace) in &self.prefixes {
-            writeln!(writer, "@prefix {}: <{}> .", prefix, namespace)?;
+            writeln!(writer, "@prefix {prefix}: <{namespace}> .")?;
         }
         if !self.prefixes.is_empty() {
             writeln!(writer)?;
@@ -83,7 +88,7 @@ impl TurtleWriter {
                 let local = &iri[namespace.len()..];
                 // Check if local part is a valid PN_LOCAL
                 if Self::is_valid_local_name(local) {
-                    return Some(format!("{}:{}", prefix, local));
+                    return Some(format!("{prefix}:{local}"));
                 }
             }
         }
@@ -117,7 +122,7 @@ impl TurtleWriter {
     /// Write an IRI (possibly compacted)
     fn write_iri<W: Write>(&self, iri: &Iri, writer: &mut W) -> ExportResult<()> {
         if let Some(compacted) = self.compact_iri(iri.as_str()) {
-            write!(writer, "{}", compacted)?;
+            write!(writer, "{compacted}")?;
         } else {
             write!(writer, "<")?;
             self.write_escaped_iri(iri.as_str(), writer)?;
@@ -135,7 +140,7 @@ impl TurtleWriter {
                 }
                 ' ' => write!(writer, "%20")?,
                 c if c.is_control() => write!(writer, "\\u{:04X}", c as u32)?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -163,7 +168,7 @@ impl TurtleWriter {
         }
 
         if let Some(lang) = lit.language() {
-            write!(writer, "@{}", lang)?;
+            write!(writer, "@{lang}")?;
         } else {
             let dt = lit.datatype();
             let dt_str = dt.as_str();
@@ -203,7 +208,7 @@ impl TurtleWriter {
                 '\r' => write!(writer, "\\r")?,
                 '\t' => write!(writer, "\\t")?,
                 c if c.is_control() => write!(writer, "\\u{:04X}", c as u32)?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -215,7 +220,7 @@ impl TurtleWriter {
             match c {
                 '\\' => write!(writer, "\\\\")?,
                 '"' => write!(writer, "\\\"")?, // Could also allow unescaped in long strings
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())

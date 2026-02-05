@@ -90,22 +90,24 @@ pub enum ExportFormat {
 
 impl ExportFormat {
     /// Get the MIME type for this format
-    pub fn mime_type(&self) -> &'static str {
+    #[must_use] 
+    pub const fn mime_type(&self) -> &'static str {
         match self {
-            ExportFormat::NTriples => "text/n-triples",
-            ExportFormat::NQuads => "text/n-quads",
-            ExportFormat::Turtle => "text/turtle",
-            ExportFormat::JsonLd => "application/ld+json",
+            Self::NTriples => "text/n-triples",
+            Self::NQuads => "text/n-quads",
+            Self::Turtle => "text/turtle",
+            Self::JsonLd => "application/ld+json",
         }
     }
 
     /// Get the file extension for this format
-    pub fn extension(&self) -> &'static str {
+    #[must_use] 
+    pub const fn extension(&self) -> &'static str {
         match self {
-            ExportFormat::NTriples => "nt",
-            ExportFormat::NQuads => "nq",
-            ExportFormat::Turtle => "ttl",
-            ExportFormat::JsonLd => "jsonld",
+            Self::NTriples => "nt",
+            Self::NQuads => "nq",
+            Self::Turtle => "ttl",
+            Self::JsonLd => "jsonld",
         }
     }
 }

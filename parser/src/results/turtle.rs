@@ -16,12 +16,14 @@ pub struct TurtleResultsWriter {
 
 impl TurtleResultsWriter {
     /// Create a new Turtle results writer
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    pub fn pretty(mut self) -> Self {
+    #[must_use] 
+    pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self
     }
@@ -35,7 +37,7 @@ impl TurtleResultsWriter {
                 '\n' => write!(writer, "\\n")?,
                 '\r' => write!(writer, "\\r")?,
                 '\t' => write!(writer, "\\t")?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -61,12 +63,12 @@ impl TurtleResultsWriter {
                 write!(writer, "\"")?;
 
                 if let Some(lang) = lit.language() {
-                    write!(writer, "@{}", lang)?;
+                    write!(writer, "@{lang}")?;
                 } else if let Some(dt) = lit.explicit_datatype() {
                     let dt_str = dt.as_str();
                     // Only include datatype if not xsd:string
                     if dt_str != "http://www.w3.org/2001/XMLSchema#string" {
-                        write!(writer, "^^<{}>", dt_str)?;
+                        write!(writer, "^^<{dt_str}>")?;
                     }
                 }
             }
@@ -133,12 +135,14 @@ pub struct RdfJsonResultsWriter {
 
 impl RdfJsonResultsWriter {
     /// Create a new RDF/JSON results writer
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    pub fn pretty(mut self) -> Self {
+    #[must_use] 
+    pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self
     }
@@ -152,7 +156,7 @@ impl RdfJsonResultsWriter {
                 '\r' => write!(writer, "\\r")?,
                 '\t' => write!(writer, "\\t")?,
                 c if c.is_control() => write!(writer, "\\u{:04x}", c as u32)?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())

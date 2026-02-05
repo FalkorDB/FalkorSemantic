@@ -1,6 +1,6 @@
 //! Graph Mapping Module
 //!
-//! Provides functionality for mapping RDF triples to FalkorDB graph structures.
+//! Provides functionality for mapping RDF triples to `FalkorDB` graph structures.
 
 mod cypher;
 mod delete;

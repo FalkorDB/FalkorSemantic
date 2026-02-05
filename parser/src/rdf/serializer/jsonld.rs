@@ -1,7 +1,7 @@
 //! JSON-LD Serializer
 //!
 //! Serializes RDF data in JSON-LD format.
-//! https://www.w3.org/TR/json-ld/
+//! <https://www.w3.org/TR/json-ld>/
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -62,6 +62,7 @@ impl Default for JsonLdSerializer {
 
 impl JsonLdSerializer {
     /// Create a new JSON-LD serializer
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -73,6 +74,7 @@ impl JsonLdSerializer {
     }
 
     /// Create a JSON-LD serializer with expanded form (no @context)
+    #[must_use] 
     pub fn expanded() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -84,7 +86,8 @@ impl JsonLdSerializer {
     }
 
     /// Set whether to use pretty printing
-    pub fn pretty(mut self, pretty: bool) -> Self {
+    #[must_use] 
+    pub const fn pretty(mut self, pretty: bool) -> Self {
         self.pretty = pretty;
         self
     }
@@ -142,7 +145,7 @@ impl JsonLdSerializer {
             Object::Literal(lit) => JsonLdValue::Literal {
                 value: lit.value().to_string(),
                 datatype: lit.explicit_datatype().map(|d| d.as_str().to_string()),
-                language: lit.language().map(|l| l.to_string()),
+                language: lit.language().map(std::string::ToString::to_string),
             },
         }
     }
@@ -157,7 +160,7 @@ impl JsonLdSerializer {
             if iri.starts_with(namespace) {
                 let local = &iri[namespace.len()..];
                 if super::traits::is_valid_local_name(local) {
-                    return format!("{}:{}", prefix, local);
+                    return format!("{prefix}:{local}");
                 }
             }
         }
@@ -173,7 +176,7 @@ impl JsonLdSerializer {
 
         // Write @context if using compact form
         if self.use_context && !self.prefixes.is_empty() {
-            write!(writer, "{}{}\"@context\": {{", newline, indent)?;
+            write!(writer, "{newline}{indent}\"@context\": {{")?;
 
             let mut first = true;
             let mut prefixes: Vec<_> = self.prefixes.iter().collect();
@@ -183,12 +186,12 @@ impl JsonLdSerializer {
                 if !first {
                     write!(writer, ",")?;
                 }
-                write!(writer, "{}{}{}\"{}\":", newline, indent, indent, prefix)?;
-                write!(writer, " \"{}\"", iri)?;
+                write!(writer, "{newline}{indent}{indent}\"{prefix}\":")?;
+                write!(writer, " \"{iri}\"")?;
                 first = false;
             }
 
-            write!(writer, "{}{}}}", newline, indent)?;
+            write!(writer, "{newline}{indent}}}")?;
         }
 
         // Write nodes
@@ -199,7 +202,7 @@ impl JsonLdSerializer {
             if self.use_context && !self.prefixes.is_empty() {
                 write!(writer, ",")?;
             }
-            write!(writer, "{}{}\"@graph\": [", newline, indent)?;
+            write!(writer, "{newline}{indent}\"@graph\": [")?;
 
             // Write default graph nodes
             self.write_nodes_array(&self.nodes, writer, indent, newline, true)?;
@@ -207,25 +210,24 @@ impl JsonLdSerializer {
             // Write named graphs
             for (graph_id, nodes) in &self.named_graphs {
                 write!(writer, ",")?;
-                write!(writer, "{}{}{{", newline, indent)?;
+                write!(writer, "{newline}{indent}{{")?;
                 write!(
                     writer,
-                    "{}{}{}\"@id\": \"{}\",",
-                    newline, indent, indent, graph_id
+                    "{newline}{indent}{indent}\"@id\": \"{graph_id}\","
                 )?;
-                write!(writer, "{}{}{}\"@graph\": [", newline, indent, indent)?;
+                write!(writer, "{newline}{indent}{indent}\"@graph\": [")?;
                 self.write_nodes_array(
                     nodes,
                     writer,
-                    &format!("{}{}", indent, indent),
+                    &format!("{indent}{indent}"),
                     newline,
                     true,
                 )?;
-                write!(writer, "{}{}{}]", newline, indent, indent)?;
-                write!(writer, "{}{}}}", newline, indent)?;
+                write!(writer, "{newline}{indent}{indent}]")?;
+                write!(writer, "{newline}{indent}}}")?;
             }
 
-            write!(writer, "{}{}]", newline, indent)?;
+            write!(writer, "{newline}{indent}]")?;
         } else if !self.nodes.is_empty() {
             // Single graph - write nodes directly or as @graph
             if self.nodes.len() == 1 {
@@ -241,13 +243,13 @@ impl JsonLdSerializer {
                 if self.use_context && !self.prefixes.is_empty() {
                     write!(writer, ",")?;
                 }
-                write!(writer, "{}{}\"@graph\": [", newline, indent)?;
+                write!(writer, "{newline}{indent}\"@graph\": [")?;
                 self.write_nodes_array(&self.nodes, writer, indent, newline, true)?;
-                write!(writer, "{}{}]", newline, indent)?;
+                write!(writer, "{newline}{indent}]")?;
             }
         }
 
-        write!(writer, "{}}}{}", newline, newline)?;
+        write!(writer, "{newline}}}{newline}")?;
         Ok(())
     }
 
@@ -272,9 +274,9 @@ impl JsonLdSerializer {
             if !is_first {
                 write!(writer, ",")?;
             }
-            write!(writer, "{}{}{{", newline, indent)?;
+            write!(writer, "{newline}{indent}{{")?;
             self.write_node_properties(node, writer, indent, newline, true)?;
-            write!(writer, "{}{}}}", newline, indent)?;
+            write!(writer, "{newline}{indent}}}")?;
             is_first = false;
         }
 
@@ -312,7 +314,7 @@ impl JsonLdSerializer {
             if !first {
                 write!(writer, ",")?;
             }
-            write!(writer, "{}{}\"@type\": ", newline, inner_indent)?;
+            write!(writer, "{newline}{inner_indent}\"@type\": ")?;
             if node.types.len() == 1 {
                 write!(writer, "\"{}\"", self.compact_iri(&node.types[0]))?;
             } else {
@@ -390,7 +392,7 @@ impl JsonLdSerializer {
                 if language.is_some() || datatype.is_some() {
                     write!(writer, "{{\"@value\": \"{}\"", escape_json_string(value))?;
                     if let Some(lang) = language {
-                        write!(writer, ", \"@language\": \"{}\"", lang)?;
+                        write!(writer, ", \"@language\": \"{lang}\"")?;
                     } else if let Some(dt) = datatype {
                         if dt != "http://www.w3.org/2001/XMLSchema#string" {
                             write!(writer, ", \"@type\": \"{}\"", self.compact_iri(dt))?;

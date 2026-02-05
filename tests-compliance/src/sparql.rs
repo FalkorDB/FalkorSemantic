@@ -7,6 +7,7 @@ use crate::{ComplianceGap, ComplianceReport, GapSeverity, TestResult, TestType};
 use falkorsemantic_parser::SparqlParser;
 
 /// Run SPARQL 1.1 Query syntax compliance tests
+#[must_use] 
 pub fn run_sparql_syntax_tests() -> ComplianceReport {
     let mut report = ComplianceReport::new("SPARQL 1.1 Query Syntax");
 
@@ -292,6 +293,7 @@ pub fn run_sparql_syntax_tests() -> ComplianceReport {
 }
 
 /// Run SPARQL 1.1 Update syntax compliance tests
+#[must_use] 
 pub fn run_sparql_update_tests() -> ComplianceReport {
     let mut report = ComplianceReport::new("SPARQL 1.1 Update Syntax");
 
@@ -312,7 +314,7 @@ pub fn run_sparql_update_tests() -> ComplianceReport {
     for (op, _desc) in update_operations {
         report.add_skipped(
             format!("update-{}", op.to_lowercase().replace([' ', '/'], "-")),
-            format!("SPARQL Update ({}) not implemented", op),
+            format!("SPARQL Update ({op}) not implemented"),
         );
     }
 

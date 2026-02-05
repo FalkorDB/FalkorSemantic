@@ -1,7 +1,7 @@
 //! N-Quads Serializer
 //!
 //! Serializes RDF quads in the W3C N-Quads format.
-//! https://www.w3.org/TR/n-quads/
+//! <https://www.w3.org/TR/n-quads>/
 
 use std::io::Write;
 
@@ -18,7 +18,8 @@ pub struct NQuadsSerializer;
 
 impl NQuadsSerializer {
     /// Create a new N-Quads serializer
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self
     }
 
@@ -43,9 +44,9 @@ impl NQuadsSerializer {
             crate::rdf::Object::BlankNode(bn) => write!(writer, "_:{}", bn.label())?,
             crate::rdf::Object::Literal(lit) => {
                 let escaped = super::traits::escape_string(lit.value());
-                write!(writer, "\"{}\"", escaped)?;
+                write!(writer, "\"{escaped}\"")?;
                 if let Some(lang) = lit.language() {
-                    write!(writer, "@{}", lang)?;
+                    write!(writer, "@{lang}")?;
                 } else if let Some(datatype) = lit.explicit_datatype() {
                     if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
                         write!(writer, "^^<{}>", datatype.as_str())?;

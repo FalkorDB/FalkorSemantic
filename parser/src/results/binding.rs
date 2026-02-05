@@ -20,12 +20,14 @@ pub struct SelectResults {
 
 impl SelectResults {
     /// Create a new empty result set
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a result set with the given variables
-    pub fn with_variables(variables: Vec<String>) -> Self {
+    #[must_use] 
+    pub const fn with_variables(variables: Vec<String>) -> Self {
         Self {
             variables,
             bindings: Vec::new(),
@@ -38,16 +40,19 @@ impl SelectResults {
     }
 
     /// Get the number of results
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.bindings.len()
     }
 
     /// Check if the result set is empty
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.bindings.is_empty()
     }
 
     /// Get the number of variables
+    #[must_use] 
     pub fn num_variables(&self) -> usize {
         self.variables.len()
     }
@@ -58,6 +63,7 @@ impl SelectResults {
     }
 
     /// Get a binding by index
+    #[must_use] 
     pub fn get(&self, index: usize) -> Option<&Binding> {
         self.bindings.get(index)
     }
@@ -72,7 +78,8 @@ pub struct AskResult {
 
 impl AskResult {
     /// Create a new ASK result
-    pub fn new(result: bool) -> Self {
+    #[must_use] 
+    pub const fn new(result: bool) -> Self {
         Self { result }
     }
 }
@@ -92,12 +99,14 @@ pub struct ConstructResults {
 
 impl ConstructResults {
     /// Create a new empty construct result
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create with the given triples
-    pub fn with_triples(triples: Vec<Triple>) -> Self {
+    #[must_use] 
+    pub const fn with_triples(triples: Vec<Triple>) -> Self {
         Self { triples }
     }
 
@@ -107,11 +116,13 @@ impl ConstructResults {
     }
 
     /// Get the number of triples
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.triples.len()
     }
 
     /// Check if empty
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.triples.is_empty()
     }
@@ -135,58 +146,67 @@ pub enum ResultSet {
 
 impl ResultSet {
     /// Create SELECT results
-    pub fn select(variables: Vec<String>, bindings: Vec<Binding>) -> Self {
-        ResultSet::Select(SelectResults {
+    #[must_use] 
+    pub const fn select(variables: Vec<String>, bindings: Vec<Binding>) -> Self {
+        Self::Select(SelectResults {
             variables,
             bindings,
         })
     }
 
     /// Create ASK result
+    #[must_use] 
     pub fn ask(result: bool) -> Self {
-        ResultSet::Ask(AskResult::new(result))
+        Self::Ask(AskResult::new(result))
     }
 
     /// Create CONSTRUCT results
+    #[must_use] 
     pub fn construct(triples: Vec<Triple>) -> Self {
-        ResultSet::Construct(ConstructResults::with_triples(triples))
+        Self::Construct(ConstructResults::with_triples(triples))
     }
 
     /// Check if this is a SELECT result
-    pub fn is_select(&self) -> bool {
-        matches!(self, ResultSet::Select(_))
+    #[must_use] 
+    pub const fn is_select(&self) -> bool {
+        matches!(self, Self::Select(_))
     }
 
     /// Check if this is an ASK result
-    pub fn is_ask(&self) -> bool {
-        matches!(self, ResultSet::Ask(_))
+    #[must_use] 
+    pub const fn is_ask(&self) -> bool {
+        matches!(self, Self::Ask(_))
     }
 
     /// Check if this is a CONSTRUCT result
-    pub fn is_construct(&self) -> bool {
-        matches!(self, ResultSet::Construct(_))
+    #[must_use] 
+    pub const fn is_construct(&self) -> bool {
+        matches!(self, Self::Construct(_))
     }
 
     /// Get as SELECT results
-    pub fn as_select(&self) -> Option<&SelectResults> {
+    #[must_use] 
+    pub const fn as_select(&self) -> Option<&SelectResults> {
         match self {
-            ResultSet::Select(r) => Some(r),
+            Self::Select(r) => Some(r),
             _ => None,
         }
     }
 
     /// Get as ASK result
-    pub fn as_ask(&self) -> Option<&AskResult> {
+    #[must_use] 
+    pub const fn as_ask(&self) -> Option<&AskResult> {
         match self {
-            ResultSet::Ask(r) => Some(r),
+            Self::Ask(r) => Some(r),
             _ => None,
         }
     }
 
     /// Get as CONSTRUCT results
-    pub fn as_construct(&self) -> Option<&ConstructResults> {
+    #[must_use] 
+    pub const fn as_construct(&self) -> Option<&ConstructResults> {
         match self {
-            ResultSet::Construct(r) => Some(r),
+            Self::Construct(r) => Some(r),
             _ => None,
         }
     }

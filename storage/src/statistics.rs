@@ -47,6 +47,7 @@ pub struct SelectivityHistogram {
 
 impl SelectivityHistogram {
     /// Estimate selectivity given a bound subject
+    #[must_use] 
     pub fn selectivity_with_subject(&self) -> f64 {
         if self.count == 0 {
             return 1.0;
@@ -55,6 +56,7 @@ impl SelectivityHistogram {
     }
 
     /// Estimate selectivity given a bound object
+    #[must_use] 
     pub fn selectivity_with_object(&self) -> f64 {
         if self.count == 0 {
             return 1.0;
@@ -63,6 +65,7 @@ impl SelectivityHistogram {
     }
 
     /// Estimate selectivity given both subject and object bound
+    #[must_use] 
     pub fn selectivity_with_both(&self) -> f64 {
         if self.count == 0 {
             return 1.0;
@@ -73,6 +76,7 @@ impl SelectivityHistogram {
 
 impl Statistics {
     /// Create new empty statistics
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -254,6 +258,7 @@ pub struct StatisticsSummary {
 
 impl StatisticsSummary {
     /// Get graph density (edges / possible edges)
+    #[must_use] 
     pub fn density(&self) -> f64 {
         if self.distinct_subjects == 0 || self.distinct_objects == 0 {
             return 0.0;
@@ -281,6 +286,7 @@ pub struct StatisticsCollector {
 
 impl StatisticsCollector {
     /// Create a new collector
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }

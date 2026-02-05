@@ -1,7 +1,7 @@
 //! JSON-LD Serializer
 //!
 //! Implements the JSON-LD format as per:
-//! https://www.w3.org/TR/json-ld11/
+//! <https://www.w3.org/TR/json-ld11>/
 //!
 //! JSON-LD is a JSON-based format to serialize Linked Data.
 
@@ -42,6 +42,7 @@ impl Default for JsonLdWriter {
 
 impl JsonLdWriter {
     /// Create a new JSON-LD writer
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             context: HashMap::new(),
@@ -51,6 +52,7 @@ impl JsonLdWriter {
     }
 
     /// Add a term to the context
+    #[must_use] 
     pub fn with_term(mut self, term: &str, iri: &str) -> Self {
         self.context
             .insert(term.to_string(), ContextEntry::Iri(iri.to_string()));
@@ -58,6 +60,7 @@ impl JsonLdWriter {
     }
 
     /// Add a prefix to the context
+    #[must_use] 
     pub fn with_prefix(mut self, prefix: &str, namespace: &str) -> Self {
         self.context
             .insert(prefix.to_string(), ContextEntry::Iri(namespace.to_string()));
@@ -65,6 +68,7 @@ impl JsonLdWriter {
     }
 
     /// Add common prefixes
+    #[must_use] 
     pub fn with_common_prefixes(self) -> Self {
         self.with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
             .with_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
@@ -72,7 +76,8 @@ impl JsonLdWriter {
     }
 
     /// Disable pretty-printing
-    pub fn compact(mut self) -> Self {
+    #[must_use] 
+    pub const fn compact(mut self) -> Self {
         self.pretty = false;
         self
     }
@@ -87,7 +92,7 @@ impl JsonLdWriter {
                 '\r' => write!(writer, "\\r")?,
                 '\t' => write!(writer, "\\t")?,
                 c if c.is_control() => write!(writer, "\\u{:04X}", c as u32)?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -117,7 +122,7 @@ impl JsonLdWriter {
             if let ContextEntry::Iri(namespace) = entry {
                 if iri.starts_with(namespace) {
                     let local = &iri[namespace.len()..];
-                    return format!("{}:{}", prefix, local);
+                    return format!("{prefix}:{local}");
                 }
             }
         }
@@ -266,7 +271,7 @@ impl JsonLdWriter {
             write!(writer, "\"")?;
 
             // Write predicates
-            for (pred_iri, objects) in predicates.iter() {
+            for (pred_iri, objects) in *predicates {
                 write!(writer, ",")?;
                 self.nl(writer)?;
                 self.write_indent(writer, 3)?;

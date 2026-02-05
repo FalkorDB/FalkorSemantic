@@ -1,7 +1,7 @@
 //! N-Triples Serializer
 //!
 //! Serializes RDF triples in the W3C N-Triples format.
-//! https://www.w3.org/TR/n-triples/
+//! <https://www.w3.org/TR/n-triples>/
 
 use std::io::Write;
 
@@ -18,7 +18,8 @@ pub struct NTriplesSerializer;
 
 impl NTriplesSerializer {
     /// Create a new N-Triples serializer
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self
     }
 
@@ -44,10 +45,10 @@ impl NTriplesSerializer {
     /// Serialize a literal to N-Triples format
     fn write_literal<W: Write>(&self, literal: &Literal, writer: &mut W) -> SerializerResult<()> {
         let escaped = escape_string(literal.value());
-        write!(writer, "\"{}\"", escaped)?;
+        write!(writer, "\"{escaped}\"")?;
 
         if let Some(lang) = literal.language() {
-            write!(writer, "@{}", lang)?;
+            write!(writer, "@{lang}")?;
         } else if let Some(datatype) = literal.explicit_datatype() {
             // Only write datatype if it's not xsd:string (the default)
             if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {

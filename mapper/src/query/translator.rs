@@ -1,6 +1,6 @@
 //! SPARQL to Cypher Translator
 //!
-//! Translates SPARQL queries to Cypher queries for execution against FalkorDB.
+//! Translates SPARQL queries to Cypher queries for execution against `FalkorDB`.
 
 use std::collections::HashSet;
 use std::fmt::Write;
@@ -19,6 +19,7 @@ pub struct SparqlToCypher {
 
 impl SparqlToCypher {
     /// Create a new translator
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -48,7 +49,7 @@ impl SparqlToCypher {
         cypher.push_str(&match_clause);
 
         if !where_clause.is_empty() {
-            write!(cypher, "\nWHERE {}", where_clause).unwrap();
+            write!(cypher, "\nWHERE {where_clause}").unwrap();
         }
 
         // Build RETURN clause
@@ -69,10 +70,10 @@ impl SparqlToCypher {
 
         // Handle LIMIT and OFFSET
         if let Some(limit) = select.limit {
-            write!(cypher, "\nLIMIT {}", limit).unwrap();
+            write!(cypher, "\nLIMIT {limit}").unwrap();
         }
         if let Some(offset) = select.offset {
-            write!(cypher, "\nSKIP {}", offset).unwrap();
+            write!(cypher, "\nSKIP {offset}").unwrap();
         }
 
         Ok(CypherQuery {
@@ -88,7 +89,7 @@ impl SparqlToCypher {
 
         let mut cypher = match_clause;
         if !where_clause.is_empty() {
-            write!(cypher, "\nWHERE {}", where_clause).unwrap();
+            write!(cypher, "\nWHERE {where_clause}").unwrap();
         }
         cypher.push_str("\nRETURN count(*) > 0 AS result");
 
@@ -237,7 +238,7 @@ impl SparqlToCypher {
                 let (obj_var, obj_cond) = self.term_to_cypher(object)?;
 
                 // Basic path translation (simplified)
-                let path_pattern = format!("({})-[*]->({})", subj_var, obj_var);
+                let path_pattern = format!("({subj_var})-[*]->({obj_var})");
                 match_parts.push(path_pattern);
 
                 if let Some(cond) = subj_cond {
@@ -296,7 +297,7 @@ impl SparqlToCypher {
         let rel_var = self.next_var("r");
 
         // Build MATCH pattern
-        let pattern = format!("({})-[{}{}]->({})", subj_var, rel_var, pred_str, obj_var);
+        let pattern = format!("({subj_var})-[{rel_var}{pred_str}]->({obj_var})");
 
         Ok((pattern, conditions, bound_vars))
     }
@@ -323,7 +324,7 @@ impl SparqlToCypher {
             TP::Literal(lit) => {
                 let var = self.next_var("l");
                 let value = escape_cypher_string(lit.value());
-                let condition = format!("{}.value = '{}'", var, value);
+                let condition = format!("{var}.value = '{value}'");
                 Ok((var, Some(condition)))
             }
             #[allow(unreachable_patterns)]
@@ -387,7 +388,7 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("{} = {}", l, r)),
+                    (Some(l), Some(r)) => Some(format!("{l} = {r}")),
                     _ => None,
                 }
             }
@@ -396,7 +397,7 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("{} = {}", l, r)),
+                    (Some(l), Some(r)) => Some(format!("{l} = {r}")),
                     _ => None,
                 }
             }
@@ -404,7 +405,7 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("{} < {}", l, r)),
+                    (Some(l), Some(r)) => Some(format!("{l} < {r}")),
                     _ => None,
                 }
             }
@@ -412,7 +413,7 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("{} > {}", l, r)),
+                    (Some(l), Some(r)) => Some(format!("{l} > {r}")),
                     _ => None,
                 }
             }
@@ -420,7 +421,7 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("{} <= {}", l, r)),
+                    (Some(l), Some(r)) => Some(format!("{l} <= {r}")),
                     _ => None,
                 }
             }
@@ -428,7 +429,7 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("{} >= {}", l, r)),
+                    (Some(l), Some(r)) => Some(format!("{l} >= {r}")),
                     _ => None,
                 }
             }
@@ -436,7 +437,7 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("({} AND {})", l, r)),
+                    (Some(l), Some(r)) => Some(format!("({l} AND {r})")),
                     (Some(l), None) => Some(l),
                     (None, Some(r)) => Some(r),
                     _ => None,
@@ -446,13 +447,13 @@ impl SparqlToCypher {
                 let l = self.translate_expression(left)?;
                 let r = self.translate_expression(right)?;
                 match (l, r) {
-                    (Some(l), Some(r)) => Some(format!("({} OR {})", l, r)),
+                    (Some(l), Some(r)) => Some(format!("({l} OR {r})")),
                     _ => None,
                 }
             }
             E::Not(inner) => {
                 let i = self.translate_expression(inner)?;
-                i.map(|i| format!("NOT ({})", i))
+                i.map(|i| format!("NOT ({i})"))
             }
             E::Variable(v) => Some(v.as_str().to_string()),
             E::Literal(lit) => {
@@ -467,7 +468,7 @@ impl SparqlToCypher {
                 let e = self.translate_expression(else_expr)?;
                 match (c, t, e) {
                     (Some(c), Some(t), Some(e)) => {
-                        Some(format!("CASE WHEN {} THEN {} ELSE {} END", c, t, e))
+                        Some(format!("CASE WHEN {c} THEN {t} ELSE {e} END"))
                     }
                     _ => None,
                 }
@@ -491,10 +492,10 @@ impl SparqlToCypher {
                     .collect();
 
                 match func {
-                    F::Str => arg_strs.first().map(|a| format!("toString({})", a)),
-                    F::StrLen => arg_strs.first().map(|a| format!("size({})", a)),
-                    F::UCase => arg_strs.first().map(|a| format!("toUpper({})", a)),
-                    F::LCase => arg_strs.first().map(|a| format!("toLower({})", a)),
+                    F::Str => arg_strs.first().map(|a| format!("toString({a})")),
+                    F::StrLen => arg_strs.first().map(|a| format!("size({a})")),
+                    F::UCase => arg_strs.first().map(|a| format!("toUpper({a})")),
+                    F::LCase => arg_strs.first().map(|a| format!("toLower({a})")),
                     F::Contains => {
                         if arg_strs.len() >= 2 {
                             Some(format!("{} CONTAINS {}", arg_strs[0], arg_strs[1]))
@@ -523,10 +524,10 @@ impl SparqlToCypher {
                             None
                         }
                     }
-                    F::Abs => arg_strs.first().map(|a| format!("abs({})", a)),
-                    F::Ceil => arg_strs.first().map(|a| format!("ceil({})", a)),
-                    F::Floor => arg_strs.first().map(|a| format!("floor({})", a)),
-                    F::Round => arg_strs.first().map(|a| format!("round({})", a)),
+                    F::Abs => arg_strs.first().map(|a| format!("abs({a})")),
+                    F::Ceil => arg_strs.first().map(|a| format!("ceil({a})")),
+                    F::Floor => arg_strs.first().map(|a| format!("floor({a})")),
+                    F::Round => arg_strs.first().map(|a| format!("round({a})")),
                     _ => None, // Unsupported function
                 }
             }
@@ -580,7 +581,7 @@ impl SparqlToCypher {
                     .ok()
                     .flatten()?;
                 let dir = if cond.descending { " DESC" } else { "" };
-                Some(format!("{}{}", expr_str, dir))
+                Some(format!("{expr_str}{dir}"))
             })
             .collect();
 
@@ -595,7 +596,7 @@ impl SparqlToCypher {
     fn next_var(&self, prefix: &str) -> String {
         let count = *self.var_counter.borrow();
         *self.var_counter.borrow_mut() += 1;
-        format!("{}_{}", prefix, count)
+        format!("{prefix}_{count}")
     }
 }
 

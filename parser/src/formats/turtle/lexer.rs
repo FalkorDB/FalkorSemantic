@@ -70,7 +70,7 @@ pub struct Token {
 }
 
 impl Token {
-    fn new(kind: TokenKind, line: usize, column: usize) -> Self {
+    const fn new(kind: TokenKind, line: usize, column: usize) -> Self {
         Self { kind, line, column }
     }
 }
@@ -86,6 +86,7 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     /// Create a new lexer for the given input
+    #[must_use] 
     pub fn new(input: &'a str) -> Self {
         Self {
             input: input.chars().peekable(),
@@ -185,8 +186,7 @@ impl<'a> Lexer<'a> {
             }
             _ => {
                 return Err(ParserError::ParseError(format!(
-                    "Unexpected character '{}' at line {}, column {}",
-                    ch, line, column
+                    "Unexpected character '{ch}' at line {line}, column {column}"
                 )));
             }
         };
@@ -259,8 +259,7 @@ impl<'a> Lexer<'a> {
                 }
                 Some(c) if c == '<' || c.is_whitespace() && c != ' ' => {
                     return Err(ParserError::ParseError(format!(
-                        "Invalid character in IRI: {:?}",
-                        c
+                        "Invalid character in IRI: {c:?}"
                     )));
                 }
                 Some(c) => iri.push(c),
@@ -301,10 +300,9 @@ impl<'a> Lexer<'a> {
                             if self.peek() == Some(quote) {
                                 self.advance();
                                 break;
-                            } else {
-                                value.push(quote);
-                                value.push(quote);
                             }
+                            value.push(quote);
+                            value.push(quote);
                         } else {
                             value.push(quote);
                         }
@@ -317,7 +315,7 @@ impl<'a> Lexer<'a> {
                         value.push(self.unescape_char(escaped)?);
                     }
                 }
-                Some('\n') | Some('\r') if !is_long => {
+                Some('\n' | '\r') if !is_long => {
                     return Err(ParserError::ParseError(
                         "Newline in short string literal".into(),
                     ));
@@ -334,7 +332,7 @@ impl<'a> Lexer<'a> {
         Ok(TokenKind::StringLiteral(value))
     }
 
-    fn unescape_char(&self, ch: char) -> Result<char, ParserError> {
+    const fn unescape_char(&self, ch: char) -> Result<char, ParserError> {
         match ch {
             'n' => Ok('\n'),
             'r' => Ok('\r'),
@@ -384,8 +382,7 @@ impl<'a> Lexer<'a> {
                 label.push(self.advance().unwrap());
             } else {
                 return Err(ParserError::ParseError(format!(
-                    "Invalid first character in blank node label: {:?}",
-                    c
+                    "Invalid first character in blank node label: {c:?}"
                 )));
             }
         }
@@ -397,7 +394,7 @@ impl<'a> Lexer<'a> {
                 if c == '.' {
                     // Look ahead to ensure not at end
                     label.push(self.advance().unwrap());
-                    if self.peek().map(|c| !self.is_pn_chars(c)).unwrap_or(true) {
+                    if self.peek().map_or(true, |c| !self.is_pn_chars(c)) {
                         // Dot was at end, remove it
                         label.pop();
                         break;
@@ -469,7 +466,7 @@ impl<'a> Lexer<'a> {
                         return Ok(TokenKind::Dot);
                     }
                     let val: i64 = num_str.parse().map_err(|_| {
-                        ParserError::ParseError(format!("Invalid integer: {}", num_str))
+                        ParserError::ParseError(format!("Invalid integer: {num_str}"))
                     })?;
                     return Ok(TokenKind::Integer(val));
                 }
@@ -499,17 +496,17 @@ impl<'a> Lexer<'a> {
         if has_exponent {
             let val: f64 = num_str
                 .parse()
-                .map_err(|_| ParserError::ParseError(format!("Invalid double: {}", num_str)))?;
+                .map_err(|_| ParserError::ParseError(format!("Invalid double: {num_str}")))?;
             Ok(TokenKind::Double(val))
         } else if has_dot {
             let val: f64 = num_str
                 .parse()
-                .map_err(|_| ParserError::ParseError(format!("Invalid decimal: {}", num_str)))?;
+                .map_err(|_| ParserError::ParseError(format!("Invalid decimal: {num_str}")))?;
             Ok(TokenKind::Decimal(val))
         } else {
             let val: i64 = num_str
                 .parse()
-                .map_err(|_| ParserError::ParseError(format!("Invalid integer: {}", num_str)))?;
+                .map_err(|_| ParserError::ParseError(format!("Invalid integer: {num_str}")))?;
             Ok(TokenKind::Integer(val))
         }
     }
@@ -543,8 +540,7 @@ impl<'a> Lexer<'a> {
         }
 
         Err(ParserError::ParseError(format!(
-            "Expected ':' in prefixed name after '{}'",
-            prefix
+            "Expected ':' in prefixed name after '{prefix}'"
         )))
     }
 
@@ -558,8 +554,7 @@ impl<'a> Lexer<'a> {
             })
         } else {
             Err(ParserError::ParseError(format!(
-                "Expected ':' in prefixed name after '{}'",
-                word
+                "Expected ':' in prefixed name after '{word}'"
             )))
         }
     }
@@ -584,8 +579,7 @@ impl<'a> Lexer<'a> {
                     local.push(self.advance().unwrap());
                     if self
                         .peek()
-                        .map(|c| !self.is_pn_chars(c) && c != ':')
-                        .unwrap_or(true)
+                        .map_or(true, |c| !self.is_pn_chars(c) && c != ':')
                     {
                         local.pop();
                         break;
@@ -614,7 +608,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn is_pn_char_or_colon(&self, c: Option<char>) -> bool {
-        c.map(|c| self.is_pn_chars(c) || c == ':').unwrap_or(false)
+        c.is_some_and(|c| self.is_pn_chars(c) || c == ':')
     }
 }
 

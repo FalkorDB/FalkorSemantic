@@ -26,12 +26,12 @@ pub enum SerializerError {
 impl SerializerError {
     /// Create an invalid data error
     pub fn invalid_data(msg: impl Into<String>) -> Self {
-        SerializerError::InvalidData(msg.into())
+        Self::InvalidData(msg.into())
     }
 
     /// Create a format error
     pub fn format_error(msg: impl Into<String>) -> Self {
-        SerializerError::FormatError(msg.into())
+        Self::FormatError(msg.into())
     }
 }
 

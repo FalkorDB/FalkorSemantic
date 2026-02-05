@@ -1,7 +1,7 @@
 //! Turtle Serializer
 //!
 //! Serializes RDF triples in the W3C Turtle format with prefix support.
-//! https://www.w3.org/TR/turtle/
+//! <https://www.w3.org/TR/turtle>/
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -34,6 +34,7 @@ impl Default for TurtleSerializer {
 
 impl TurtleSerializer {
     /// Create a new Turtle serializer
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -44,6 +45,7 @@ impl TurtleSerializer {
     }
 
     /// Create a Turtle serializer with common prefixes
+    #[must_use] 
     pub fn with_common_prefixes() -> Self {
         let mut serializer = Self::new();
         serializer.add_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
@@ -72,15 +74,16 @@ impl TurtleSerializer {
                 let local = &iri[namespace.len()..];
                 // Check if local name is valid (no special chars)
                 if Self::is_valid_local_name(local) {
-                    return format!("{}:{}", prefix, local);
+                    return format!("{prefix}:{local}");
                 }
             }
         }
         // Return full IRI in angle brackets
-        format!("<{}>", iri)
+        format!("<{iri}>")
     }
 
     /// Check if a string is a valid Turtle local name
+    #[must_use] 
     pub fn is_valid_local_name(s: &str) -> bool {
         if s.is_empty() {
             return true; // Empty local name is valid (just prefix:)
@@ -146,7 +149,7 @@ impl TurtleSerializer {
             // Integer shorthand
             if dt_str == "http://www.w3.org/2001/XMLSchema#integer" && value.parse::<i64>().is_ok()
             {
-                write!(writer, "{}", value)?;
+                write!(writer, "{value}")?;
                 return Ok(());
             }
 
@@ -156,7 +159,7 @@ impl TurtleSerializer {
                 && value.parse::<f64>().is_ok()
                 && value.contains('.')
             {
-                write!(writer, "{}", value)?;
+                write!(writer, "{value}")?;
                 return Ok(());
             }
 
@@ -164,7 +167,7 @@ impl TurtleSerializer {
             if dt_str == "http://www.w3.org/2001/XMLSchema#boolean"
                 && (value == "true" || value == "false")
             {
-                write!(writer, "{}", value)?;
+                write!(writer, "{value}")?;
                 return Ok(());
             }
         }
@@ -172,14 +175,14 @@ impl TurtleSerializer {
         // Check if multiline string
         if value.contains('\n') || value.contains('\r') {
             let escaped = escape_string(value);
-            write!(writer, "\"\"\"{}\"\"\"", escaped)?;
+            write!(writer, "\"\"\"{escaped}\"\"\"")?;
         } else {
             let escaped = escape_string(value);
-            write!(writer, "\"{}\"", escaped)?;
+            write!(writer, "\"{escaped}\"")?;
         }
 
         if let Some(lang) = literal.language() {
-            write!(writer, "@{}", lang)?;
+            write!(writer, "@{lang}")?;
         } else if let Some(datatype) = literal.explicit_datatype() {
             let dt_str = datatype.as_str();
             // Don't write xsd:string as it's the default
@@ -255,7 +258,7 @@ impl GraphSerializer for TurtleSerializer {
         prefixes.sort_by_key(|(k, _)| k.as_str());
 
         for (prefix, iri) in prefixes {
-            writeln!(writer, "@prefix {}: <{}> .", prefix, iri)?;
+            writeln!(writer, "@prefix {prefix}: <{iri}> .")?;
         }
 
         if !self.prefixes.is_empty() {

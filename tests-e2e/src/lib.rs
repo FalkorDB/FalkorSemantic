@@ -1,2 +1,2 @@
 //! E2E test crate - placeholder lib
-pub fn placeholder() {}
+pub const fn placeholder() {}

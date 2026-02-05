@@ -49,6 +49,7 @@ pub struct TriplePatternCost {
 
 impl TriplePatternCost {
     /// Get estimated execution cost
+    #[must_use] 
     pub fn cost(&self, cost_model: &CostModel) -> f64 {
         let base = self.cardinality;
         match &self.index_hint {
@@ -80,6 +81,7 @@ impl OptimizedPlan {
     }
 
     /// Check if plan uses any indexes
+    #[must_use] 
     pub fn uses_indexes(&self) -> bool {
         self.patterns.iter().any(|p| p.index_hint.uses_index())
     }
@@ -96,6 +98,7 @@ pub struct JoinOrderOptimizer {
 
 impl JoinOrderOptimizer {
     /// Create a new optimizer
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             cost_model: CostModel::default(),
@@ -104,7 +107,8 @@ impl JoinOrderOptimizer {
     }
 
     /// Create optimizer with custom cost model
-    pub fn with_cost_model(cost_model: CostModel) -> Self {
+    #[must_use] 
+    pub const fn with_cost_model(cost_model: CostModel) -> Self {
         Self {
             cost_model,
             total_triples: 0,
@@ -165,6 +169,7 @@ impl JoinOrderOptimizer {
     }
 
     /// Optimize patterns without statistics (heuristic-based)
+    #[must_use] 
     pub fn optimize_heuristic(&self, patterns: &[TriplePattern]) -> OptimizedPlan {
         if patterns.is_empty() {
             return OptimizedPlan {
@@ -349,8 +354,7 @@ impl JoinOrderOptimizer {
                 .iter()
                 .enumerate()
                 .min_by(|(_, a), (_, b)| a.selectivity.partial_cmp(&b.selectivity).unwrap())
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+                .map_or(0, |(i, _)| i);
         }
 
         // Find pattern that shares variables and has lowest cost
