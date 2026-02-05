@@ -266,9 +266,10 @@ impl<'a> RedisCypherExecutor<'a> {
     }
 }
 
-impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
-    fn execute(&self, query: &str) -> Result<CypherResult, QueryError> {
-        let result = self.ctx.call("GRAPH.QUERY", &[self.graph_key, query]);
+impl<'a> RedisCypherExecutor<'a> {
+    /// Execute a GRAPH.QUERY command with the given arguments and handle errors
+    fn execute_graph_query(&self, args: &[&str], query: &str) -> Result<CypherResult, QueryError> {
+        let result = self.ctx.call("GRAPH.QUERY", args);
 
         match result {
             Ok(value) => self.parse_result(value),
@@ -278,6 +279,12 @@ impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
                 query: Some(query.to_string()),
             }),
         }
+    }
+}
+
+impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
+    fn execute(&self, query: &str) -> Result<CypherResult, QueryError> {
+        self.execute_graph_query(&[self.graph_key, query], query)
     }
 
     fn execute_with_timeout(
@@ -290,19 +297,10 @@ impl<'a> CypherExecutor for RedisCypherExecutor<'a> {
         let timeout_ms = timeout.as_millis().min(u64::MAX as u128) as u64;
         let timeout_str = timeout_ms.to_string();
         
-        let result = self.ctx.call(
-            "GRAPH.QUERY",
+        self.execute_graph_query(
             &[self.graph_key, query, "TIMEOUT", &timeout_str],
-        );
-
-        match result {
-            Ok(value) => self.parse_result(value),
-            Err(e) => Err(QueryError {
-                message: format!("FalkorDB error: {:?}", e),
-                code: Some("EXECUTE_ERROR".into()),
-                query: Some(query.to_string()),
-            }),
-        }
+            query,
+        )
     }
 }
 
