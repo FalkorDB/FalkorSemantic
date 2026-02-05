@@ -10,6 +10,9 @@ use super::schema::{
 };
 use crate::MapperError;
 
+/// XSD date datatype IRI
+const XSD_DATE: &str = "http://www.w3.org/2001/XMLSchema#date";
+
 /// Generates Cypher statements for RDF triples
 #[derive(Debug, Default)]
 pub struct CypherGenerator {
@@ -207,8 +210,7 @@ impl CypherGenerator {
 
         // Check if this is a date type
         let is_date = if let Some(datatype) = literal.explicit_datatype() {
-            datatype.as_str() == "http://www.w3.org/2001/XMLSchema#date"
-                && literal.as_date().is_some()
+            datatype.as_str() == XSD_DATE && literal.as_date().is_some()
         } else {
             false
         };
@@ -272,8 +274,7 @@ impl CypherGenerator {
                         
                         // Check if this is a date type
                         let is_date = if let Some(datatype) = lit.explicit_datatype() {
-                            datatype.as_str() == "http://www.w3.org/2001/XMLSchema#date"
-                                && lit.as_date().is_some()
+                            datatype.as_str() == XSD_DATE && lit.as_date().is_some()
                         } else {
                             false
                         };

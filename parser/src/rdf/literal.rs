@@ -206,7 +206,9 @@ impl Literal {
 
     /// Try to parse the value as a date in ISO 8601 format (YYYY-MM-DD)
     ///
-    /// Returns the original string if it's a valid ISO 8601 date format.
+    /// Returns `Some(self.value.as_str())` if it's a valid ISO 8601 date format,
+    /// or `None` if the value is not a valid date.
+    /// 
     /// This validates the basic ISO 8601 format with 4-digit years (0000-9999).
     /// Extended year representations are not supported.
     pub fn as_date(&self) -> Option<&str> {
