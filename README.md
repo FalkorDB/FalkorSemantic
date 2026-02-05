@@ -3,8 +3,8 @@
 A high-performance Redis module that extends [FalkorDB](https://www.falkordb.com/) with RDF and SPARQL capabilities, bridging the property graph and semantic web worlds.
 
 [![CI](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
+[![License: MIT](https://img.shields.io/badge/license-AGPL--v3-blue)](https://opensource.org/licenses/agpl-v3)
+ 
 ## Overview
 
 FalkorSemantic is a Redis module that enables semantic web data processing with FalkorDB. It provides:
