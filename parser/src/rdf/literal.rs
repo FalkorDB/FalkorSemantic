@@ -236,7 +236,8 @@ impl Literal {
         let day = s[8..10].parse::<u32>().ok()?;
 
         // Basic validation
-        if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        // Year 0 does not exist in the Gregorian calendar (starts at year 1 CE)
+        if year < 1 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
             return None;
         }
 
@@ -416,5 +417,9 @@ mod tests {
         // Negative year (extended format not supported)
         let lit7 = Literal::with_datatype("-123-01-01", xsd::date());
         assert_eq!(lit7.as_date(), None);
+
+        // Year 0000 is invalid (Gregorian calendar starts at year 1)
+        let lit8 = Literal::with_datatype("0000-01-01", xsd::date());
+        assert_eq!(lit8.as_date(), None);
     }
 }

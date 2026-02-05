@@ -215,10 +215,18 @@ impl CypherGenerator {
             false
         };
 
+        // Check if explicit xsd:date datatype was declared (even if invalid)
+        let has_date_datatype = literal
+            .explicit_datatype()
+            .map(|dt| dt.as_str() == XSD_DATE)
+            .unwrap_or(false);
+
         // For numeric and boolean types, use unquoted values; otherwise quote as string
-        let is_numeric_or_bool = literal.as_integer().is_some()
-            || literal.as_float().is_some()
-            || literal.as_bool().is_some();
+        // Skip numeric check if xsd:date datatype was declared to maintain type contract
+        let is_numeric_or_bool = !has_date_datatype
+            && (literal.as_integer().is_some()
+                || literal.as_float().is_some()
+                || literal.as_bool().is_some());
 
         let value_repr = if is_date {
             // Use FalkorDB's date() function for xsd:date types
@@ -279,9 +287,17 @@ impl CypherGenerator {
                             false
                         };
 
-                        let is_numeric_or_bool = lit.as_integer().is_some()
-                            || lit.as_float().is_some()
-                            || lit.as_bool().is_some();
+                        // Check if explicit xsd:date datatype was declared (even if invalid)
+                        let has_date_datatype = lit
+                            .explicit_datatype()
+                            .map(|dt| dt.as_str() == XSD_DATE)
+                            .unwrap_or(false);
+
+                        // Skip numeric check if xsd:date datatype was declared
+                        let is_numeric_or_bool = !has_date_datatype
+                            && (lit.as_integer().is_some()
+                                || lit.as_float().is_some()
+                                || lit.as_bool().is_some());
                         let value_repr = if is_date {
                             // Use FalkorDB's date() function for xsd:date types
                             format!("date('{}')", escape_cypher_string(lit.value()))
@@ -724,6 +740,38 @@ mod tests {
         assert!(
             stmt.contains("'Tech University'"),
             "String should be quoted, got: {}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_invalid_xsd_date_as_string() {
+        use falkorsemantic_parser::rdf::xsd;
+
+        let gen = CypherGenerator::new();
+
+        // Test case: literal with xsd:date datatype but invalid date value
+        // Should be treated as string, not as unquoted integer
+        let triple = Triple::new(
+            test_iri("http://example.org/entity"),
+            test_iri("http://example.org/prop"),
+            Literal::with_datatype("42", xsd::date()),
+        );
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+
+        // Should be quoted as string since xsd:date datatype contract must be maintained
+        assert!(
+            stmt.contains("SET s.prop = '42'"),
+            "Invalid xsd:date should be quoted as string, got: {}",
+            stmt
+        );
+        // Should NOT be unquoted integer
+        assert!(
+            !stmt.contains("SET s.prop = 42"),
+            "Invalid xsd:date should not be treated as integer, got: {}",
             stmt
         );
     }
