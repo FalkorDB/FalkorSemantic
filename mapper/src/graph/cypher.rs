@@ -17,6 +17,9 @@ type CollectionArray = (String, String, Vec<String>);
 /// Type alias for collection detection result
 type CollectionDetectionResult = (Vec<CollectionArray>, Vec<Triple>);
 
+/// XSD date datatype IRI
+const XSD_DATE: &str = "http://www.w3.org/2001/XMLSchema#date";
+
 /// Generates Cypher statements for RDF triples
 #[derive(Debug, Default)]
 pub struct CypherGenerator {
@@ -60,9 +63,13 @@ impl CypherGenerator {
                 let label = sanitize_identifier(type_iri.local_name());
                 let subject_uri = self.subject_uri(&triple.subject);
                 let is_blank = matches!(triple.subject, Subject::BlankNode(_));
+
+                // Use consistent base label for MERGE to prevent duplicate nodes
+                // For blank nodes, always use BlankNode as primary to ensure same URI matches same node
+                // For resources, use Resource as primary
                 let node_label = if is_blank { "BlankNode" } else { "Resource" };
 
-                // Use consistent MERGE pattern with other node creations
+                // Add the type as an additional label via SET
                 let statement = format!(
                     "{} (n:{} {{uri: '{}'}}) SET n:{}, n.isBlank = {}",
                     self.operation(),
@@ -212,12 +219,30 @@ impl CypherGenerator {
     ) -> String {
         let prop_name = sanitize_identifier(predicate.local_name());
 
-        // For numeric and boolean types, use unquoted values; otherwise quote as string
-        let is_numeric_or_bool = literal.as_integer().is_some()
-            || literal.as_float().is_some()
-            || literal.as_bool().is_some();
+        // Check if this is a date type
+        let is_date = if let Some(datatype) = literal.explicit_datatype() {
+            datatype.as_str() == XSD_DATE && literal.as_date().is_some()
+        } else {
+            false
+        };
 
-        let value_repr = if is_numeric_or_bool {
+        // Check if explicit xsd:date datatype was declared (even if invalid)
+        let has_date_datatype = literal
+            .explicit_datatype()
+            .map(|dt| dt.as_str() == XSD_DATE)
+            .unwrap_or(false);
+
+        // For numeric and boolean types, use unquoted values; otherwise quote as string
+        // Skip numeric check if xsd:date datatype was declared to maintain type contract
+        let is_numeric_or_bool = !has_date_datatype
+            && (literal.as_integer().is_some()
+                || literal.as_float().is_some()
+                || literal.as_bool().is_some());
+
+        let value_repr = if is_date {
+            // Use FalkorDB's date() function for xsd:date types
+            format!("date('{}')", escape_cypher_string(literal.value()))
+        } else if is_numeric_or_bool {
             literal.value().to_string()
         } else {
             format!("'{}'", escape_cypher_string(literal.value()))
@@ -440,10 +465,29 @@ impl CypherGenerator {
                     Object::Literal(lit) => {
                         // Literal -> add property
                         let prop_name = sanitize_identifier(triple.predicate.local_name());
-                        let is_numeric_or_bool = lit.as_integer().is_some()
-                            || lit.as_float().is_some()
-                            || lit.as_bool().is_some();
-                        let value_repr = if is_numeric_or_bool {
+
+                        // Check if this is a date type
+                        let is_date = if let Some(datatype) = lit.explicit_datatype() {
+                            datatype.as_str() == XSD_DATE && lit.as_date().is_some()
+                        } else {
+                            false
+                        };
+
+                        // Check if explicit xsd:date datatype was declared (even if invalid)
+                        let has_date_datatype = lit
+                            .explicit_datatype()
+                            .map(|dt| dt.as_str() == XSD_DATE)
+                            .unwrap_or(false);
+
+                        // Skip numeric check if xsd:date datatype was declared
+                        let is_numeric_or_bool = !has_date_datatype
+                            && (lit.as_integer().is_some()
+                                || lit.as_float().is_some()
+                                || lit.as_bool().is_some());
+                        let value_repr = if is_date {
+                            // Use FalkorDB's date() function for xsd:date types
+                            format!("date('{}')", escape_cypher_string(lit.value()))
+                        } else if is_numeric_or_bool {
                             lit.value().to_string()
                         } else {
                             format!("'{}'", escape_cypher_string(lit.value()))
@@ -502,6 +546,11 @@ impl CypherGenerator {
     /// Generate a combined Cypher query for a subject with all its data
     fn generate_subject_query(&self, data: &SubjectData) -> String {
         let mut parts = Vec::new();
+
+        // Determine the primary node label
+        // Use consistent base label for MERGE to prevent duplicate nodes when types are in different batches
+        // For blank nodes: always use BlankNode as primary
+        // For resources: always use Resource as primary
         let node_label = if data.is_blank {
             "BlankNode"
         } else {
@@ -511,8 +560,10 @@ impl CypherGenerator {
         // Build the SET clause with labels and properties
         let mut set_parts = Vec::new();
 
-        // Add labels
-        for label in &data.labels {
+        // Add all type labels (sorted for deterministic output)
+        let mut sorted_labels = data.labels.clone();
+        sorted_labels.sort();
+        for label in &sorted_labels {
             set_parts.push(format!("s:{}", label));
         }
 
@@ -766,6 +817,207 @@ mod tests {
     }
 
     #[test]
+    fn test_blank_node_with_rdf_type() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+        let triple = Triple {
+            subject: Subject::BlankNode(blank_node),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Address")),
+        };
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+
+        // The blank node should use BlankNode as primary label for MERGE (to prevent duplicates)
+        // and Address as an additional label via SET
+        assert!(
+            stmt.contains("MERGE (n:BlankNode"),
+            "Statement should MERGE with BlankNode label to prevent duplicates. Statement: {}",
+            stmt
+        );
+
+        assert!(
+            stmt.contains("SET n:Address"),
+            "Statement should SET Address as additional label. Statement: {}",
+            stmt
+        );
+
+        // Blank nodes should still be identifiable as blank via the isBlank property
+        assert!(
+            stmt.contains("isBlank = true"),
+            "Statement should mark node as blank. Statement: {}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_blank_node_batch_with_type() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Create multiple triples for the same blank node
+        let triples = vec![
+            // Type triple
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Address")),
+            },
+            // Property triple
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/2006/vcard/ns#street-address"),
+                object: Object::Literal(Literal::new("123 Main St")),
+            },
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+        assert_eq!(statements.len(), 1); // Should combine into one statement
+
+        let stmt = &statements[0];
+        println!("Batch statement: {}", stmt);
+
+        // The blank node should use BlankNode as primary label for MERGE (to prevent duplicates)
+        // and Address as an additional label via SET
+        assert!(
+            stmt.contains("MERGE (s:BlankNode"),
+            "Batch statement should use BlankNode as primary label to prevent duplicates. Statement: {}",
+            stmt
+        );
+
+        assert!(
+            stmt.contains("s:Address"),
+            "Batch statement should add Address as additional label. Statement: {}",
+            stmt
+        );
+
+        // Should have the property (sanitized to use underscore)
+        assert!(
+            stmt.contains("street_address") || stmt.contains("street-address"),
+            "Should contain property"
+        );
+        assert!(
+            stmt.contains("123 Main St"),
+            "Should contain property value"
+        );
+
+        // Should mark as blank
+        assert!(stmt.contains("isBlank = true"), "Should mark as blank");
+    }
+
+    #[test]
+    fn test_blank_node_with_multiple_types_deterministic() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Create triples with multiple types in different orders
+        // The primary label should always be the alphabetically first one
+        let triples = vec![
+            // Type triple - ZebraType (should not be primary)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/ZebraType")),
+            },
+            // Type triple - AppleType (should be primary - alphabetically first)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/AppleType")),
+            },
+            // Type triple - MangoType (should be additional)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/MangoType")),
+            },
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+        assert_eq!(statements.len(), 1);
+
+        let stmt = &statements[0];
+        println!("Multiple types statement: {}", stmt);
+
+        // BlankNode should be the primary label for MERGE (to prevent duplicates)
+        assert!(
+            stmt.contains("MERGE (s:BlankNode"),
+            "Should use BlankNode as primary label to prevent duplicates. Statement: {}",
+            stmt
+        );
+
+        // All types should be added as additional labels (sorted alphabetically)
+        assert!(
+            stmt.contains("s:AppleType"),
+            "Should add AppleType as additional label"
+        );
+        assert!(
+            stmt.contains("s:MangoType"),
+            "Should add MangoType as additional label"
+        );
+        assert!(
+            stmt.contains("s:ZebraType"),
+            "Should add ZebraType as additional label"
+        );
+    }
+
+    #[test]
+    fn test_blank_node_multiple_batches_no_duplicates() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Batch 1: Blank node with Address type
+        let batch1 = vec![Triple {
+            subject: Subject::BlankNode(blank_node.clone()),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Address")),
+        }];
+
+        // Batch 2: Same blank node with Location type
+        let batch2 = vec![Triple {
+            subject: Subject::BlankNode(blank_node.clone()),
+            predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            object: Object::Iri(test_iri("http://www.w3.org/2006/vcard/ns#Location")),
+        }];
+
+        let stmt1 = gen.generate_batch(&batch1).unwrap();
+        let stmt2 = gen.generate_batch(&batch2).unwrap();
+
+        println!("Batch 1 statement: {}", stmt1[0]);
+        println!("Batch 2 statement: {}", stmt2[0]);
+
+        // Both should use BlankNode as primary label, ensuring they MERGE to the same node
+        assert!(
+            stmt1[0].contains("MERGE (s:BlankNode {uri: '_:b1'})"),
+            "Batch 1 should use BlankNode as primary label"
+        );
+        assert!(
+            stmt2[0].contains("MERGE (s:BlankNode {uri: '_:b1'})"),
+            "Batch 2 should use BlankNode as primary label"
+        );
+
+        // The labels should be added via SET
+        assert!(
+            stmt1[0].contains("s:Address"),
+            "Batch 1 should add Address label"
+        );
+        assert!(
+            stmt2[0].contains("s:Location"),
+            "Batch 2 should add Location label"
+        );
+    }
+
+    #[test]
     fn test_escape_cypher_string() {
         assert_eq!(escape_cypher_string("hello"), "hello");
         assert_eq!(escape_cypher_string("it's"), "it\\'s");
@@ -995,5 +1247,158 @@ mod tests {
         let combined = statements.join("\n");
         assert!(combined.contains("BlankNode") || combined.contains("_:"), 
                 "Should preserve blank node structure for nested collections");
+    }
+
+    #[test]
+    fn test_cypher_date_literal() {
+        use falkorsemantic_parser::rdf::xsd;
+
+        let gen = CypherGenerator::new();
+        let triple = Triple::new(
+            test_iri("http://example.org/university"),
+            test_iri("http://example.org/established"),
+            Literal::with_datatype("1995-10-01", xsd::date()),
+        );
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+        // Should use date() function for xsd:date type
+        assert!(
+            stmt.contains("SET s.established = date('1995-10-01')"),
+            "Statement should contain date() function, got: {}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_cypher_integer_literal() {
+        use falkorsemantic_parser::rdf::xsd;
+
+        let gen = CypherGenerator::new();
+        let triple = Triple::new(
+            test_iri("http://example.org/university"),
+            test_iri("http://example.org/ranking"),
+            Literal::with_datatype("42", xsd::integer()),
+        );
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+        // Integer should be unquoted
+        assert!(
+            stmt.contains("SET s.ranking = 42"),
+            "Statement should contain unquoted integer, got: {}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_cypher_batch_with_date() {
+        use falkorsemantic_parser::rdf::xsd;
+
+        let gen = CypherGenerator::new();
+
+        // Example from the issue: university with establishment date
+        let triples = vec![
+            // ex:university a foaf:Organization
+            Triple::new(
+                test_iri("http://example.org/university"),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                test_iri("http://xmlns.com/foaf/0.1/Organization"),
+            ),
+            // ex:university foaf:name "Tech University"
+            Triple::new(
+                test_iri("http://example.org/university"),
+                test_iri("http://xmlns.com/foaf/0.1/name"),
+                Literal::new("Tech University"),
+            ),
+            // ex:university ex:established "1995-10-01"^^xsd:date
+            Triple::new(
+                test_iri("http://example.org/university"),
+                test_iri("http://example.org/established"),
+                Literal::with_datatype("1995-10-01", xsd::date()),
+            ),
+            // ex:university ex:ranking "42"^^xsd:int
+            Triple::new(
+                test_iri("http://example.org/university"),
+                test_iri("http://example.org/ranking"),
+                Literal::with_datatype("42", xsd::integer()),
+            ),
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+        assert_eq!(
+            statements.len(),
+            1,
+            "Should generate one statement for the subject"
+        );
+
+        let stmt = &statements[0];
+
+        // Verify it contains the Organization label
+        assert!(
+            stmt.contains(":Organization"),
+            "Should have Organization label"
+        );
+
+        // Verify date is stored with date() function
+        assert!(
+            stmt.contains("date('1995-10-01')"),
+            "Date should use date() function, got: {}",
+            stmt
+        );
+
+        // Verify integer is unquoted - check for both parts separately
+        assert!(
+            stmt.contains(".ranking") && stmt.contains("42"),
+            "Integer property should be present, got: {}",
+            stmt
+        );
+        // Ensure 42 is not quoted
+        assert!(
+            !stmt.contains("'42'"),
+            "Integer should not be quoted, got: {}",
+            stmt
+        );
+
+        // Verify string is quoted
+        assert!(
+            stmt.contains("'Tech University'"),
+            "String should be quoted, got: {}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_invalid_xsd_date_as_string() {
+        use falkorsemantic_parser::rdf::xsd;
+
+        let gen = CypherGenerator::new();
+
+        // Test case: literal with xsd:date datatype but invalid date value
+        // Should be treated as string, not as unquoted integer
+        let triple = Triple::new(
+            test_iri("http://example.org/entity"),
+            test_iri("http://example.org/prop"),
+            Literal::with_datatype("42", xsd::date()),
+        );
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+
+        // Should be quoted as string since xsd:date datatype contract must be maintained
+        assert!(
+            stmt.contains("SET s.prop = '42'"),
+            "Invalid xsd:date should be quoted as string, got: {}",
+            stmt
+        );
+        // Should NOT be unquoted integer
+        assert!(
+            !stmt.contains("SET s.prop = 42"),
+            "Invalid xsd:date should not be treated as integer, got: {}",
+            stmt
+        );
     }
 }

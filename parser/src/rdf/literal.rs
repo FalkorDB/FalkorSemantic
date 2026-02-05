@@ -203,6 +203,64 @@ impl Literal {
     pub fn as_float(&self) -> Option<f64> {
         self.value.parse().ok()
     }
+
+    /// Try to parse the value as a date in ISO 8601 format (YYYY-MM-DD)
+    ///
+    /// Returns `Some(self.value.as_str())` if it's a valid ISO 8601 date format,
+    /// or `None` if the value is not a valid date.
+    ///
+    /// This validates the basic ISO 8601 format with 4-digit years (0000-9999).
+    /// Extended year representations are not supported.
+    pub fn as_date(&self) -> Option<&str> {
+        let s = self.value.as_str();
+
+        // Basic format check: YYYY-MM-DD (10 characters)
+        if s.len() != 10 {
+            return None;
+        }
+
+        let bytes = s.as_bytes();
+        // Check format: YYYY-MM-DD (year must be 4 digits)
+        if bytes[4] != b'-' || bytes[7] != b'-' {
+            return None;
+        }
+
+        // Verify year portion is exactly 4 digits
+        if !bytes[0..4].iter().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+
+        // Parse year, month, day
+        let year = s[0..4].parse::<i32>().ok()?;
+        let month = s[5..7].parse::<u32>().ok()?;
+        let day = s[8..10].parse::<u32>().ok()?;
+
+        // Basic validation
+        // Year 0 does not exist in the Gregorian calendar (starts at year 1 CE)
+        if year < 1 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+            return None;
+        }
+
+        // More precise day validation based on month
+        let max_day = match month {
+            2 => {
+                // Leap year check
+                if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+                    29
+                } else {
+                    28
+                }
+            }
+            4 | 6 | 9 | 11 => 30,
+            _ => 31,
+        };
+
+        if day > max_day {
+            return None;
+        }
+
+        Some(s)
+    }
 }
 
 impl fmt::Display for Literal {
@@ -316,5 +374,52 @@ mod tests {
         assert!(Literal::with_language("test", "").is_err());
         assert!(Literal::with_language("test", "123").is_err());
         assert!(Literal::with_language("test", "en US").is_err());
+    }
+
+    #[test]
+    fn test_as_date_valid() {
+        let lit = Literal::with_datatype("1995-10-01", xsd::date());
+        assert_eq!(lit.as_date(), Some("1995-10-01"));
+
+        let lit2 = Literal::with_datatype("2024-02-29", xsd::date()); // leap year
+        assert_eq!(lit2.as_date(), Some("2024-02-29"));
+
+        let lit3 = Literal::with_datatype("2000-12-31", xsd::date());
+        assert_eq!(lit3.as_date(), Some("2000-12-31"));
+    }
+
+    #[test]
+    fn test_as_date_invalid() {
+        // Wrong format
+        let lit = Literal::with_datatype("10-01-1995", xsd::date());
+        assert_eq!(lit.as_date(), None);
+
+        // Invalid month
+        let lit2 = Literal::with_datatype("1995-13-01", xsd::date());
+        assert_eq!(lit2.as_date(), None);
+
+        // Invalid day
+        let lit3 = Literal::with_datatype("1995-02-30", xsd::date());
+        assert_eq!(lit3.as_date(), None);
+
+        // Non-leap year February 29
+        let lit4 = Literal::with_datatype("1995-02-29", xsd::date());
+        assert_eq!(lit4.as_date(), None);
+
+        // Invalid format (too short)
+        let lit5 = Literal::with_datatype("1995-1-1", xsd::date());
+        assert_eq!(lit5.as_date(), None);
+
+        // Not a date at all
+        let lit6 = Literal::new("hello");
+        assert_eq!(lit6.as_date(), None);
+
+        // Negative year (extended format not supported)
+        let lit7 = Literal::with_datatype("-123-01-01", xsd::date());
+        assert_eq!(lit7.as_date(), None);
+
+        // Year 0000 is invalid (Gregorian calendar starts at year 1)
+        let lit8 = Literal::with_datatype("0000-01-01", xsd::date());
+        assert_eq!(lit8.as_date(), None);
     }
 }
