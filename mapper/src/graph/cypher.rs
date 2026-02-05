@@ -281,7 +281,7 @@ impl CypherGenerator {
         // First pass: identify collection structure
         for triple in triples {
             let subject_uri = self.subject_uri(&triple.subject);
-            
+
             if triple.predicate.as_str() == rdf_predicates::RDF_FIRST {
                 // This is a rdf:first triple
                 if let Subject::BlankNode(bn) = &triple.subject {
@@ -299,7 +299,10 @@ impl CypherGenerator {
                 // (it will be the head if it has rdf:first)
                 collection_heads.insert(
                     bn_id.clone(),
-                    (subject_uri, sanitize_identifier(triple.predicate.local_name())),
+                    (
+                        subject_uri,
+                        sanitize_identifier(triple.predicate.local_name()),
+                    ),
                 );
             }
         }
@@ -307,8 +310,11 @@ impl CypherGenerator {
         // Second pass: build collections
         // Filter collection_heads to only include entries that have rdf:first predicates
         let mut collections: Vec<(String, String, Vec<String>)> = Vec::new();
-        
-        for (head_bn_id, (subject_uri, prop_name)) in collection_heads.iter().filter(|(bn_id, _)| first_map.contains_key(*bn_id)) {
+
+        for (head_bn_id, (subject_uri, prop_name)) in collection_heads
+            .iter()
+            .filter(|(bn_id, _)| first_map.contains_key(*bn_id))
+        {
             // Try to build the collection
             let mut current_bn = head_bn_id.clone();
             let mut values = Vec::new();
@@ -394,7 +400,7 @@ impl CypherGenerator {
                         return false;
                     }
                 }
-                
+
                 // Remove triples that point to collection heads
                 if let Object::BlankNode(bn) = &triple.object {
                     let bn_id = format!("_:{}", bn.label());
@@ -409,7 +415,7 @@ impl CypherGenerator {
                         }
                     }
                 }
-                
+
                 true
             })
             .cloned()
@@ -426,7 +432,8 @@ impl CypherGenerator {
         use std::collections::HashMap;
 
         // First pass: detect and process RDF collections
-        let (collection_arrays, remaining_triples) = self.detect_and_extract_collections(triples)?;
+        let (collection_arrays, remaining_triples) =
+            self.detect_and_extract_collections(triples)?;
 
         // Group triples by subject URI
         let mut subjects: HashMap<String, SubjectData> = HashMap::new();
@@ -1038,9 +1045,9 @@ mod tests {
     #[test]
     fn test_simple_collection_with_literals() {
         use falkorsemantic_parser::rdf::BlankNode;
-        
+
         let gen = CypherGenerator::new();
-        
+
         // Build a simple collection: alice favoriteCourses ("Databases" "AI" "DistributedSystems")
         // This generates:
         // alice favoriteCourses _:b1
@@ -1050,11 +1057,11 @@ mod tests {
         // _:b2 rdf:rest _:b3
         // _:b3 rdf:first "DistributedSystems"
         // _:b3 rdf:rest rdf:nil
-        
+
         let bn1 = BlankNode::new("b1");
         let bn2 = BlankNode::new("b2");
         let bn3 = BlankNode::new("b3");
-        
+
         let triples = vec![
             Triple::new(
                 test_iri("http://example.org/alice"),
@@ -1092,16 +1099,16 @@ mod tests {
                 test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
             ),
         ];
-        
+
         let statements = gen.generate_batch(&triples).unwrap();
-        
+
         // Should generate one statement for alice with an array property
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
-        
+
         // Check that it contains alice
         assert!(stmt.contains("alice"), "Statement should contain alice");
-        
+
         // Check that it contains the favoriteCourses property
         assert!(
             stmt.contains("favoriteCourses"),
@@ -1125,7 +1132,7 @@ mod tests {
             "Statement should contain value 'DistributedSystems': {}",
             stmt
         );
-        
+
         let pos_db = stmt
             .find("Databases")
             .expect("Statement should contain value 'Databases'");
@@ -1140,7 +1147,7 @@ mod tests {
             "Course values should appear in order: Databases, AI, DistributedSystems. Statement: {}",
             stmt
         );
-        
+
         // Should NOT contain blank node relationships
         assert!(!stmt.contains("BlankNode"), "Should not create blank nodes");
         assert!(!stmt.contains("rdf:first"), "Should not have rdf:first");
@@ -1150,14 +1157,14 @@ mod tests {
     #[test]
     fn test_simple_collection_with_iris() {
         use falkorsemantic_parser::rdf::BlankNode;
-        
+
         let gen = CypherGenerator::new();
-        
+
         // Build a collection with IRIs: alice knows (bob charlie david)
         let bn1 = BlankNode::new("b1");
         let bn2 = BlankNode::new("b2");
         let bn3 = BlankNode::new("b3");
-        
+
         let triples = vec![
             Triple::new(
                 test_iri("http://example.org/alice"),
@@ -1195,15 +1202,18 @@ mod tests {
                 test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
             ),
         ];
-        
+
         let statements = gen.generate_batch(&triples).unwrap();
-        
+
         // Should generate one statement for alice with an array property
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
-        
+
         // Check that knows is a property
-        assert!(stmt.contains("knows"), "Statement should contain knows property");
+        assert!(
+            stmt.contains("knows"),
+            "Statement should contain knows property"
+        );
 
         // Check that all expected IRIs appear, in order, within an array-like context
         assert!(
@@ -1223,7 +1233,9 @@ mod tests {
         );
 
         // Ensure the IRIs appear in the correct order
-        let bob_pos = stmt.find("http://example.org/bob").expect("bob IRI not found");
+        let bob_pos = stmt
+            .find("http://example.org/bob")
+            .expect("bob IRI not found");
         let charlie_pos = stmt
             .find("http://example.org/charlie")
             .expect("charlie IRI not found");
@@ -1240,43 +1252,47 @@ mod tests {
     #[test]
     fn test_empty_collection() {
         let gen = CypherGenerator::new();
-        
+
         // Empty collection: alice favoriteCourses ()
         // This generates: alice favoriteCourses rdf:nil
-        let triples = vec![
-            Triple::new(
-                test_iri("http://example.org/alice"),
-                test_iri("http://example.org/favoriteCourses"),
-                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
-            ),
-        ];
-        
+        let triples = vec![Triple::new(
+            test_iri("http://example.org/alice"),
+            test_iri("http://example.org/favoriteCourses"),
+            test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
+        )];
+
         let statements = gen.generate_batch(&triples).unwrap();
-        
+
         // Empty collections are handled as regular relationships (not arrays)
         // since they point directly to rdf:nil without any blank nodes
         // This creates alice node and rdf:nil node with a relationship
-        assert!(statements.len() >= 1, "Should generate at least one statement");
-        
+        assert!(
+            statements.len() >= 1,
+            "Should generate at least one statement"
+        );
+
         // Check that alice is created
         let combined = statements.join("\n");
-        assert!(combined.contains("alice") || combined.contains("example.org/alice"), 
-                "Should contain alice: {}", combined);
+        assert!(
+            combined.contains("alice") || combined.contains("example.org/alice"),
+            "Should contain alice: {}",
+            combined
+        );
     }
 
     #[test]
     fn test_nested_collection_not_converted() {
         use falkorsemantic_parser::rdf::BlankNode;
-        
+
         let gen = CypherGenerator::new();
-        
+
         // Nested collection (not simple): alice data (_:nested)
         // _:b1 rdf:first _:nested (this is a blank node, not a literal/IRI)
         // _:b1 rdf:rest rdf:nil
-        
+
         let bn1 = BlankNode::new("b1");
         let bn_nested = BlankNode::new("nested");
-        
+
         let triples = vec![
             Triple::new(
                 test_iri("http://example.org/alice"),
@@ -1294,17 +1310,22 @@ mod tests {
                 test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
             ),
         ];
-        
+
         let statements = gen.generate_batch(&triples).unwrap();
-        
+
         // Should NOT convert to array since it contains a blank node
         // Should create multiple statements for the collection structure
-        assert!(statements.len() > 1, "Nested collections should not be converted to arrays");
-        
+        assert!(
+            statements.len() > 1,
+            "Nested collections should not be converted to arrays"
+        );
+
         // The output should contain blank node references
         let combined = statements.join("\n");
-        assert!(combined.contains("BlankNode") || combined.contains("_:"), 
-                "Should preserve blank node structure for nested collections");
+        assert!(
+            combined.contains("BlankNode") || combined.contains("_:"),
+            "Should preserve blank node structure for nested collections"
+        );
     }
 
     #[test]
