@@ -10,6 +10,13 @@ use super::schema::{
 };
 use crate::MapperError;
 
+/// Type alias for a detected RDF collection array
+/// Format: (subject_uri, property_name, values)
+type CollectionArray = (String, String, Vec<String>);
+
+/// Type alias for collection detection result
+type CollectionDetectionResult = (Vec<CollectionArray>, Vec<Triple>);
+
 /// XSD date datatype IRI
 const XSD_DATE: &str = "http://www.w3.org/2001/XMLSchema#date";
 
@@ -246,6 +253,178 @@ impl CypherGenerator {
         format!("SET {subject_var}.{prop_name} = {value_repr}")
     }
 
+    /// Detect and extract RDF collections that contain only simple values.
+    ///
+    /// Returns (collection_arrays, remaining_triples) where:
+    /// - collection_arrays: Vec<(subject_uri, property_name, values)>
+    /// - remaining_triples: Vec<Triple> without collection-related triples
+    ///
+    /// RDF collections are represented as:
+    /// - subject predicate _:head
+    /// - _:head rdf:first value1
+    /// - _:head rdf:rest _:node2
+    /// - _:node2 rdf:first value2
+    /// - _:node2 rdf:rest rdf:nil
+    ///
+    /// These are converted to array properties if all values are literals or IRIs.
+    fn detect_and_extract_collections(
+        &self,
+        triples: &[Triple],
+    ) -> Result<CollectionDetectionResult, MapperError> {
+        use std::collections::{HashMap, HashSet};
+
+        // Map blank nodes to their rdf:first and rdf:rest values
+        let mut first_map: HashMap<String, &Object> = HashMap::new();
+        let mut rest_map: HashMap<String, &Object> = HashMap::new();
+        let mut collection_heads: HashMap<String, (String, String)> = HashMap::new(); // bn_id -> (subject_uri, sanitized_property_name)
+        let mut used_blank_nodes: HashSet<String> = HashSet::new();
+
+        // First pass: identify collection structure
+        for triple in triples {
+            let subject_uri = self.subject_uri(&triple.subject);
+
+            if triple.predicate.as_str() == rdf_predicates::RDF_FIRST {
+                // This is a rdf:first triple
+                if let Subject::BlankNode(bn) = &triple.subject {
+                    first_map.insert(format!("_:{}", bn.label()), &triple.object);
+                }
+            } else if triple.predicate.as_str() == rdf_predicates::RDF_REST {
+                // This is a rdf:rest triple
+                if let Subject::BlankNode(bn) = &triple.subject {
+                    rest_map.insert(format!("_:{}", bn.label()), &triple.object);
+                }
+            } else if let Object::BlankNode(bn) = &triple.object {
+                // This could be a collection head (subject predicate _:bn)
+                let bn_id = format!("_:{}", bn.label());
+                // Check if this blank node is part of a collection
+                // (it will be the head if it has rdf:first)
+                collection_heads.insert(
+                    bn_id.clone(),
+                    (
+                        subject_uri,
+                        sanitize_identifier(triple.predicate.local_name()),
+                    ),
+                );
+            }
+        }
+
+        // Second pass: build collections
+        // Filter collection_heads to only include entries that have rdf:first predicates
+        let mut collections: Vec<(String, String, Vec<String>)> = Vec::new();
+
+        for (head_bn_id, (subject_uri, prop_name)) in collection_heads
+            .iter()
+            .filter(|(bn_id, _)| first_map.contains_key(*bn_id))
+        {
+            // Try to build the collection
+            let mut current_bn = head_bn_id.clone();
+            let mut values = Vec::new();
+            let mut collection_blank_nodes = HashSet::new();
+            let mut is_simple_collection = true;
+
+            loop {
+                collection_blank_nodes.insert(current_bn.clone());
+
+                // Get the rdf:first value
+                if let Some(first_obj) = first_map.get(&current_bn) {
+                    match first_obj {
+                        Object::Literal(lit) => {
+                            // Simple literal value
+                            let is_numeric_or_bool = lit.as_integer().is_some()
+                                || lit.as_float().is_some()
+                                || lit.as_bool().is_some();
+                            let value_repr = if is_numeric_or_bool {
+                                lit.value().to_string()
+                            } else {
+                                format!("'{}'", escape_cypher_string(lit.value()))
+                            };
+                            values.push(value_repr);
+                        }
+                        Object::Iri(iri) => {
+                            // Simple IRI value - store as string
+                            values.push(format!("'{}'", escape_cypher_string(iri.as_str())));
+                        }
+                        Object::BlankNode(_) => {
+                            // Nested blank node - not a simple collection
+                            is_simple_collection = false;
+                            break;
+                        }
+                    }
+                } else {
+                    // Missing rdf:first - malformed collection
+                    is_simple_collection = false;
+                    break;
+                }
+
+                // Get the rdf:rest value
+                if let Some(rest_obj) = rest_map.get(&current_bn) {
+                    match rest_obj {
+                        Object::Iri(iri) if iri.as_str() == rdf_predicates::RDF_NIL => {
+                            // End of collection
+                            break;
+                        }
+                        Object::BlankNode(bn) => {
+                            // Continue to next node
+                            current_bn = format!("_:{}", bn.label());
+                        }
+                        _ => {
+                            // Unexpected rdf:rest value
+                            is_simple_collection = false;
+                            break;
+                        }
+                    }
+                } else {
+                    // Missing rdf:rest - malformed collection
+                    is_simple_collection = false;
+                    break;
+                }
+            }
+
+            if is_simple_collection && !values.is_empty() {
+                collections.push((subject_uri.clone(), prop_name.clone(), values));
+                // Mark all blank nodes as used
+                for bn in collection_blank_nodes {
+                    used_blank_nodes.insert(bn);
+                }
+            }
+        }
+
+        // Third pass: filter out collection-related triples
+        let remaining_triples: Vec<Triple> = triples
+            .iter()
+            .filter(|triple| {
+                // Remove triples that are part of detected collections
+                if let Subject::BlankNode(bn) = &triple.subject {
+                    let bn_id = format!("_:{}", bn.label());
+                    if used_blank_nodes.contains(&bn_id) {
+                        // This is a collection node, remove all its triples
+                        return false;
+                    }
+                }
+
+                // Remove triples that point to collection heads
+                if let Object::BlankNode(bn) = &triple.object {
+                    let bn_id = format!("_:{}", bn.label());
+                    if used_blank_nodes.contains(&bn_id) {
+                        // Check if this is a collection head reference
+                        if let Some((coll_subj, _)) = collection_heads.get(&bn_id) {
+                            let subject_uri = self.subject_uri(&triple.subject);
+                            if coll_subj == &subject_uri {
+                                // This is the triple that points to the collection head
+                                return false;
+                            }
+                        }
+                    }
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok((collections, remaining_triples))
+    }
+
     /// Generate a batch of statements for multiple triples
     ///
     /// This method optimizes by grouping triples by subject and generating
@@ -253,10 +432,14 @@ impl CypherGenerator {
     pub fn generate_batch(&self, triples: &[Triple]) -> Result<Vec<String>, MapperError> {
         use std::collections::HashMap;
 
+        // First pass: detect and process RDF collections
+        let (collection_arrays, remaining_triples) =
+            self.detect_and_extract_collections(triples)?;
+
         // Group triples by subject URI
         let mut subjects: HashMap<String, SubjectData> = HashMap::new();
 
-        for triple in triples {
+        for triple in remaining_triples.iter() {
             let subject_uri = self.subject_uri(&triple.subject);
             let is_blank = matches!(triple.subject, Subject::BlankNode(_));
 
@@ -267,6 +450,7 @@ impl CypherGenerator {
                     is_blank,
                     labels: Vec::new(),
                     properties: Vec::new(),
+                    array_properties: Vec::new(),
                     relationships: Vec::new(),
                 });
 
@@ -334,6 +518,22 @@ impl CypherGenerator {
             }
         }
 
+        // Add detected array properties to subjects
+        for (subject_uri, prop_name, values) in collection_arrays {
+            let is_blank = subject_uri.starts_with("_:");
+            let data = subjects
+                .entry(subject_uri.clone())
+                .or_insert_with(|| SubjectData {
+                    uri: subject_uri.clone(),
+                    is_blank,
+                    labels: Vec::new(),
+                    properties: Vec::new(),
+                    array_properties: Vec::new(),
+                    relationships: Vec::new(),
+                });
+            data.array_properties.push((prop_name, values));
+        }
+
         // Generate one query per subject
         let mut statements = Vec::new();
 
@@ -375,6 +575,12 @@ impl CypherGenerator {
         // Add literal properties
         for (prop_name, value_repr) in &data.properties {
             set_parts.push(format!("s.{prop_name} = {value_repr}"));
+        }
+
+        // Add array properties
+        for (prop_name, values) in &data.array_properties {
+            let array_repr = format!("[{}]", values.join(", "));
+            set_parts.push(format!("s.{} = {}", prop_name, array_repr));
         }
 
         // Build the main MERGE + SET statement
@@ -429,6 +635,7 @@ struct SubjectData {
     is_blank: bool,
     labels: Vec<String>,
     properties: Vec<(String, String)>, // (property_name, value_repr)
+    array_properties: Vec<(String, Vec<String>)>, // (property_name, [values])
     relationships: Vec<RelationshipData>,
 }
 
@@ -834,6 +1041,292 @@ mod tests {
         let resources: Vec<_> = builder.resources().collect();
         assert_eq!(resources.len(), 1);
         assert!(resources[0].labels.contains(&"Person".to_string()));
+    }
+
+    #[test]
+    fn test_simple_collection_with_literals() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+
+        // Build a simple collection: alice favoriteCourses ("Databases" "AI" "DistributedSystems")
+        // This generates:
+        // alice favoriteCourses _:b1
+        // _:b1 rdf:first "Databases"
+        // _:b1 rdf:rest _:b2
+        // _:b2 rdf:first "AI"
+        // _:b2 rdf:rest _:b3
+        // _:b3 rdf:first "DistributedSystems"
+        // _:b3 rdf:rest rdf:nil
+
+        let bn1 = BlankNode::new("b1");
+        let bn2 = BlankNode::new("b2");
+        let bn3 = BlankNode::new("b3");
+
+        let triples = vec![
+            Triple::new(
+                test_iri("http://example.org/alice"),
+                test_iri("http://example.org/favoriteCourses"),
+                bn1.clone(),
+            ),
+            Triple::new(
+                bn1.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"),
+                Literal::new("Databases"),
+            ),
+            Triple::new(
+                bn1.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                bn2.clone(),
+            ),
+            Triple::new(
+                bn2.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"),
+                Literal::new("AI"),
+            ),
+            Triple::new(
+                bn2.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                bn3.clone(),
+            ),
+            Triple::new(
+                bn3.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"),
+                Literal::new("DistributedSystems"),
+            ),
+            Triple::new(
+                bn3.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
+            ),
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+
+        // Should generate one statement for alice with an array property
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+
+        // Check that it contains alice
+        assert!(stmt.contains("alice"), "Statement should contain alice");
+
+        // Check that it contains the favoriteCourses property
+        assert!(
+            stmt.contains("favoriteCourses"),
+            "Statement should contain favoriteCourses"
+        );
+
+        // Check that it contains the expected course values in order,
+        // without relying on an exact array string representation
+        assert!(
+            stmt.contains("Databases"),
+            "Statement should contain value 'Databases': {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("AI"),
+            "Statement should contain value 'AI': {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("DistributedSystems"),
+            "Statement should contain value 'DistributedSystems': {}",
+            stmt
+        );
+
+        let pos_db = stmt
+            .find("Databases")
+            .expect("Statement should contain value 'Databases'");
+        let pos_ai = stmt
+            .find("AI")
+            .expect("Statement should contain value 'AI'");
+        let pos_ds = stmt
+            .find("DistributedSystems")
+            .expect("Statement should contain value 'DistributedSystems'");
+        assert!(
+            pos_db < pos_ai && pos_ai < pos_ds,
+            "Course values should appear in order: Databases, AI, DistributedSystems. Statement: {}",
+            stmt
+        );
+
+        // Should NOT contain blank node relationships
+        assert!(!stmt.contains("BlankNode"), "Should not create blank nodes");
+        assert!(!stmt.contains("rdf:first"), "Should not have rdf:first");
+        assert!(!stmt.contains("rdf:rest"), "Should not have rdf:rest");
+    }
+
+    #[test]
+    fn test_simple_collection_with_iris() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+
+        // Build a collection with IRIs: alice knows (bob charlie david)
+        let bn1 = BlankNode::new("b1");
+        let bn2 = BlankNode::new("b2");
+        let bn3 = BlankNode::new("b3");
+
+        let triples = vec![
+            Triple::new(
+                test_iri("http://example.org/alice"),
+                test_iri("http://example.org/knows"),
+                bn1.clone(),
+            ),
+            Triple::new(
+                bn1.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"),
+                test_iri("http://example.org/bob"),
+            ),
+            Triple::new(
+                bn1.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                bn2.clone(),
+            ),
+            Triple::new(
+                bn2.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"),
+                test_iri("http://example.org/charlie"),
+            ),
+            Triple::new(
+                bn2.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                bn3.clone(),
+            ),
+            Triple::new(
+                bn3.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"),
+                test_iri("http://example.org/david"),
+            ),
+            Triple::new(
+                bn3.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
+            ),
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+
+        // Should generate one statement for alice with an array property
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+
+        // Check that knows is a property
+        assert!(
+            stmt.contains("knows"),
+            "Statement should contain knows property"
+        );
+
+        // Check that all expected IRIs appear, in order, within an array-like context
+        assert!(
+            stmt.contains("http://example.org/bob"),
+            "Statement should contain bob IRI: {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("http://example.org/charlie"),
+            "Statement should contain charlie IRI: {}",
+            stmt
+        );
+        assert!(
+            stmt.contains("http://example.org/david"),
+            "Statement should contain david IRI: {}",
+            stmt
+        );
+
+        // Ensure the IRIs appear in the correct order
+        let bob_pos = stmt
+            .find("http://example.org/bob")
+            .expect("bob IRI not found");
+        let charlie_pos = stmt
+            .find("http://example.org/charlie")
+            .expect("charlie IRI not found");
+        let david_pos = stmt
+            .find("http://example.org/david")
+            .expect("david IRI not found");
+        assert!(
+            bob_pos < charlie_pos && charlie_pos < david_pos,
+            "IRIs should appear in order [bob, charlie, david]: {}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_empty_collection() {
+        let gen = CypherGenerator::new();
+
+        // Empty collection: alice favoriteCourses ()
+        // This generates: alice favoriteCourses rdf:nil
+        let triples = vec![Triple::new(
+            test_iri("http://example.org/alice"),
+            test_iri("http://example.org/favoriteCourses"),
+            test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
+        )];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+
+        // Empty collections are handled as regular relationships (not arrays)
+        // since they point directly to rdf:nil without any blank nodes
+        // This creates alice node and rdf:nil node with a relationship
+        assert!(
+            statements.len() >= 1,
+            "Should generate at least one statement"
+        );
+
+        // Check that alice is created
+        let combined = statements.join("\n");
+        assert!(
+            combined.contains("alice") || combined.contains("example.org/alice"),
+            "Should contain alice: {}",
+            combined
+        );
+    }
+
+    #[test]
+    fn test_nested_collection_not_converted() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+
+        // Nested collection (not simple): alice data (_:nested)
+        // _:b1 rdf:first _:nested (this is a blank node, not a literal/IRI)
+        // _:b1 rdf:rest rdf:nil
+
+        let bn1 = BlankNode::new("b1");
+        let bn_nested = BlankNode::new("nested");
+
+        let triples = vec![
+            Triple::new(
+                test_iri("http://example.org/alice"),
+                test_iri("http://example.org/data"),
+                bn1.clone(),
+            ),
+            Triple::new(
+                bn1.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first"),
+                bn_nested.clone(),
+            ),
+            Triple::new(
+                bn1.clone(),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"),
+            ),
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+
+        // Should NOT convert to array since it contains a blank node
+        // Should create multiple statements for the collection structure
+        assert!(
+            statements.len() > 1,
+            "Nested collections should not be converted to arrays"
+        );
+
+        // The output should contain blank node references
+        let combined = statements.join("\n");
+        assert!(
+            combined.contains("BlankNode") || combined.contains("_:"),
+            "Should preserve blank node structure for nested collections"
+        );
     }
 
     #[test]
