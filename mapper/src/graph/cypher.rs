@@ -321,25 +321,29 @@ impl CypherGenerator {
         let mut parts = Vec::new();
 
         // Determine the primary node label
-        let (node_label, additional_labels) = if data.is_blank && !data.labels.is_empty() {
-            // For blank nodes with types, use the first type as the primary label
-            // and the rest as additional labels
-            let primary = &data.labels[0];
-            let additional = &data.labels[1..];
-            (primary.as_str(), additional)
-        } else if data.is_blank {
-            // Blank node with no type - use BlankNode
-            ("BlankNode", &data.labels[..])
-        } else {
+        // Handle resources first, then blank nodes with types, then blank nodes without types
+        let (node_label, additional_labels): (String, Vec<String>) = if !data.is_blank {
             // Resource node - use Resource as primary, all types as additional
-            ("Resource", &data.labels[..])
+            ("Resource".to_string(), data.labels.clone())
+        } else if !data.labels.is_empty() {
+            // Blank node with types - use the first type (alphabetically sorted) as primary
+            // and the rest as additional labels
+            // Sort labels to ensure deterministic ordering
+            let mut sorted_labels = data.labels.clone();
+            sorted_labels.sort();
+            let primary = sorted_labels[0].clone();
+            let additional = sorted_labels[1..].to_vec();
+            (primary, additional)
+        } else {
+            // Blank node with no type - use BlankNode
+            ("BlankNode".to_string(), vec![])
         };
 
         // Build the SET clause with labels and properties
         let mut set_parts = Vec::new();
 
         // Add additional type labels (for resources, this is all labels; for blank nodes, this is labels after the first)
-        for label in additional_labels {
+        for label in &additional_labels {
             set_parts.push(format!("s:{}", label));
         }
 
@@ -673,6 +677,60 @@ mod tests {
 
         // Should mark as blank
         assert!(stmt.contains("isBlank = true"), "Should mark as blank");
+    }
+
+    #[test]
+    fn test_blank_node_with_multiple_types_deterministic() {
+        use falkorsemantic_parser::rdf::BlankNode;
+
+        let gen = CypherGenerator::new();
+        let blank_node = BlankNode::new("b1");
+
+        // Create triples with multiple types in different orders
+        // The primary label should always be the alphabetically first one
+        let triples = vec![
+            // Type triple - ZebraType (should not be primary)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/ZebraType")),
+            },
+            // Type triple - AppleType (should be primary - alphabetically first)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/AppleType")),
+            },
+            // Type triple - MangoType (should be additional)
+            Triple {
+                subject: Subject::BlankNode(blank_node.clone()),
+                predicate: test_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                object: Object::Iri(test_iri("http://example.org/MangoType")),
+            },
+        ];
+
+        let statements = gen.generate_batch(&triples).unwrap();
+        assert_eq!(statements.len(), 1);
+
+        let stmt = &statements[0];
+        println!("Multiple types statement: {}", stmt);
+
+        // AppleType should be the primary label (alphabetically first)
+        assert!(
+            stmt.contains("MERGE (s:AppleType"),
+            "Should use AppleType as primary label (alphabetically first). Statement: {}",
+            stmt
+        );
+
+        // Other types should be added as additional labels
+        assert!(
+            stmt.contains("s:MangoType"),
+            "Should add MangoType as additional label"
+        );
+        assert!(
+            stmt.contains("s:ZebraType"),
+            "Should add ZebraType as additional label"
+        );
     }
 
     #[test]
