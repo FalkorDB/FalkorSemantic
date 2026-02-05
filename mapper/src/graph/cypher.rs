@@ -205,12 +205,23 @@ impl CypherGenerator {
     ) -> String {
         let prop_name = sanitize_identifier(predicate.local_name());
 
+        // Check if this is a date type
+        let is_date = if let Some(datatype) = literal.explicit_datatype() {
+            datatype.as_str() == "http://www.w3.org/2001/XMLSchema#date"
+                && literal.as_date().is_some()
+        } else {
+            false
+        };
+
         // For numeric and boolean types, use unquoted values; otherwise quote as string
         let is_numeric_or_bool = literal.as_integer().is_some()
             || literal.as_float().is_some()
             || literal.as_bool().is_some();
 
-        let value_repr = if is_numeric_or_bool {
+        let value_repr = if is_date {
+            // Use FalkorDB's date() function for xsd:date types
+            format!("date('{}')", escape_cypher_string(literal.value()))
+        } else if is_numeric_or_bool {
             literal.value().to_string()
         } else {
             format!("'{}'", escape_cypher_string(literal.value()))
@@ -258,10 +269,22 @@ impl CypherGenerator {
                     Object::Literal(lit) => {
                         // Literal -> add property
                         let prop_name = sanitize_identifier(triple.predicate.local_name());
+                        
+                        // Check if this is a date type
+                        let is_date = if let Some(datatype) = lit.explicit_datatype() {
+                            datatype.as_str() == "http://www.w3.org/2001/XMLSchema#date"
+                                && lit.as_date().is_some()
+                        } else {
+                            false
+                        };
+                        
                         let is_numeric_or_bool = lit.as_integer().is_some()
                             || lit.as_float().is_some()
                             || lit.as_bool().is_some();
-                        let value_repr = if is_numeric_or_bool {
+                        let value_repr = if is_date {
+                            // Use FalkorDB's date() function for xsd:date types
+                            format!("date('{}')", escape_cypher_string(lit.value()))
+                        } else if is_numeric_or_bool {
                             lit.value().to_string()
                         } else {
                             format!("'{}'", escape_cypher_string(lit.value()))
@@ -581,5 +604,43 @@ mod tests {
         let resources: Vec<_> = builder.resources().collect();
         assert_eq!(resources.len(), 1);
         assert!(resources[0].labels.contains(&"Person".to_string()));
+    }
+
+    #[test]
+    fn test_cypher_date_literal() {
+        use falkorsemantic_parser::rdf::xsd;
+        
+        let gen = CypherGenerator::new();
+        let triple = Triple::new(
+            test_iri("http://example.org/university"),
+            test_iri("http://example.org/established"),
+            Literal::with_datatype("1995-10-01", xsd::date()),
+        );
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+        // Should use date() function for xsd:date type
+        assert!(stmt.contains("SET s.established = date('1995-10-01')"), 
+            "Statement should contain date() function, got: {}", stmt);
+    }
+
+    #[test]
+    fn test_cypher_integer_literal() {
+        use falkorsemantic_parser::rdf::xsd;
+        
+        let gen = CypherGenerator::new();
+        let triple = Triple::new(
+            test_iri("http://example.org/university"),
+            test_iri("http://example.org/ranking"),
+            Literal::with_datatype("42", xsd::integer()),
+        );
+
+        let statements = gen.generate_triple(&triple).unwrap();
+        assert_eq!(statements.len(), 1);
+        let stmt = &statements[0];
+        // Integer should be unquoted
+        assert!(stmt.contains("SET s.ranking = 42"), 
+            "Statement should contain unquoted integer, got: {}", stmt);
     }
 }
