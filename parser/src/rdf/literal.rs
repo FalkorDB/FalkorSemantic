@@ -208,38 +208,38 @@ impl Literal {
     ///
     /// Returns `Some(self.value.as_str())` if it's a valid ISO 8601 date format,
     /// or `None` if the value is not a valid date.
-    /// 
+    ///
     /// This validates the basic ISO 8601 format with 4-digit years (0000-9999).
     /// Extended year representations are not supported.
     pub fn as_date(&self) -> Option<&str> {
         let s = self.value.as_str();
-        
+
         // Basic format check: YYYY-MM-DD (10 characters)
         if s.len() != 10 {
             return None;
         }
-        
+
         let bytes = s.as_bytes();
         // Check format: YYYY-MM-DD (year must be 4 digits)
         if bytes[4] != b'-' || bytes[7] != b'-' {
             return None;
         }
-        
+
         // Verify year portion is exactly 4 digits
         if !bytes[0..4].iter().all(|b| b.is_ascii_digit()) {
             return None;
         }
-        
+
         // Parse year, month, day
         let year = s[0..4].parse::<i32>().ok()?;
         let month = s[5..7].parse::<u32>().ok()?;
         let day = s[8..10].parse::<u32>().ok()?;
-        
+
         // Basic validation
         if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
             return None;
         }
-        
+
         // More precise day validation based on month
         let max_day = match month {
             2 => {
@@ -253,11 +253,11 @@ impl Literal {
             4 | 6 | 9 | 11 => 30,
             _ => 31,
         };
-        
+
         if day > max_day {
             return None;
         }
-        
+
         Some(s)
     }
 }

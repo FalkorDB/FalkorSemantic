@@ -271,14 +271,14 @@ impl CypherGenerator {
                     Object::Literal(lit) => {
                         // Literal -> add property
                         let prop_name = sanitize_identifier(triple.predicate.local_name());
-                        
+
                         // Check if this is a date type
                         let is_date = if let Some(datatype) = lit.explicit_datatype() {
                             datatype.as_str() == XSD_DATE && lit.as_date().is_some()
                         } else {
                             false
                         };
-                        
+
                         let is_numeric_or_bool = lit.as_integer().is_some()
                             || lit.as_float().is_some()
                             || lit.as_bool().is_some();
@@ -610,7 +610,7 @@ mod tests {
     #[test]
     fn test_cypher_date_literal() {
         use falkorsemantic_parser::rdf::xsd;
-        
+
         let gen = CypherGenerator::new();
         let triple = Triple::new(
             test_iri("http://example.org/university"),
@@ -622,14 +622,17 @@ mod tests {
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
         // Should use date() function for xsd:date type
-        assert!(stmt.contains("SET s.established = date('1995-10-01')"), 
-            "Statement should contain date() function, got: {}", stmt);
+        assert!(
+            stmt.contains("SET s.established = date('1995-10-01')"),
+            "Statement should contain date() function, got: {}",
+            stmt
+        );
     }
 
     #[test]
     fn test_cypher_integer_literal() {
         use falkorsemantic_parser::rdf::xsd;
-        
+
         let gen = CypherGenerator::new();
         let triple = Triple::new(
             test_iri("http://example.org/university"),
@@ -641,16 +644,19 @@ mod tests {
         assert_eq!(statements.len(), 1);
         let stmt = &statements[0];
         // Integer should be unquoted
-        assert!(stmt.contains("SET s.ranking = 42"), 
-            "Statement should contain unquoted integer, got: {}", stmt);
+        assert!(
+            stmt.contains("SET s.ranking = 42"),
+            "Statement should contain unquoted integer, got: {}",
+            stmt
+        );
     }
 
     #[test]
     fn test_cypher_batch_with_date() {
         use falkorsemantic_parser::rdf::xsd;
-        
+
         let gen = CypherGenerator::new();
-        
+
         // Example from the issue: university with establishment date
         let triples = vec![
             // ex:university a foaf:Organization
@@ -680,26 +686,45 @@ mod tests {
         ];
 
         let statements = gen.generate_batch(&triples).unwrap();
-        assert_eq!(statements.len(), 1, "Should generate one statement for the subject");
-        
+        assert_eq!(
+            statements.len(),
+            1,
+            "Should generate one statement for the subject"
+        );
+
         let stmt = &statements[0];
-        
+
         // Verify it contains the Organization label
-        assert!(stmt.contains(":Organization"), "Should have Organization label");
-        
+        assert!(
+            stmt.contains(":Organization"),
+            "Should have Organization label"
+        );
+
         // Verify date is stored with date() function
-        assert!(stmt.contains("date('1995-10-01')"), 
-            "Date should use date() function, got: {}", stmt);
-        
+        assert!(
+            stmt.contains("date('1995-10-01')"),
+            "Date should use date() function, got: {}",
+            stmt
+        );
+
         // Verify integer is unquoted - check for both parts separately
-        assert!(stmt.contains(".ranking") && stmt.contains("42"), 
-            "Integer property should be present, got: {}", stmt);
+        assert!(
+            stmt.contains(".ranking") && stmt.contains("42"),
+            "Integer property should be present, got: {}",
+            stmt
+        );
         // Ensure 42 is not quoted
-        assert!(!stmt.contains("'42'"), 
-            "Integer should not be quoted, got: {}", stmt);
-        
+        assert!(
+            !stmt.contains("'42'"),
+            "Integer should not be quoted, got: {}",
+            stmt
+        );
+
         // Verify string is quoted
-        assert!(stmt.contains("'Tech University'"), 
-            "String should be quoted, got: {}", stmt);
+        assert!(
+            stmt.contains("'Tech University'"),
+            "String should be quoted, got: {}",
+            stmt
+        );
     }
 }
