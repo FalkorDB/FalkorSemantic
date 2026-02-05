@@ -172,6 +172,12 @@ pub enum GraphElement {
 pub mod rdf_predicates {
     /// rdf:type predicate
     pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    /// rdf:first predicate (used in RDF collections)
+    pub const RDF_FIRST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
+    /// rdf:rest predicate (used in RDF collections)
+    pub const RDF_REST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
+    /// rdf:nil IRI (used to terminate RDF collections)
+    pub const RDF_NIL: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
 }
 
 /// Escape a string for safe use in Cypher queries.

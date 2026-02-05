@@ -181,4 +181,151 @@ mod tests {
         // Should include cleanup queries
         assert!(statements.len() >= 2);
     }
+
+    #[test]
+    fn test_rdf_collection_end_to_end() {
+        use falkorsemantic_parser::formats::turtle::TurtleParser;
+
+        let mapper = Mapper::new();
+
+        // Parse Turtle with RDF collection
+        let turtle_input = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+            
+            ex:alice a foaf:Person ;
+                     foaf:name "Alice" ;
+                     ex:favoriteCourses (
+                         "Databases"
+                         "AI"
+                         "DistributedSystems"
+                     ) .
+        "#;
+
+        let mut parser = TurtleParser::new();
+        let triples = parser.parse(turtle_input).expect("Failed to parse Turtle");
+
+        // Map to Cypher
+        let statements = mapper.map_triples(&triples).expect("Failed to map triples");
+
+        // Verify: should generate statements with array property
+        assert!(!statements.is_empty(), "Should generate statements");
+
+        let combined = statements.join("\n");
+
+        // Check that alice is created
+        assert!(
+            combined.contains("alice") || combined.contains("example.org/alice"),
+            "Should contain alice"
+        );
+
+        // Check that Person type is assigned
+        assert!(combined.contains("Person"), "Should contain Person type");
+
+        // Check that name is assigned
+        assert!(
+            combined.contains("name") && combined.contains("Alice"),
+            "Should contain name property"
+        );
+
+        // Check that favoriteCourses is stored as array
+        assert!(
+            combined.contains("favoriteCourses"),
+            "Should contain favoriteCourses property"
+        );
+
+        // Check that all course values appear in order
+        assert!(
+            combined.contains("Databases"),
+            "Should contain 'Databases': {}",
+            combined
+        );
+        assert!(combined.contains("AI"), "Should contain 'AI': {}", combined);
+        assert!(
+            combined.contains("DistributedSystems"),
+            "Should contain 'DistributedSystems': {}",
+            combined
+        );
+
+        let pos_db = combined.find("Databases").expect("Databases not found");
+        let pos_ai = combined.find("AI").expect("AI not found");
+        let pos_ds = combined
+            .find("DistributedSystems")
+            .expect("DistributedSystems not found");
+        assert!(
+            pos_db < pos_ai && pos_ai < pos_ds,
+            "Course values should appear in order: Databases, AI, DistributedSystems"
+        );
+
+        // Ensure no rdf:first or rdf:rest triples are created
+        assert!(
+            !combined.contains("rdf:first") && !combined.contains("first"),
+            "Should not contain rdf:first"
+        );
+        assert!(
+            !combined.contains("rdf:rest") && !combined.contains("rest"),
+            "Should not contain rdf:rest"
+        );
+    }
+
+    #[test]
+    fn test_rdf_collection_with_iris() {
+        use falkorsemantic_parser::formats::turtle::TurtleParser;
+
+        let mapper = Mapper::new();
+
+        // Parse Turtle with RDF collection of IRIs
+        let turtle_input = r#"
+            @prefix ex: <http://example.org/> .
+            
+            ex:alice ex:knows (ex:bob ex:charlie ex:david) .
+        "#;
+
+        let mut parser = TurtleParser::new();
+        let triples = parser.parse(turtle_input).expect("Failed to parse Turtle");
+
+        // Map to Cypher
+        let statements = mapper.map_triples(&triples).expect("Failed to map triples");
+
+        // Verify: should generate statements with array property of IRIs
+        assert!(!statements.is_empty(), "Should generate statements");
+
+        let combined = statements.join("\n");
+
+        // Check that knows is stored as array
+        assert!(combined.contains("knows"), "Should contain knows property");
+
+        // Check that all expected IRIs are present in the correct order
+        assert!(
+            combined.contains("http://example.org/bob"),
+            "Should contain bob IRI: {}",
+            combined
+        );
+        assert!(
+            combined.contains("http://example.org/charlie"),
+            "Should contain charlie IRI: {}",
+            combined
+        );
+        assert!(
+            combined.contains("http://example.org/david"),
+            "Should contain david IRI: {}",
+            combined
+        );
+
+        // Ensure the IRIs appear in the correct order
+        let bob_pos = combined
+            .find("http://example.org/bob")
+            .expect("bob IRI not found");
+        let charlie_pos = combined
+            .find("http://example.org/charlie")
+            .expect("charlie IRI not found");
+        let david_pos = combined
+            .find("http://example.org/david")
+            .expect("david IRI not found");
+        assert!(
+            bob_pos < charlie_pos && charlie_pos < david_pos,
+            "IRIs should appear in order [bob, charlie, david]: {}",
+            combined
+        );
+    }
 }
