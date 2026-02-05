@@ -181,4 +181,89 @@ mod tests {
         // Should include cleanup queries
         assert!(statements.len() >= 2);
     }
+
+    #[test]
+    fn test_rdf_collection_end_to_end() {
+        use falkorsemantic_parser::formats::turtle::TurtleParser;
+        
+        let mapper = Mapper::new();
+        
+        // Parse Turtle with RDF collection
+        let turtle_input = r#"
+            @prefix ex: <http://example.org/> .
+            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+            
+            ex:alice a foaf:Person ;
+                     foaf:name "Alice" ;
+                     ex:favoriteCourses (
+                         "Databases"
+                         "AI"
+                         "DistributedSystems"
+                     ) .
+        "#;
+        
+        let mut parser = TurtleParser::new();
+        let triples = parser.parse(turtle_input).expect("Failed to parse Turtle");
+        
+        // Map to Cypher
+        let statements = mapper.map_triples(&triples).expect("Failed to map triples");
+        
+        // Verify: should generate statements with array property
+        assert!(!statements.is_empty(), "Should generate statements");
+        
+        let combined = statements.join("\n");
+        
+        // Check that alice is created
+        assert!(combined.contains("alice") || combined.contains("example.org/alice"), 
+                "Should contain alice");
+        
+        // Check that Person type is assigned
+        assert!(combined.contains("Person"), "Should contain Person type");
+        
+        // Check that name is assigned
+        assert!(combined.contains("name") && combined.contains("Alice"), 
+                "Should contain name property");
+        
+        // Check that favoriteCourses is stored as array
+        assert!(combined.contains("favoriteCourses"), 
+                "Should contain favoriteCourses property");
+        assert!(combined.contains("['Databases', 'AI', 'DistributedSystems']"), 
+                "Should contain array values: {}", combined);
+        
+        // Ensure no rdf:first or rdf:rest triples are created
+        assert!(!combined.contains("rdf:first") && !combined.contains("first"), 
+                "Should not contain rdf:first");
+        assert!(!combined.contains("rdf:rest") && !combined.contains("rest"), 
+                "Should not contain rdf:rest");
+    }
+
+    #[test]
+    fn test_rdf_collection_with_iris() {
+        use falkorsemantic_parser::formats::turtle::TurtleParser;
+        
+        let mapper = Mapper::new();
+        
+        // Parse Turtle with RDF collection of IRIs
+        let turtle_input = r#"
+            @prefix ex: <http://example.org/> .
+            
+            ex:alice ex:knows (ex:bob ex:charlie ex:david) .
+        "#;
+        
+        let mut parser = TurtleParser::new();
+        let triples = parser.parse(turtle_input).expect("Failed to parse Turtle");
+        
+        // Map to Cypher
+        let statements = mapper.map_triples(&triples).expect("Failed to map triples");
+        
+        // Verify: should generate statements with array property of IRIs
+        assert!(!statements.is_empty(), "Should generate statements");
+        
+        let combined = statements.join("\n");
+        
+        // Check that knows is stored as array
+        assert!(combined.contains("knows"), "Should contain knows property");
+        assert!(combined.contains("['http://example.org/bob', 'http://example.org/charlie', 'http://example.org/david']"), 
+                "Should contain IRI array: {}", combined);
+    }
 }
