@@ -1,4 +1,4 @@
-//! FalkorSemantic Parser
+//! `FalkorSemantic` Parser
 //!
 //! This crate provides parsing functionality for semantic data,
 //! including core RDF data types (IRIs, literals, triples, etc.)
@@ -34,12 +34,13 @@ pub struct Parser;
 
 impl Parser {
     /// Create a new parser instance
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 
     /// Parse input data
-    pub fn parse(&self, _input: &str) -> Result<()> {
+    pub const fn parse(&self, _input: &str) -> Result<()> {
         // TODO: Implement parsing logic
         Ok(())
     }

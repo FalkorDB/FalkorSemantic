@@ -4,7 +4,7 @@
 //! - N-Triples: Simple line-based format for triples
 //! - N-Quads: N-Triples extended with named graphs
 //! - Turtle: Human-readable format with prefix support
-//! - TriG: Turtle extended with named graphs
+//! - `TriG`: Turtle extended with named graphs
 //! - JSON-LD: JSON-based linked data format
 
 mod error;

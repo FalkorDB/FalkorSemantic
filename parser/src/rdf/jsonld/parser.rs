@@ -29,6 +29,7 @@ pub struct JsonLdParser {
 
 impl JsonLdParser {
     /// Create a new JSON-LD parser
+    #[must_use]
     pub fn new() -> Self {
         Self {
             context_resolver: ContextResolver::new(),
@@ -191,7 +192,7 @@ impl JsonLdParser {
 
         // Apply vocab if present
         if let Some(ref vocab) = context.vocab {
-            return Ok(format!("{}{}", vocab, term));
+            return Ok(format!("{vocab}{term}"));
         }
 
         Ok(term.to_string())
@@ -212,16 +213,14 @@ impl JsonLdParser {
         // Relative IRI - resolve against base
         if let Some(ref base) = context.base {
             if iri.starts_with('#') {
-                return Ok(format!("{}{}", base, iri));
+                return Ok(format!("{base}{iri}"));
             }
             if iri.starts_with('/') {
                 // Absolute path - find authority
-                if let Some(authority_end) = base.find("://").map(|i| {
-                    base[i + 3..]
-                        .find('/')
-                        .map(|j| i + 3 + j)
-                        .unwrap_or(base.len())
-                }) {
+                if let Some(authority_end) = base
+                    .find("://")
+                    .map(|i| base[i + 3..].find('/').map_or(base.len(), |j| i + 3 + j))
+                {
                     return Ok(format!("{}{}", &base[..authority_end], iri));
                 }
             }
@@ -332,14 +331,14 @@ impl JsonLdParser {
 
         // Add context to result
         if let Value::Object(obj) = compacted {
-            if !context.is_null() {
+            if context.is_null() {
+                Ok(Value::Object(obj))
+            } else {
                 // Insert @context at the beginning by creating a new map
                 let mut result = serde_json::Map::new();
                 result.insert("@context".to_string(), context.clone());
                 result.extend(obj);
                 Ok(Value::Object(result))
-            } else {
-                Ok(Value::Object(obj))
             }
         } else if let Value::Array(arr) = compacted {
             if arr.len() == 1 {
@@ -458,7 +457,7 @@ impl JsonLdParser {
                 let suffix = &iri[prefix_iri.len()..];
                 // Only use prefix if suffix doesn't contain special chars
                 if !suffix.contains('/') && !suffix.contains('#') {
-                    return format!("{}:{}", term, suffix);
+                    return format!("{term}:{suffix}");
                 }
             }
         }
@@ -505,10 +504,10 @@ impl JsonLdParser {
         let matched = self.match_frame(&expanded_doc, frame_obj)?;
 
         // Compact the result using the frame's context
-        if !frame_context.is_null() {
-            self.compact(&matched, &frame_context)
-        } else {
+        if frame_context.is_null() {
             Ok(matched)
+        } else {
+            self.compact(&matched, &frame_context)
         }
     }
 

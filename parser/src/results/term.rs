@@ -21,84 +21,92 @@ pub enum Term {
 impl Term {
     /// Create a new IRI term
     pub fn iri(value: impl Into<String>) -> Self {
-        Term::Iri(Iri::new_unchecked(value))
+        Self::Iri(Iri::new_unchecked(value))
     }
 
     /// Create a new simple literal term
     pub fn literal(value: impl Into<String>) -> Self {
-        Term::Literal(Literal::new(value))
+        Self::Literal(Literal::new(value))
     }
 
     /// Create a new typed literal term
     pub fn typed_literal(value: impl Into<String>, datatype: impl Into<String>) -> Self {
-        Term::Literal(Literal::with_datatype(value, Iri::new_unchecked(datatype)))
+        Self::Literal(Literal::with_datatype(value, Iri::new_unchecked(datatype)))
     }
 
     /// Create a new language-tagged literal term
     pub fn lang_literal(value: impl Into<String>, lang: impl Into<String>) -> Self {
         // Use with_language which returns Result, unwrap since we trust the input
-        Term::Literal(Literal::with_language(value, lang).unwrap_or_else(|_| Literal::new("")))
+        Self::Literal(Literal::with_language(value, lang).unwrap_or_else(|_| Literal::new("")))
     }
 
     /// Create a new blank node term
     pub fn blank_node(id: impl Into<String>) -> Self {
-        Term::BlankNode(BlankNode::new(id))
+        Self::BlankNode(BlankNode::new(id))
     }
 
     /// Check if this is an IRI
-    pub fn is_iri(&self) -> bool {
-        matches!(self, Term::Iri(_))
+    #[must_use]
+    pub const fn is_iri(&self) -> bool {
+        matches!(self, Self::Iri(_))
     }
 
     /// Check if this is a literal
-    pub fn is_literal(&self) -> bool {
-        matches!(self, Term::Literal(_))
+    #[must_use]
+    pub const fn is_literal(&self) -> bool {
+        matches!(self, Self::Literal(_))
     }
 
     /// Check if this is a blank node
-    pub fn is_blank_node(&self) -> bool {
-        matches!(self, Term::BlankNode(_))
+    #[must_use]
+    pub const fn is_blank_node(&self) -> bool {
+        matches!(self, Self::BlankNode(_))
     }
 
     /// Get as IRI if this is an IRI term
-    pub fn as_iri(&self) -> Option<&Iri> {
+    #[must_use]
+    pub const fn as_iri(&self) -> Option<&Iri> {
         match self {
-            Term::Iri(iri) => Some(iri),
+            Self::Iri(iri) => Some(iri),
             _ => None,
         }
     }
 
     /// Get as literal if this is a literal term
-    pub fn as_literal(&self) -> Option<&Literal> {
+    #[must_use]
+    pub const fn as_literal(&self) -> Option<&Literal> {
         match self {
-            Term::Literal(lit) => Some(lit),
+            Self::Literal(lit) => Some(lit),
             _ => None,
         }
     }
 
     /// Get as blank node if this is a blank node term
-    pub fn as_blank_node(&self) -> Option<&BlankNode> {
+    #[must_use]
+    pub const fn as_blank_node(&self) -> Option<&BlankNode> {
         match self {
-            Term::BlankNode(bn) => Some(bn),
+            Self::BlankNode(bn) => Some(bn),
             _ => None,
         }
     }
 
     /// Get the term type as a string (for JSON serialization)
-    pub fn term_type(&self) -> &'static str {
+    #[must_use]
+    pub const fn term_type(&self) -> &'static str {
         match self {
-            Term::Iri(_) => "uri",
-            Term::Literal(_) => "literal",
-            Term::BlankNode(_) => "bnode",
+            Self::Iri(_) => "uri",
+            Self::Literal(_) => "literal",
+            Self::BlankNode(_) => "bnode",
         }
     }
 
     /// Get the value as a string
+    #[must_use]
     pub fn value(&self) -> &str {
         match self {
-            Term::Iri(iri) => iri.as_str(),
-            Term::Literal(lit) => lit.value(),
-            Term::BlankNode(bn) => bn.label(),
+            Self::Iri(iri) => iri.as_str(),
+            Self::Literal(lit) => lit.value(),
+            Self::BlankNode(bn) => bn.label(),
         }
     }
 }
@@ -106,28 +114,28 @@ impl Term {
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Term::Iri(iri) => write!(f, "<{}>", iri),
-            Term::Literal(lit) => write!(f, "{}", lit),
-            Term::BlankNode(bn) => write!(f, "_:{}", bn.label()),
+            Self::Iri(iri) => write!(f, "<{iri}>"),
+            Self::Literal(lit) => write!(f, "{lit}"),
+            Self::BlankNode(bn) => write!(f, "_:{}", bn.label()),
         }
     }
 }
 
 impl From<Iri> for Term {
     fn from(iri: Iri) -> Self {
-        Term::Iri(iri)
+        Self::Iri(iri)
     }
 }
 
 impl From<Literal> for Term {
     fn from(lit: Literal) -> Self {
-        Term::Literal(lit)
+        Self::Literal(lit)
     }
 }
 
 impl From<BlankNode> for Term {
     fn from(bn: BlankNode) -> Self {
-        Term::BlankNode(bn)
+        Self::BlankNode(bn)
     }
 }
 

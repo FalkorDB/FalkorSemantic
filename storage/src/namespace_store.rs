@@ -17,7 +17,8 @@ pub struct NamespaceMapping {
 }
 
 impl NamespaceMapping {
-    /// Create from a NamespaceRegistry
+    /// Create from a `NamespaceRegistry`
+    #[must_use]
     pub fn from_registry(registry: &NamespaceRegistry) -> Self {
         let prefixes = registry
             .prefixes()
@@ -26,7 +27,8 @@ impl NamespaceMapping {
         Self { prefixes }
     }
 
-    /// Convert to a NamespaceRegistry
+    /// Convert to a `NamespaceRegistry`
+    #[must_use]
     pub fn to_registry(&self) -> NamespaceRegistry {
         let mut registry = NamespaceRegistry::new();
         for (prefix, namespace) in &self.prefixes {
@@ -55,6 +57,7 @@ pub struct NamespaceStore {
 
 impl NamespaceStore {
     /// Create a new namespace store
+    #[must_use]
     pub fn new() -> Self {
         Self {
             graphs: HashMap::new(),
@@ -68,8 +71,11 @@ impl NamespaceStore {
     }
 
     /// Get namespaces for a graph
+    #[must_use]
     pub fn get(&self, graph_name: &str) -> Option<NamespaceRegistry> {
-        self.graphs.get(graph_name).map(|m| m.to_registry())
+        self.graphs
+            .get(graph_name)
+            .map(NamespaceMapping::to_registry)
     }
 
     /// Remove namespaces for a graph
@@ -78,13 +84,14 @@ impl NamespaceStore {
     }
 
     /// Check if a graph has stored namespaces
+    #[must_use]
     pub fn contains(&self, graph_name: &str) -> bool {
         self.graphs.contains_key(graph_name)
     }
 
     /// Get all graph names
     pub fn graph_names(&self) -> impl Iterator<Item = &str> {
-        self.graphs.keys().map(|s| s.as_str())
+        self.graphs.keys().map(std::string::String::as_str)
     }
 
     /// Clear all stored namespaces

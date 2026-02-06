@@ -1,6 +1,6 @@
 //! Cypher Query Generator
 //!
-//! Generates Cypher statements for inserting RDF data into FalkorDB.
+//! Generates Cypher statements for inserting RDF data into `FalkorDB`.
 
 use falkorsemantic_parser::rdf::{Literal, Object, Quad, Subject, Triple};
 
@@ -29,12 +29,14 @@ pub struct CypherGenerator {
 
 impl CypherGenerator {
     /// Create a new Cypher generator
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self { use_merge: true }
     }
 
     /// Create a generator that uses CREATE instead of MERGE
-    pub fn with_create() -> Self {
+    #[must_use]
+    pub const fn with_create() -> Self {
         Self { use_merge: false }
     }
 
@@ -43,7 +45,7 @@ impl CypherGenerator {
         self.use_merge = use_merge;
     }
 
-    fn operation(&self) -> &str {
+    const fn operation(&self) -> &str {
         if self.use_merge {
             "MERGE"
         } else {
@@ -141,7 +143,7 @@ impl CypherGenerator {
             // Wrap statements in a graph context
             statements = statements
                 .into_iter()
-                .map(|s| format!("// Graph: {}\n{}", graph_uri, s))
+                .map(|s| format!("// Graph: {graph_uri}\n{s}"))
                 .collect();
         }
 
@@ -229,8 +231,7 @@ impl CypherGenerator {
         // Check if explicit xsd:date datatype was declared (even if invalid)
         let has_date_datatype = literal
             .explicit_datatype()
-            .map(|dt| dt.as_str() == XSD_DATE)
-            .unwrap_or(false);
+            .is_some_and(|dt| dt.as_str() == XSD_DATE);
 
         // For numeric and boolean types, use unquoted values; otherwise quote as string
         // Skip numeric check if xsd:date datatype was declared to maintain type contract
@@ -249,7 +250,7 @@ impl CypherGenerator {
         };
 
         // Store literal as a property on the subject node instead of creating a separate node
-        format!("SET {}.{} = {}", subject_var, prop_name, value_repr)
+        format!("SET {subject_var}.{prop_name} = {value_repr}")
     }
 
     /// Detect and extract RDF collections that contain only simple values.
@@ -478,8 +479,7 @@ impl CypherGenerator {
                         // Check if explicit xsd:date datatype was declared (even if invalid)
                         let has_date_datatype = lit
                             .explicit_datatype()
-                            .map(|dt| dt.as_str() == XSD_DATE)
-                            .unwrap_or(false);
+                            .is_some_and(|dt| dt.as_str() == XSD_DATE);
 
                         // Skip numeric check if xsd:date datatype was declared
                         let is_numeric_or_bool = !has_date_datatype
@@ -566,7 +566,7 @@ impl CypherGenerator {
         let mut sorted_labels = data.labels.clone();
         sorted_labels.sort();
         for label in &sorted_labels {
-            set_parts.push(format!("s:{}", label));
+            set_parts.push(format!("s:{label}"));
         }
 
         // Add isBlank property
@@ -574,7 +574,7 @@ impl CypherGenerator {
 
         // Add literal properties
         for (prop_name, value_repr) in &data.properties {
-            set_parts.push(format!("s.{} = {}", prop_name, value_repr));
+            set_parts.push(format!("s.{prop_name} = {value_repr}"));
         }
 
         // Add array properties
@@ -595,7 +595,7 @@ impl CypherGenerator {
 
         // Add relationships
         for (idx, rel) in data.relationships.iter().enumerate() {
-            let target_var = format!("o{}", idx);
+            let target_var = format!("o{idx}");
             let target_label = if rel.target_is_blank {
                 "BlankNode"
             } else {
@@ -661,6 +661,7 @@ pub struct GraphBuilder {
 
 impl GraphBuilder {
     /// Create a new graph builder
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -713,7 +714,7 @@ impl GraphBuilder {
                 let prop_value = PropertyValue::new(
                     lit.value().to_string(),
                     lit.datatype().as_str().to_string(),
-                    lit.language().map(|s| s.to_string()),
+                    lit.language().map(std::string::ToString::to_string),
                 );
                 if let Some(node) = self.resources.get_mut(&subject_uri) {
                     node.add_property(prop_key, prop_value);
@@ -722,7 +723,7 @@ impl GraphBuilder {
                 self.literals.push(LiteralNode::new(
                     lit.value().to_string(),
                     lit.datatype().as_str().to_string(),
-                    lit.language().map(|s| s.to_string()),
+                    lit.language().map(std::string::ToString::to_string),
                 ));
                 // Return early - no edge needed since it's stored as a property
                 return;

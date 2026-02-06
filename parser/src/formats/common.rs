@@ -90,6 +90,7 @@ pub struct ParserConfig {
 
 impl ParserConfig {
     /// Create a new parser configuration
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -129,7 +130,7 @@ pub trait QuadParser {
     fn parse_read<R: BufRead>(&self, reader: R) -> Result<Vec<Quad>, ParseErrorInfo>;
 }
 
-/// Converter for rio_api types to FalkorSemantic RDF types
+/// Converter for `rio_api` types to `FalkorSemantic` RDF types
 ///
 /// This consolidates all the conversion logic in one place,
 /// eliminating duplication across N-Triples, N-Quads, and other rio-based parsers.
@@ -139,7 +140,8 @@ pub struct RioConverter {
 
 impl RioConverter {
     /// Create a new converter
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             blank_node_prefix: None,
         }
@@ -153,6 +155,7 @@ impl RioConverter {
     }
 
     /// Get the blank node prefix
+    #[must_use]
     pub fn blank_node_prefix(&self) -> Option<&str> {
         self.blank_node_prefix.as_deref()
     }
@@ -195,7 +198,7 @@ impl RioConverter {
         }
     }
 
-    /// Convert a rio NamedNode to our Iri type
+    /// Convert a rio `NamedNode` to our Iri type
     pub fn convert_predicate(
         &self,
         predicate: rio_api::model::NamedNode<'_>,
@@ -217,7 +220,7 @@ impl RioConverter {
         }
     }
 
-    /// Convert a rio GraphName to our GraphName type
+    /// Convert a rio `GraphName` to our `GraphName` type
     pub fn convert_graph_name(
         &self,
         graph_name: Option<rio_api::model::GraphName<'_>>,
@@ -236,7 +239,7 @@ impl RioConverter {
     /// Convert a blank node ID, applying prefix if configured
     fn convert_blank_node(&self, id: &str) -> BlankNode {
         let label = if let Some(ref prefix) = self.blank_node_prefix {
-            format!("{}_{}", prefix, id)
+            format!("{prefix}_{id}")
         } else {
             id.to_string()
         };
@@ -264,7 +267,8 @@ impl Default for RioConverter {
     }
 }
 
-/// Helper to create a TurtleError from a ParserError
+/// Helper to create a `TurtleError` from a `ParserError`
+#[must_use]
 pub fn parser_error_to_turtle_error(e: ParserError) -> rio_turtle::TurtleError {
     rio_turtle::TurtleError::from(std::io::Error::new(
         std::io::ErrorKind::InvalidData,

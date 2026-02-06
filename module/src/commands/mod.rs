@@ -1,4 +1,4 @@
-//! Command handlers for the FalkorSemantic Redis module
+//! Command handlers for the `FalkorSemantic` Redis module
 
 mod rdf_bulk_insert;
 mod rdf_delete;

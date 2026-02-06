@@ -1,7 +1,7 @@
 //! N-Triples Serializer
 //!
 //! Implements the N-Triples format as per:
-//! https://www.w3.org/TR/n-triples/
+//! <https://www.w3.org/TR/n-triples>/
 //!
 //! N-Triples is a line-based, plain text format for encoding RDF graphs.
 
@@ -15,7 +15,8 @@ pub struct NTriplesWriter;
 
 impl NTriplesWriter {
     /// Create a new N-Triples writer
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 
@@ -42,7 +43,7 @@ impl NTriplesWriter {
                 '\\' => write!(writer, "\\u005C")?,
                 ' ' => write!(writer, "\\u0020")?,
                 c if c.is_control() => write!(writer, "\\u{:04X}", c as u32)?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -61,7 +62,7 @@ impl NTriplesWriter {
         write!(writer, "\"")?;
 
         if let Some(lang) = lit.language() {
-            write!(writer, "@{}", lang)?;
+            write!(writer, "@{lang}")?;
         } else {
             let dt = lit.datatype();
             let dt_str = dt.as_str();
@@ -91,7 +92,7 @@ impl NTriplesWriter {
                         write!(writer, "\\U{:08X}", c as u32)?;
                     }
                 }
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -165,7 +166,7 @@ impl<W: Write> NTriplesStreamWriter<W> {
     }
 
     /// Get the number of triples written
-    pub fn count(&self) -> usize {
+    pub const fn count(&self) -> usize {
         self.count
     }
 

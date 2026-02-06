@@ -1,7 +1,7 @@
 //! N-Triples Parser
 //!
 //! Streaming parser for the N-Triples RDF format.
-//! Uses the rio_turtle crate for parsing.
+//! Uses the `rio_turtle` crate for parsing.
 
 use std::io::BufRead;
 
@@ -26,7 +26,8 @@ pub struct NTriplesReader {
 
 impl NTriplesReader {
     /// Create a new N-Triples reader
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             blank_node_prefix: None,
         }
@@ -85,6 +86,7 @@ impl NTriplesReader {
     }
 
     /// Parse N-Triples from a string
+    #[must_use]
     pub fn parse_str<'a>(&self, input: &'a str) -> TripleCollector<&'a [u8]> {
         TripleCollector::new(input.as_bytes(), self.blank_node_prefix.clone())
     }

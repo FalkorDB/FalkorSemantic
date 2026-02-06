@@ -27,6 +27,7 @@ pub struct SparqlParser {
 
 impl SparqlParser {
     /// Create a new SPARQL parser
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -38,13 +39,15 @@ impl SparqlParser {
     }
 
     /// Enable query validation after parsing
-    pub fn with_validation(mut self, validate: bool) -> Self {
+    #[must_use]
+    pub const fn with_validation(mut self, validate: bool) -> Self {
         self.validate = validate;
         self
     }
 
     /// Set a custom validator
-    pub fn with_validator(mut self, validator: QueryValidator) -> Self {
+    #[must_use]
+    pub const fn with_validator(mut self, validator: QueryValidator) -> Self {
         self.validator = Some(validator);
         self.validate = true;
         self
@@ -66,10 +69,10 @@ impl SparqlParser {
         // Parse with spargebra using the new API
         let spargebra_query = if let Some(base_str) = base {
             let base_iri = Iri::parse(base_str)
-                .map_err(|e| SparqlError::parse(format!("Invalid base IRI: {}", e)))?;
+                .map_err(|e| SparqlError::parse(format!("Invalid base IRI: {e}")))?;
             spargebra::SparqlParser::new()
                 .with_base_iri(base_iri.as_str())
-                .map_err(|e| SparqlError::parse(format!("Invalid base IRI: {}", e)))?
+                .map_err(|e| SparqlError::parse(format!("Invalid base IRI: {e}")))?
                 .parse_query(query)
                 .map_err(SparqlError::from)?
         } else {
@@ -83,7 +86,7 @@ impl SparqlParser {
 
         // Validate if enabled
         if self.validate {
-            let validator = self.validator.as_ref().cloned().unwrap_or_default();
+            let validator = self.validator.clone().unwrap_or_default();
             validator.validate(&query)?;
         }
 
@@ -98,11 +101,13 @@ impl SparqlParser {
     }
 
     /// Check if a query string is syntactically valid
+    #[must_use]
     pub fn is_valid(&self, query: &str) -> bool {
         self.parse(query).is_ok()
     }
 
     /// Get the query type without full parsing
+    #[must_use]
     pub fn query_type(query: &str) -> Option<QueryType> {
         let trimmed = query.trim_start();
 

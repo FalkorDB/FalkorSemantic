@@ -21,8 +21,7 @@ pub fn scan_keys(ctx: &Context, pattern: &str) -> Vec<String> {
             Ok(RedisValue::Array(arr)) if arr.len() >= 2 => {
                 // First element is the next cursor
                 cursor = match &arr[0] {
-                    RedisValue::SimpleString(s) => s.clone(),
-                    RedisValue::BulkString(s) => s.clone(),
+                    RedisValue::SimpleString(s) | RedisValue::BulkString(s) => s.clone(),
                     RedisValue::Integer(i) => i.to_string(),
                     _ => break,
                 };
@@ -31,8 +30,9 @@ pub fn scan_keys(ctx: &Context, pattern: &str) -> Vec<String> {
                 if let RedisValue::Array(key_arr) = &arr[1] {
                     for key in key_arr {
                         match key {
-                            RedisValue::SimpleString(k) => keys.push(k.clone()),
-                            RedisValue::BulkString(k) => keys.push(k.clone()),
+                            RedisValue::SimpleString(k) | RedisValue::BulkString(k) => {
+                                keys.push(k.clone());
+                            }
                             _ => {}
                         }
                     }

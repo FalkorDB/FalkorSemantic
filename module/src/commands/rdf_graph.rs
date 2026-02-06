@@ -1,6 +1,6 @@
 //! RDF.GRAPH Command Implementation
 //!
-//! Manages RDF graphs in FalkorDB.
+//! Manages RDF graphs in `FalkorDB`.
 //! Supports CREATE, DROP, LIST, and CLEAR subcommands.
 
 use redis_module::{Context, RedisError, RedisResult, RedisString, RedisValue};
@@ -20,10 +20,10 @@ enum Subcommand {
 impl Subcommand {
     fn from_str(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
-            "CREATE" => Some(Subcommand::Create),
-            "DROP" | "DELETE" => Some(Subcommand::Drop),
-            "LIST" => Some(Subcommand::List),
-            "CLEAR" | "EMPTY" => Some(Subcommand::Clear),
+            "CREATE" => Some(Self::Create),
+            "DROP" | "DELETE" => Some(Self::Drop),
+            "LIST" => Some(Self::List),
+            "CLEAR" | "EMPTY" => Some(Self::Clear),
             _ => None,
         }
     }
@@ -47,7 +47,7 @@ fn validate_graph_name(name: &str) -> Result<(), String> {
 
     for ch in name.chars() {
         if ch.is_control() || ch == ' ' {
-            return Err(format!("Graph name contains invalid character: {:?}", ch));
+            return Err(format!("Graph name contains invalid character: {ch:?}"));
         }
     }
 
@@ -57,7 +57,7 @@ fn validate_graph_name(name: &str) -> Result<(), String> {
 /// Create a new RDF graph
 fn create_graph(ctx: &Context, graph_name: &str) -> RedisResult {
     validate_graph_name(graph_name)
-        .map_err(|e| RedisError::String(format!("Invalid graph name: {}", e)))?;
+        .map_err(|e| RedisError::String(format!("Invalid graph name: {e}")))?;
 
     // Check if graph already exists
     let exists_result = ctx.call("SISMEMBER", &[RDF_GRAPHS_SET, graph_name])?;
@@ -68,8 +68,7 @@ fn create_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 
     if exists {
         return Err(RedisError::String(format!(
-            "Graph '{}' already exists",
-            graph_name
+            "Graph '{graph_name}' already exists"
         )));
     }
 
@@ -80,15 +79,14 @@ fn create_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 
     if let Err(e) = query_result {
         return Err(RedisError::String(format!(
-            "Failed to initialize graph in FalkorDB: {:?}",
-            e
+            "Failed to initialize graph in FalkorDB: {e:?}"
         )));
     }
 
     // Register the graph in our tracking set
     ctx.call("SADD", &[RDF_GRAPHS_SET, graph_name])?;
 
-    log::info!("Created RDF graph: {}", graph_name);
+    log::info!("Created RDF graph: {graph_name}");
 
     Ok(RedisValue::SimpleStringStatic("OK"))
 }
@@ -104,8 +102,7 @@ fn drop_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 
     if !exists {
         return Err(RedisError::String(format!(
-            "Graph '{}' does not exist",
-            graph_name
+            "Graph '{graph_name}' does not exist"
         )));
     }
 
@@ -113,7 +110,7 @@ fn drop_graph(ctx: &Context, graph_name: &str) -> RedisResult {
     let delete_result = ctx.call("GRAPH.DELETE", &[graph_name]);
 
     if let Err(e) = delete_result {
-        log::warn!("Failed to delete graph from FalkorDB: {:?}", e);
+        log::warn!("Failed to delete graph from FalkorDB: {e:?}");
         // Continue to remove from tracking anyway
     }
 
@@ -122,14 +119,14 @@ fn drop_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 
     // Also clean up any namespace mappings for this graph
     // Use SCAN instead of KEYS for production safety (non-blocking)
-    let ns_pattern = format!("rdf:ns:{}:*", graph_name);
+    let ns_pattern = format!("rdf:ns:{graph_name}:*");
     let keys = super::utils::scan_keys(ctx, &ns_pattern);
 
     for key_str in keys {
         let _ = ctx.call("DEL", &[key_str.as_str()]);
     }
 
-    log::info!("Dropped RDF graph: {}", graph_name);
+    log::info!("Dropped RDF graph: {graph_name}");
 
     Ok(RedisValue::SimpleStringStatic("OK"))
 }
@@ -193,8 +190,7 @@ fn clear_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 
     if !exists {
         return Err(RedisError::String(format!(
-            "Graph '{}' does not exist",
-            graph_name
+            "Graph '{graph_name}' does not exist"
         )));
     }
 
@@ -227,10 +223,7 @@ fn clear_graph(ctx: &Context, graph_name: &str) -> RedisResult {
             }
 
             log::info!(
-                "Cleared RDF graph '{}': {} nodes, {} relationships deleted",
-                graph_name,
-                deleted_nodes,
-                deleted_relationships
+                "Cleared RDF graph '{graph_name}': {deleted_nodes} nodes, {deleted_relationships} relationships deleted"
             );
 
             Ok(RedisValue::Array(vec![
@@ -239,15 +232,14 @@ fn clear_graph(ctx: &Context, graph_name: &str) -> RedisResult {
             ]))
         }
         Ok(_) => {
-            log::info!("Cleared RDF graph: {}", graph_name);
+            log::info!("Cleared RDF graph: {graph_name}");
             Ok(RedisValue::Array(vec![
                 RedisValue::Integer(0),
                 RedisValue::Integer(0),
             ]))
         }
         Err(e) => Err(RedisError::String(format!(
-            "Failed to clear graph '{}': {:?}",
-            graph_name, e
+            "Failed to clear graph '{graph_name}': {e:?}"
         ))),
     }
 }
@@ -255,16 +247,16 @@ fn clear_graph(ctx: &Context, graph_name: &str) -> RedisResult {
 /// RDF.GRAPH command handler
 ///
 /// Syntax:
-/// - RDF.GRAPH CREATE <graph_name>
-/// - RDF.GRAPH DROP <graph_name>
+/// - RDF.GRAPH CREATE <`graph_name`>
+/// - RDF.GRAPH DROP <`graph_name`>
 /// - RDF.GRAPH LIST
-/// - RDF.GRAPH CLEAR <graph_name>
+/// - RDF.GRAPH CLEAR <`graph_name`>
 ///
 /// Returns:
 /// - CREATE: "OK" on success
 /// - DROP: "OK" on success
-/// - LIST: Array of [graph_name, node_count] pairs
-/// - CLEAR: [nodes_deleted, relationships_deleted]
+/// - LIST: Array of [`graph_name`, `node_count`] pairs
+/// - CLEAR: [`nodes_deleted`, `relationships_deleted`]
 pub fn rdf_graph(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     // Minimum args: command, subcommand
     if args.len() < 2 {
@@ -277,8 +269,7 @@ pub fn rdf_graph(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
 
     let subcommand = Subcommand::from_str(subcommand_str).ok_or_else(|| {
         RedisError::String(format!(
-            "Unknown subcommand '{}'. Use: CREATE, DROP, LIST, CLEAR",
-            subcommand_str
+            "Unknown subcommand '{subcommand_str}'. Use: CREATE, DROP, LIST, CLEAR"
         ))
     })?;
 

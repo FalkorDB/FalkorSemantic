@@ -1,7 +1,7 @@
 //! SPARQL JSON Results Format
 //!
 //! Implements the SPARQL Query Results JSON Format as per:
-//! https://www.w3.org/TR/sparql11-results-json/
+//! <https://www.w3.org/TR/sparql11-results-json>/
 
 use super::{AskResult, ResultsError, ResultsResult, ResultsWriter, SelectResults, Term};
 use std::io::Write;
@@ -15,12 +15,14 @@ pub struct JsonResultsWriter {
 
 impl JsonResultsWriter {
     /// Create a new JSON results writer
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Enable pretty-printing
-    pub fn pretty(mut self) -> Self {
+    #[must_use]
+    pub const fn pretty(mut self) -> Self {
         self.pretty = true;
         self
     }
@@ -62,7 +64,7 @@ impl JsonResultsWriter {
                 '\r' => write!(writer, "\\r")?,
                 '\t' => write!(writer, "\\t")?,
                 c if c.is_control() => write!(writer, "\\u{:04x}", c as u32)?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())

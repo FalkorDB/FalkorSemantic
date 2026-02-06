@@ -1,7 +1,7 @@
-//! TriG Serializer
+//! `TriG` Serializer
 //!
-//! Serializes RDF quads in the W3C TriG format (Turtle with named graphs).
-//! https://www.w3.org/TR/trig/
+//! Serializes RDF quads in the W3C `TriG` format (Turtle with named graphs).
+//! <https://www.w3.org/TR/trig>/
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -11,9 +11,9 @@ use super::traits::{QuadSerializer, TripleSerializer};
 use super::turtle::TurtleSerializer;
 use crate::rdf::{GraphName, Quad};
 
-/// TriG serializer with prefix and named graph support
+/// `TriG` serializer with prefix and named graph support
 ///
-/// Serializes RDF quads in the TriG format, which extends Turtle
+/// Serializes RDF quads in the `TriG` format, which extends Turtle
 /// with support for named graphs using GRAPH blocks.
 #[derive(Debug)]
 pub struct TriGSerializer {
@@ -34,7 +34,8 @@ impl Default for TriGSerializer {
 }
 
 impl TriGSerializer {
-    /// Create a new TriG serializer
+    /// Create a new `TriG` serializer
+    #[must_use]
     pub fn new() -> Self {
         Self {
             prefixes: HashMap::new(),
@@ -44,7 +45,8 @@ impl TriGSerializer {
         }
     }
 
-    /// Create a TriG serializer with common prefixes
+    /// Create a `TriG` serializer with common prefixes
+    #[must_use]
     pub fn with_common_prefixes() -> Self {
         let mut serializer = Self::new();
         serializer.add_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
@@ -71,7 +73,7 @@ impl TriGSerializer {
         prefixes.sort_by_key(|(k, _)| k.as_str());
 
         for (prefix, iri) in prefixes {
-            writeln!(writer, "@prefix {}: <{}> .", prefix, iri)?;
+            writeln!(writer, "@prefix {prefix}: <{iri}> .")?;
         }
 
         if !self.prefixes.is_empty() {
@@ -96,11 +98,11 @@ impl TriGSerializer {
             if iri.starts_with(namespace) {
                 let local = &iri[namespace.len()..];
                 if TurtleSerializer::is_valid_local_name(local) {
-                    return format!("{}:{}", prefix, local);
+                    return format!("{prefix}:{local}");
                 }
             }
         }
-        format!("<{}>", iri)
+        format!("<{iri}>")
     }
 
     /// Write graph opening

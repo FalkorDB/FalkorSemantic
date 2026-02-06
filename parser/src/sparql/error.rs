@@ -57,13 +57,14 @@ impl SparqlError {
     }
 
     /// Add position information from byte offset
+    #[must_use]
     pub fn with_position(mut self, input: &str, offset: usize) -> Self {
         self.offset = Some(offset);
 
         // Calculate line and column from offset
         let before = &input[..offset.min(input.len())];
         let line = before.matches('\n').count() + 1;
-        let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let last_newline = before.rfind('\n').map_or(0, |i| i + 1);
         let column = offset - last_newline + 1;
 
         self.line = Some(line);
@@ -72,7 +73,8 @@ impl SparqlError {
     }
 
     /// Add explicit line/column information
-    pub fn with_location(mut self, line: usize, column: usize) -> Self {
+    #[must_use]
+    pub const fn with_location(mut self, line: usize, column: usize) -> Self {
         self.line = Some(line);
         self.column = Some(column);
         self
@@ -109,9 +111,9 @@ pub enum SparqlErrorKind {
 impl fmt::Display for SparqlErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SparqlErrorKind::Parse => write!(f, "parse error"),
-            SparqlErrorKind::Validation => write!(f, "validation error"),
-            SparqlErrorKind::Unsupported => write!(f, "unsupported"),
+            Self::Parse => write!(f, "parse error"),
+            Self::Validation => write!(f, "validation error"),
+            Self::Unsupported => write!(f, "unsupported"),
         }
     }
 }
@@ -120,7 +122,7 @@ impl From<spargebra::SparqlSyntaxError> for SparqlError {
     fn from(err: spargebra::SparqlSyntaxError) -> Self {
         // spargebra exposes position info
         let message = err.to_string();
-        SparqlError::parse(message)
+        Self::parse(message)
     }
 }
 

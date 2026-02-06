@@ -58,13 +58,13 @@ impl ContainerType {
     /// Parse a container type from a string
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "@list" => Some(ContainerType::List),
-            "@set" => Some(ContainerType::Set),
-            "@index" => Some(ContainerType::Index),
-            "@language" => Some(ContainerType::Language),
-            "@graph" => Some(ContainerType::Graph),
-            "@id" => Some(ContainerType::Id),
-            "@type" => Some(ContainerType::Type),
+            "@list" => Some(Self::List),
+            "@set" => Some(Self::Set),
+            "@index" => Some(Self::Index),
+            "@language" => Some(Self::Language),
+            "@graph" => Some(Self::Graph),
+            "@id" => Some(Self::Id),
+            "@type" => Some(Self::Type),
             _ => None,
         }
     }
@@ -80,6 +80,7 @@ pub struct ContextResolver {
 
 impl ContextResolver {
     /// Create a new context resolver
+    #[must_use]
     pub fn new() -> Self {
         Self {
             cache: HashMap::new(),
@@ -207,7 +208,7 @@ impl ContextResolver {
                     .unwrap_or_else(|| {
                         // If no @id, the term itself is the IRI (with vocab prefix)
                         if let Some(ref vocab) = context.vocab {
-                            format!("{}{}", vocab, term)
+                            format!("{vocab}{term}")
                         } else {
                             term.to_string()
                         }
@@ -250,8 +251,7 @@ impl ContextResolver {
                 })
             }
             _ => Err(JsonLdError::context(format!(
-                "Invalid term definition for '{}'",
-                term
+                "Invalid term definition for '{term}'"
             ))),
         }
     }
@@ -290,7 +290,7 @@ impl ContextResolver {
 
         // Apply @vocab if present
         if let Some(ref vocab) = context.vocab {
-            return Ok(format!("{}{}", vocab, value));
+            return Ok(format!("{vocab}{value}"));
         }
 
         // Return as-is

@@ -32,24 +32,28 @@ impl Default for QueryConfig {
 
 impl QueryConfig {
     /// Create a new config with default values
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set query timeout
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+    #[must_use]
+    pub const fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
     /// Set no timeout
-    pub fn without_timeout(mut self) -> Self {
+    #[must_use]
+    pub const fn without_timeout(mut self) -> Self {
         self.timeout = None;
         self
     }
 
     /// Set maximum results
-    pub fn with_max_results(mut self, max: usize) -> Self {
+    #[must_use]
+    pub const fn with_max_results(mut self, max: usize) -> Self {
         self.max_results = Some(max);
         self
     }
@@ -123,33 +127,34 @@ pub enum CypherValue {
     /// String value
     String(String),
     /// Node (with properties)
-    Node(HashMap<String, CypherValue>),
+    Node(HashMap<String, Self>),
     /// Relationship (with properties)
-    Relationship(HashMap<String, CypherValue>),
+    Relationship(HashMap<String, Self>),
     /// List of values
-    List(Vec<CypherValue>),
+    List(Vec<Self>),
     /// Map of values
-    Map(HashMap<String, CypherValue>),
+    Map(HashMap<String, Self>),
 }
 
 impl CypherValue {
     /// Convert to SPARQL Term
+    #[must_use]
     pub fn to_term(&self) -> Option<Term> {
         match self {
-            CypherValue::Null => None,
-            CypherValue::Bool(b) => Some(Term::typed_literal(
+            Self::Null => None,
+            Self::Bool(b) => Some(Term::typed_literal(
                 b.to_string(),
                 "http://www.w3.org/2001/XMLSchema#boolean",
             )),
-            CypherValue::Integer(i) => Some(Term::typed_literal(
+            Self::Integer(i) => Some(Term::typed_literal(
                 i.to_string(),
                 "http://www.w3.org/2001/XMLSchema#integer",
             )),
-            CypherValue::Float(f) => Some(Term::typed_literal(
+            Self::Float(f) => Some(Term::typed_literal(
                 f.to_string(),
                 "http://www.w3.org/2001/XMLSchema#double",
             )),
-            CypherValue::String(s) => {
+            Self::String(s) => {
                 // Check if it's a URI
                 if s.starts_with("http://") || s.starts_with("https://") || s.starts_with("urn:") {
                     Some(Term::iri(s.clone()))
@@ -159,22 +164,22 @@ impl CypherValue {
                     Some(Term::literal(s.clone()))
                 }
             }
-            CypherValue::Node(props) => {
+            Self::Node(props) => {
                 // Extract URI from node properties
-                if let Some(CypherValue::String(uri)) = props.get("uri") {
+                if let Some(Self::String(uri)) = props.get("uri") {
                     if let Some(stripped) = uri.strip_prefix("_:") {
                         Some(Term::blank_node(stripped))
                     } else {
                         Some(Term::iri(uri.clone()))
                     }
-                } else if let Some(CypherValue::String(value)) = props.get("value") {
+                } else if let Some(Self::String(value)) = props.get("value") {
                     // Literal node
                     let datatype = props.get("datatype").and_then(|d| match d {
-                        CypherValue::String(s) => Some(s.clone()),
+                        Self::String(s) => Some(s.clone()),
                         _ => None,
                     });
                     let language = props.get("language").and_then(|l| match l {
-                        CypherValue::String(s) => Some(s.clone()),
+                        Self::String(s) => Some(s.clone()),
                         _ => None,
                     });
                     if let Some(lang) = language {
@@ -188,25 +193,25 @@ impl CypherValue {
                     None
                 }
             }
-            CypherValue::Relationship(props) => {
+            Self::Relationship(props) => {
                 // Extract predicate from relationship properties
-                if let Some(CypherValue::String(pred)) = props.get("predicate") {
+                if let Some(Self::String(pred)) = props.get("predicate") {
                     Some(Term::iri(pred.clone()))
                 } else {
                     None
                 }
             }
-            CypherValue::Map(map) => {
+            Self::Map(map) => {
                 // Check for uri or value properties
-                if let Some(CypherValue::String(uri)) = map.get("uri") {
+                if let Some(Self::String(uri)) = map.get("uri") {
                     Some(Term::iri(uri.clone()))
-                } else if let Some(CypherValue::String(value)) = map.get("value") {
+                } else if let Some(Self::String(value)) = map.get("value") {
                     let datatype = map.get("datatype").and_then(|d| match d {
-                        CypherValue::String(s) => Some(s.clone()),
+                        Self::String(s) => Some(s.clone()),
                         _ => None,
                     });
                     let language = map.get("language").and_then(|l| match l {
-                        CypherValue::String(s) => Some(s.clone()),
+                        Self::String(s) => Some(s.clone()),
                         _ => None,
                     });
                     if let Some(lang) = language {
@@ -220,7 +225,7 @@ impl CypherValue {
                     None
                 }
             }
-            CypherValue::List(_) => None, // Lists not directly representable
+            Self::List(_) => None, // Lists not directly representable
         }
     }
 }
@@ -241,6 +246,7 @@ pub struct ResultConverter;
 
 impl ResultConverter {
     /// Convert Cypher result to SELECT results
+    #[must_use]
     pub fn to_select_results(
         cypher_query: &CypherQuery,
         cypher_result: CypherResult,
@@ -249,7 +255,7 @@ impl ResultConverter {
 
         let mut results = SelectResults::with_variables(variables.clone());
 
-        for row in cypher_result.rows.into_iter() {
+        for row in cypher_result.rows {
             let mut binding = Binding::new();
             for (i, value) in row.into_iter().enumerate() {
                 if i < variables.len() {
@@ -265,19 +271,19 @@ impl ResultConverter {
     }
 
     /// Convert Cypher result to ASK result
+    #[must_use]
     pub fn to_ask_result(cypher_result: CypherResult) -> AskResult {
         // Look for the boolean result in first row, first column
         let result = cypher_result
             .rows
             .first()
             .and_then(|row| row.first())
-            .map(|val| match val {
+            .is_some_and(|val| match val {
                 CypherValue::Bool(b) => *b,
                 CypherValue::Integer(i) => *i > 0,
                 CypherValue::String(s) => s == "true" || s == "1",
                 _ => false,
-            })
-            .unwrap_or(false);
+            });
 
         AskResult::new(result)
     }
@@ -301,7 +307,7 @@ impl<E: CypherExecutor> QueryExecutor<E> {
     }
 
     /// Create with custom configuration
-    pub fn with_config(executor: E, config: QueryConfig) -> Self {
+    pub const fn with_config(executor: E, config: QueryConfig) -> Self {
         Self { executor, config }
     }
 

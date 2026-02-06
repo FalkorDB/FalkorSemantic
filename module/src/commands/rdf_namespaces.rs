@@ -19,9 +19,9 @@ enum Subcommand {
 impl Subcommand {
     fn from_str(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
-            "LIST" => Some(Subcommand::List),
-            "ADD" => Some(Subcommand::Add),
-            "REMOVE" | "DELETE" | "DEL" => Some(Subcommand::Remove),
+            "LIST" => Some(Self::List),
+            "ADD" => Some(Self::Add),
+            "REMOVE" | "DELETE" | "DEL" => Some(Self::Remove),
             _ => None,
         }
     }
@@ -46,8 +46,7 @@ fn validate_prefix(prefix: &str) -> Result<(), String> {
     for ch in prefix.chars() {
         if !ch.is_alphanumeric() && ch != '_' && ch != '-' {
             return Err(format!(
-                "Prefix contains invalid character: '{}'. Only letters, digits, underscores, and hyphens are allowed",
-                ch
+                "Prefix contains invalid character: '{ch}'. Only letters, digits, underscores, and hyphens are allowed"
             ));
         }
     }
@@ -73,7 +72,7 @@ fn validate_uri(uri: &str) -> Result<(), String> {
 
     for ch in uri.chars() {
         if ch.is_control() || ch == ' ' {
-            return Err(format!("URI contains invalid character: {:?}", ch));
+            return Err(format!("URI contains invalid character: {ch:?}"));
         }
     }
 
@@ -81,8 +80,7 @@ fn validate_uri(uri: &str) -> Result<(), String> {
     // This is just a convention, not a requirement
     if !uri.ends_with('#') && !uri.ends_with('/') {
         log::warn!(
-            "Namespace URI '{}' does not end with '#' or '/'. This may cause issues with IRI resolution.",
-            uri
+            "Namespace URI '{uri}' does not end with '#' or '/'. This may cause issues with IRI resolution."
         );
     }
 
@@ -91,12 +89,12 @@ fn validate_uri(uri: &str) -> Result<(), String> {
 
 /// Get the Redis key for a namespace prefix
 fn namespace_key(graph_key: &str, prefix: &str) -> String {
-    format!("{}{}:{}", NAMESPACE_KEY_PREFIX, graph_key, prefix)
+    format!("{NAMESPACE_KEY_PREFIX}{graph_key}:{prefix}")
 }
 
 /// Get the Redis key pattern for all namespaces in a graph
 fn namespace_pattern(graph_key: &str) -> String {
-    format!("{}{}:*", NAMESPACE_KEY_PREFIX, graph_key)
+    format!("{NAMESPACE_KEY_PREFIX}{graph_key}:*")
 }
 
 /// List all namespace prefixes for a graph
@@ -107,7 +105,7 @@ fn list_namespaces(ctx: &Context, graph_key: &str) -> RedisResult {
     let keys = super::utils::scan_keys(ctx, &pattern);
 
     let mut namespaces: Vec<RedisValue> = Vec::new();
-    let prefix_offset = format!("{}{}:", NAMESPACE_KEY_PREFIX, graph_key).len();
+    let prefix_offset = format!("{NAMESPACE_KEY_PREFIX}{graph_key}:").len();
 
     for key_str in keys {
         // Extract prefix from key
@@ -132,20 +130,15 @@ fn list_namespaces(ctx: &Context, graph_key: &str) -> RedisResult {
 /// Add a namespace prefix mapping
 fn add_namespace(ctx: &Context, graph_key: &str, prefix: &str, uri: &str) -> RedisResult {
     // Validate inputs
-    validate_prefix(prefix).map_err(|e| RedisError::String(format!("Invalid prefix: {}", e)))?;
-    validate_uri(uri).map_err(|e| RedisError::String(format!("Invalid URI: {}", e)))?;
+    validate_prefix(prefix).map_err(|e| RedisError::String(format!("Invalid prefix: {e}")))?;
+    validate_uri(uri).map_err(|e| RedisError::String(format!("Invalid URI: {e}")))?;
 
     let key = namespace_key(graph_key, prefix);
 
     // Store the mapping
     ctx.call("SET", &[&key, uri])?;
 
-    log::debug!(
-        "Added namespace: {} -> {} (graph: {})",
-        prefix,
-        uri,
-        graph_key
-    );
+    log::debug!("Added namespace: {prefix} -> {uri} (graph: {graph_key})");
 
     Ok(RedisValue::SimpleStringStatic("OK"))
 }
@@ -163,15 +156,14 @@ fn remove_namespace(ctx: &Context, graph_key: &str, prefix: &str) -> RedisResult
 
     if !exists {
         return Err(RedisError::String(format!(
-            "Namespace prefix '{}' not found in graph '{}'",
-            prefix, graph_key
+            "Namespace prefix '{prefix}' not found in graph '{graph_key}'"
         )));
     }
 
     // Delete the mapping
     ctx.call("DEL", &[&key])?;
 
-    log::debug!("Removed namespace: {} (graph: {})", prefix, graph_key);
+    log::debug!("Removed namespace: {prefix} (graph: {graph_key})");
 
     Ok(RedisValue::SimpleStringStatic("OK"))
 }
@@ -179,12 +171,12 @@ fn remove_namespace(ctx: &Context, graph_key: &str, prefix: &str) -> RedisResult
 /// RDF.NAMESPACES command handler
 ///
 /// Syntax:
-/// - RDF.NAMESPACES <graph_key> LIST
-/// - RDF.NAMESPACES <graph_key> ADD <prefix> <uri>
-/// - RDF.NAMESPACES <graph_key> REMOVE <prefix>
+/// - RDF.NAMESPACES <`graph_key`> LIST
+/// - RDF.NAMESPACES <`graph_key`> ADD <prefix> <uri>
+/// - RDF.NAMESPACES <`graph_key`> REMOVE <prefix>
 ///
 /// Arguments:
-/// - graph_key: The FalkorDB graph name
+/// - `graph_key`: The `FalkorDB` graph name
 /// - LIST: List all registered namespace prefixes
 /// - ADD: Add a new namespace prefix mapping
 /// - REMOVE: Remove an existing namespace prefix mapping
@@ -209,8 +201,7 @@ pub fn rdf_namespaces(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
 
     let subcommand = Subcommand::from_str(subcommand_str).ok_or_else(|| {
         RedisError::String(format!(
-            "Unknown subcommand '{}'. Use: LIST, ADD, REMOVE",
-            subcommand_str
+            "Unknown subcommand '{subcommand_str}'. Use: LIST, ADD, REMOVE"
         ))
     })?;
 

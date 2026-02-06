@@ -5,6 +5,7 @@
 use crate::{ComplianceReport, GapSeverity};
 
 /// Generate a markdown compliance report
+#[must_use]
 pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
     let mut md = String::new();
 
@@ -60,7 +61,7 @@ pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
                 md.push_str(&format!("- **{}** ({})\n", gap.feature, severity));
                 md.push_str(&format!("  - {}\n", gap.reason));
                 if let Some(ref spec) = gap.spec_reference {
-                    md.push_str(&format!("  - Spec: {}\n", spec));
+                    md.push_str(&format!("  - Spec: {spec}\n"));
                 }
             }
             md.push('\n');
@@ -85,6 +86,7 @@ pub fn generate_markdown_report(reports: &[ComplianceReport]) -> String {
 }
 
 /// Generate a JSON compliance report
+#[must_use]
 pub fn generate_json_report(reports: &[ComplianceReport]) -> String {
     use serde_json::{json, Value};
 
@@ -121,7 +123,7 @@ pub fn generate_json_report(reports: &[ComplianceReport]) -> String {
         "overall_compliance": if reports.is_empty() {
             100.0
         } else {
-            reports.iter().map(|r| r.compliance_percentage()).sum::<f64>() / reports.len() as f64
+            reports.iter().map(super::ComplianceReport::compliance_percentage).sum::<f64>() / reports.len() as f64
         }
     });
 

@@ -1,7 +1,7 @@
 //! N-Quads Serializer
 //!
 //! Implements the N-Quads format as per:
-//! https://www.w3.org/TR/n-quads/
+//! <https://www.w3.org/TR/n-quads>/
 //!
 //! N-Quads extends N-Triples to support named graphs.
 
@@ -18,6 +18,7 @@ pub struct NQuadsWriter {
 
 impl NQuadsWriter {
     /// Create a new N-Quads writer
+    #[must_use]
     pub fn new() -> Self {
         Self {
             nt_writer: NTriplesWriter::new(),
@@ -54,7 +55,7 @@ impl NQuadsWriter {
                 '\\' => write!(writer, "\\u005C")?,
                 ' ' => write!(writer, "\\u0020")?,
                 c if c.is_control() => write!(writer, "\\u{:04X}", c as u32)?,
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -84,7 +85,7 @@ struct TempWriter<'a, W: Write> {
     stopped: bool,
 }
 
-impl<'a, W: Write> Write for TempWriter<'a, W> {
+impl<W: Write> Write for TempWriter<'_, W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf)
     }
@@ -133,7 +134,7 @@ impl NQuadsWriter {
                 write!(writer, "\"")?;
 
                 if let Some(lang) = lit.language() {
-                    write!(writer, "@{}", lang)?;
+                    write!(writer, "@{lang}")?;
                 } else {
                     let dt = lit.datatype();
                     let dt_str = dt.as_str();
@@ -172,7 +173,7 @@ impl NQuadsWriter {
                         write!(writer, "\\U{:08X}", c as u32)?;
                     }
                 }
-                c => write!(writer, "{}", c)?,
+                c => write!(writer, "{c}")?,
             }
         }
         Ok(())
@@ -233,7 +234,7 @@ impl<W: Write> NQuadsStreamWriter<W> {
     }
 
     /// Get the number of quads written
-    pub fn count(&self) -> usize {
+    pub const fn count(&self) -> usize {
         self.count
     }
 

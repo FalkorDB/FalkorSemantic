@@ -1,4 +1,4 @@
-//! FalkorSemantic Storage
+//! `FalkorSemantic` Storage
 //!
 //! This crate provides storage functionality for RDF data,
 //! including IRI dictionary encoding and namespace persistence.

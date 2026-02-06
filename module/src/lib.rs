@@ -1,4 +1,4 @@
-//! FalkorSemantic Redis Module
+//! `FalkorSemantic` Redis Module
 //!
 //! This is the main Redis module that integrates the parser and mapper
 //! to provide semantic graph capabilities.
@@ -26,7 +26,7 @@ fn init(ctx: &Context, _args: &[RedisString]) -> Status {
     Status::Ok
 }
 
-/// Check if FalkorDB module is loaded
+/// Check if `FalkorDB` module is loaded
 fn check_falkordb_module(ctx: &Context) -> bool {
     match ctx.call("MODULE", &["LIST"]) {
         Ok(RedisValue::Array(modules)) => {
@@ -78,7 +78,7 @@ fn rdf_parse(_ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let input = args[1].try_as_str()?;
 
     // TODO: Implement actual parsing and mapping
-    log::debug!("Parsing RDF data: {}", input);
+    log::debug!("Parsing RDF data: {input}");
 
     Ok("OK".into())
 }

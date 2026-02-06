@@ -1,6 +1,6 @@
 //! Graph Schema Definitions
 //!
-//! Defines the node and edge schemas for mapping RDF to FalkorDB graphs.
+//! Defines the node and edge schemas for mapping RDF to `FalkorDB` graphs.
 
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +26,8 @@ pub struct PropertyValue {
 
 impl PropertyValue {
     /// Create a new property value
-    pub fn new(value: String, datatype: String, language: Option<String>) -> Self {
+    #[must_use]
+    pub const fn new(value: String, datatype: String, language: Option<String>) -> Self {
         Self {
             value,
             datatype,
@@ -50,6 +51,7 @@ pub struct ResourceNode {
 
 impl ResourceNode {
     /// Create a new resource node from an IRI
+    #[must_use]
     pub fn from_iri(uri: String) -> Self {
         Self {
             uri,
@@ -60,6 +62,7 @@ impl ResourceNode {
     }
 
     /// Create a new blank node
+    #[must_use]
     pub fn blank(label: String) -> Self {
         Self {
             uri: label,
@@ -82,11 +85,11 @@ impl ResourceNode {
     }
 
     /// Get the primary label for Cypher (first label or "Resource")
+    #[must_use]
     pub fn primary_label(&self) -> &str {
         self.labels
             .first()
-            .map(|s| s.as_str())
-            .unwrap_or("Resource")
+            .map_or("Resource", std::string::String::as_str)
     }
 }
 
@@ -103,7 +106,8 @@ pub struct LiteralNode {
 
 impl LiteralNode {
     /// Create a new literal node
-    pub fn new(value: String, datatype: String, language: Option<String>) -> Self {
+    #[must_use]
+    pub const fn new(value: String, datatype: String, language: Option<String>) -> Self {
         Self {
             value,
             datatype,
@@ -125,7 +129,8 @@ pub struct Edge {
 
 impl Edge {
     /// Create a new edge
-    pub fn new(predicate: String, local_name: String) -> Self {
+    #[must_use]
+    pub const fn new(predicate: String, local_name: String) -> Self {
         Self {
             predicate,
             local_name,
@@ -134,7 +139,8 @@ impl Edge {
     }
 
     /// Create a new edge in a named graph
-    pub fn in_graph(predicate: String, local_name: String, graph: String) -> Self {
+    #[must_use]
+    pub const fn in_graph(predicate: String, local_name: String, graph: String) -> Self {
         Self {
             predicate,
             local_name,
@@ -143,6 +149,7 @@ impl Edge {
     }
 
     /// Get the edge type for Cypher (local name or sanitized predicate)
+    #[must_use]
     pub fn edge_type(&self) -> String {
         sanitize_identifier(&self.local_name)
     }
@@ -201,6 +208,7 @@ pub mod rdf_predicates {
 /// assert_eq!(escape_cypher_string("it's"), "it\\'s");
 /// assert_eq!(escape_cypher_string("line\nbreak"), "line\\nbreak");
 /// ```
+#[must_use]
 pub fn escape_cypher_string(s: &str) -> String {
     let mut result = String::with_capacity(s.len() + 16);
     for ch in s.chars() {
@@ -229,15 +237,17 @@ pub fn escape_cypher_string(s: &str) -> String {
 /// use falkorsemantic_mapper::graph::escape_cypher_identifier;
 /// assert_eq!(escape_cypher_identifier("My Label"), "`My Label`");
 /// ```
+#[must_use]
 pub fn escape_cypher_identifier(s: &str) -> String {
     // Backticks in identifiers are escaped by doubling them
     let escaped = s.replace('`', "``");
-    format!("`{}`", escaped)
+    format!("`{escaped}`")
 }
 
 /// Sanitize a string for use as a Cypher identifier
 ///
 /// Replaces invalid characters with underscores and ensures it starts with a letter.
+#[must_use]
 pub fn sanitize_identifier(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();

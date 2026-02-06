@@ -1,4 +1,4 @@
-//! RDF.BULK_INSERT Command Implementation
+//! `RDF.BULK_INSERT` Command Implementation
 //!
 //! Bulk inserts RDF data from files with streaming, batch processing,
 //! progress reporting, and partial failure recovery.
@@ -57,13 +57,13 @@ fn validate_file_path(path: &str) -> Result<PathBuf, String> {
     // Canonicalize to resolve symlinks and get absolute path
     let canonical = path
         .canonicalize()
-        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+        .map_err(|e| format!("Failed to resolve path: {e}"))?;
 
     // Check if path is within allowed directory (if configured)
     if let Ok(allowed_dir) = std::env::var(ALLOWED_DIR_ENV) {
         let allowed_path = Path::new(&allowed_dir)
             .canonicalize()
-            .map_err(|e| format!("Invalid allowed directory '{}': {}", allowed_dir, e))?;
+            .map_err(|e| format!("Invalid allowed directory '{allowed_dir}': {e}"))?;
 
         if !canonical.starts_with(&allowed_path) {
             return Err(format!(
@@ -161,8 +161,7 @@ impl<'a> BulkInsertArgs<'a> {
                         .map_err(|_| RedisError::String("Invalid format value".into()))?;
                     format = Some(RdfFormat::from_str(fmt_str).ok_or_else(|| {
                         RedisError::String(format!(
-                            "Unknown format '{}'. Use: turtle, ntriples, nquads, jsonld",
-                            fmt_str
+                            "Unknown format '{fmt_str}'. Use: turtle, ntriples, nquads, jsonld"
                         ))
                     })?);
                 }
@@ -175,7 +174,7 @@ impl<'a> BulkInsertArgs<'a> {
                         .try_as_str()
                         .map_err(|_| RedisError::String("Invalid batch size".into()))?;
                     batch_size = size_str.parse().map_err(|_| {
-                        RedisError::String(format!("Invalid batch size: {}", size_str))
+                        RedisError::String(format!("Invalid batch size: {size_str}"))
                     })?;
                     if batch_size == 0 {
                         return Err(RedisError::String("Batch size must be > 0".into()));
@@ -190,7 +189,7 @@ impl<'a> BulkInsertArgs<'a> {
                         .try_as_str()
                         .map_err(|_| RedisError::String("Invalid skip count".into()))?;
                     skip_lines = skip_str.parse().map_err(|_| {
-                        RedisError::String(format!("Invalid skip count: {}", skip_str))
+                        RedisError::String(format!("Invalid skip count: {skip_str}"))
                     })?;
                 }
                 "MAXERRORS" => {
@@ -202,14 +201,14 @@ impl<'a> BulkInsertArgs<'a> {
                         .try_as_str()
                         .map_err(|_| RedisError::String("Invalid max errors".into()))?;
                     max_errors = max_str.parse().map_err(|_| {
-                        RedisError::String(format!("Invalid max errors: {}", max_str))
+                        RedisError::String(format!("Invalid max errors: {max_str}"))
                     })?;
                 }
                 "STOPONERROR" => {
                     continue_on_error = false;
                 }
                 _ => {
-                    return Err(RedisError::String(format!("Unknown argument: {}", arg)));
+                    return Err(RedisError::String(format!("Unknown argument: {arg}")));
                 }
             }
             i += 1;
@@ -264,7 +263,7 @@ where
             continue;
         }
 
-        let line = line_result.map_err(|e| format!("IO error at line {}: {}", line_number, e))?;
+        let line = line_result.map_err(|e| format!("IO error at line {line_number}: {e}"))?;
         let trimmed = line.trim();
 
         // Skip empty lines and comments
@@ -313,7 +312,7 @@ where
                 stats.failed_triples.push(line_number);
                 stats
                     .error_messages
-                    .push(format!("Parse error at line {}: {}", line_number, e));
+                    .push(format!("Parse error at line {line_number}: {e}"));
             }
         }
     }
@@ -337,7 +336,7 @@ where
     Ok(stats)
 }
 
-/// Process a batch of triples - execute against FalkorDB
+/// Process a batch of triples - execute against `FalkorDB`
 fn process_batch(
     ctx: &Context,
     graph_key: &str,
@@ -351,7 +350,7 @@ fn process_batch(
     let mapper = Mapper::new();
     let statements = mapper
         .map_triples(triples)
-        .map_err(|e| format!("Mapping error: {}", e))?;
+        .map_err(|e| format!("Mapping error: {e}"))?;
 
     let mut executed = 0;
     let mut errors = 0;
@@ -366,7 +365,7 @@ fn process_batch(
         }
         Err(e) => {
             errors = statements.len();
-            log::error!("Batch execution error: {:?}", e);
+            log::error!("Batch execution error: {e:?}");
         }
     }
 
@@ -382,7 +381,7 @@ fn load_complete_file(
     batch_size: usize,
 ) -> Result<BulkInsertStats, String> {
     let content =
-        std::fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+        std::fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
     let triples = match format {
         RdfFormat::Turtle => {
@@ -393,7 +392,7 @@ fn load_complete_file(
             return Err("JSON-LD parsing not yet implemented".into());
         }
         _ => {
-            return Err(format!("Format {:?} should use streaming", format));
+            return Err(format!("Format {format:?} should use streaming"));
         }
     };
 
@@ -407,7 +406,7 @@ fn load_complete_file(
     for chunk in triples.chunks(batch_size) {
         let statements = mapper
             .map_triples(chunk)
-            .map_err(|e| format!("Mapping error: {}", e))?;
+            .map_err(|e| format!("Mapping error: {e}"))?;
 
         let combined = statements.join("\n");
         let result = ctx.call("GRAPH.QUERY", &[graph_key, combined.as_str()]);
@@ -419,7 +418,7 @@ fn load_complete_file(
             }
             Err(e) => {
                 stats.errors += statements.len();
-                stats.error_messages.push(format!("Batch error: {:?}", e));
+                stats.error_messages.push(format!("Batch error: {e:?}"));
             }
         }
 
@@ -436,21 +435,21 @@ fn load_complete_file(
     Ok(stats)
 }
 
-/// RDF.BULK_INSERT command handler
+/// `RDF.BULK_INSERT` command handler
 ///
-/// Syntax: RDF.BULK_INSERT <graph_key> <file_path> [FORMAT turtle|ntriples|nquads|jsonld]
+/// Syntax: `RDF.BULK_INSERT` <`graph_key`> <`file_path`> [FORMAT turtle|ntriples|nquads|jsonld]
 ///         [BATCH size] [SKIP lines] [MAXERRORS count] [STOPONERROR]
 ///
 /// Arguments:
-/// - graph_key: The FalkorDB graph name to insert into
-/// - file_path: Path to the RDF file to load
+/// - `graph_key`: The `FalkorDB` graph name to insert into
+/// - `file_path`: Path to the RDF file to load
 /// - FORMAT: Optional format specifier (auto-detected from extension if not provided)
 /// - BATCH: Batch size for processing (default: 1000)
 /// - SKIP: Number of lines to skip (for recovery from partial failures)
 /// - MAXERRORS: Maximum errors before stopping (default: unlimited)
 /// - STOPONERROR: Stop on first error instead of continuing
 ///
-/// Returns: Array with [triples_parsed, statements_executed, errors, batches_processed, last_line]
+/// Returns: Array with [`triples_parsed`, `statements_executed`, errors, `batches_processed`, `last_line`]
 pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let parsed_args = BulkInsertArgs::parse(&args)?;
 
@@ -471,14 +470,14 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
         .or_else(|| detect_format_from_path(&validated_path))
         .unwrap_or(RdfFormat::NTriples);
 
-    log::info!("Using format: {:?}", format);
+    log::info!("Using format: {format:?}");
 
     // Process based on format
     let stats = match format {
         RdfFormat::NTriples | RdfFormat::NQuads => {
             // Stream-based processing for line-based formats
             let file = File::open(&validated_path)
-                .map_err(|e| RedisError::String(format!("Failed to open file: {}", e)))?;
+                .map_err(|e| RedisError::String(format!("Failed to open file: {e}")))?;
             let reader = BufReader::with_capacity(64 * 1024, file);
 
             let graph_key = parsed_args.graph_key.to_string();
@@ -498,7 +497,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
                             return Err("Stopped on error".into());
                         }
                         if total_errors >= max_errors {
-                            return Err(format!("Max errors ({}) reached", max_errors));
+                            return Err(format!("Max errors ({max_errors}) reached"));
                         }
                     }
                     result

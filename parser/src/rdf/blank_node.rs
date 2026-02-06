@@ -31,11 +31,12 @@ impl BlankNode {
     pub fn generate() -> Self {
         let id = GLOBAL_COUNTER.fetch_add(1, Ordering::SeqCst);
         Self {
-            label: format!("b{}", id),
+            label: format!("b{id}"),
         }
     }
 
     /// Get the blank node label (without "_:" prefix)
+    #[must_use]
     pub fn label(&self) -> &str {
         &self.label
     }
@@ -83,7 +84,7 @@ impl BlankNodeScope {
     /// Create a scope with a generated unique prefix
     pub fn generate() -> Self {
         let scope_id = GLOBAL_COUNTER.fetch_add(1, Ordering::SeqCst);
-        Self::new(format!("g{}", scope_id))
+        Self::new(format!("g{scope_id}"))
     }
 
     /// Generate a new blank node within this scope

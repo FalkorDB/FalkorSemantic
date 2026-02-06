@@ -1,6 +1,6 @@
 //! RDF.INSERT Command Implementation
 //!
-//! Inserts RDF data into a FalkorDB graph with support for multiple formats,
+//! Inserts RDF data into a `FalkorDB` graph with support for multiple formats,
 //! batch processing, and atomic transactions.
 
 use redis_module::{Context, RedisError, RedisResult, RedisString, RedisValue};
@@ -11,7 +11,7 @@ use falkorsemantic_parser::rdf::Triple;
 use falkorsemantic_parser::TurtleParser;
 
 /// Supported RDF formats
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RdfFormat {
     /// Turtle format
     Turtle,
@@ -27,10 +27,10 @@ impl RdfFormat {
     /// Parse format from string
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "turtle" | "ttl" => Some(RdfFormat::Turtle),
-            "ntriples" | "nt" => Some(RdfFormat::NTriples),
-            "nquads" | "nq" => Some(RdfFormat::NQuads),
-            "jsonld" | "json-ld" => Some(RdfFormat::JsonLd),
+            "turtle" | "ttl" => Some(Self::Turtle),
+            "ntriples" | "nt" => Some(Self::NTriples),
+            "nquads" | "nq" => Some(Self::NQuads),
+            "jsonld" | "json-ld" => Some(Self::JsonLd),
             _ => None,
         }
     }
@@ -41,7 +41,7 @@ impl RdfFormat {
 
         // Check for JSON-LD (starts with { or [)
         if trimmed.starts_with('{') || trimmed.starts_with('[') {
-            return RdfFormat::JsonLd;
+            return Self::JsonLd;
         }
 
         // First pass: scan ALL lines for Turtle-specific indicators
@@ -60,12 +60,12 @@ impl RdfFormat {
                 || line.starts_with("PREFIX")
                 || line.starts_with("BASE")
             {
-                return RdfFormat::Turtle;
+                return Self::Turtle;
             }
 
             // Semicolon or comma syntax is Turtle-specific
             if line.contains(';') || (line.contains(',') && !line.starts_with('<')) {
-                return RdfFormat::Turtle;
+                return Self::Turtle;
             }
 
             // Prefixed names (prefix:local) indicate Turtle
@@ -78,7 +78,7 @@ impl RdfFormat {
                         && !word.starts_with("_:")
                         && !word.starts_with("^^")
                     {
-                        return RdfFormat::Turtle;
+                        return Self::Turtle;
                     }
                 }
             }
@@ -97,14 +97,14 @@ impl RdfFormat {
                 // Check if 4th element looks like a graph (IRI or blank node)
                 let fourth = parts.get(3).unwrap_or(&"");
                 if fourth.starts_with('<') || fourth.starts_with("_:") {
-                    return RdfFormat::NQuads;
+                    return Self::NQuads;
                 }
             }
             break; // Only check first non-empty line for N-Quads
         }
 
         // Default to N-Triples (simplest format)
-        RdfFormat::NTriples
+        Self::NTriples
     }
 }
 
@@ -168,8 +168,7 @@ impl<'a> InsertArgs<'a> {
                         .map_err(|_| RedisError::String("Invalid format value".into()))?;
                     format = Some(RdfFormat::from_str(fmt_str).ok_or_else(|| {
                         RedisError::String(format!(
-                            "Unknown format '{}'. Use: turtle, ntriples, nquads, jsonld",
-                            fmt_str
+                            "Unknown format '{fmt_str}'. Use: turtle, ntriples, nquads, jsonld"
                         ))
                     })?);
                 }
@@ -177,7 +176,7 @@ impl<'a> InsertArgs<'a> {
                     atomic = true;
                 }
                 _ => {
-                    return Err(RedisError::String(format!("Unknown argument: {}", arg)));
+                    return Err(RedisError::String(format!("Unknown argument: {arg}")));
                 }
             }
             i += 1;
@@ -213,7 +212,7 @@ fn parse_rdf(data: &str, format: RdfFormat) -> Result<Vec<Triple>, String> {
     }
 }
 
-/// Execute Cypher statements against FalkorDB
+/// Execute Cypher statements against `FalkorDB`
 fn execute_cypher(
     ctx: &Context,
     graph_key: &str,
@@ -254,7 +253,7 @@ fn execute_cypher(
             }
             Err(e) => {
                 stats.errors += 1;
-                stats.error_messages.push(format!("Query error: {:?}", e));
+                stats.error_messages.push(format!("Query error: {e:?}"));
                 if atomic {
                     // Stop on first error in atomic mode
                     break;
@@ -268,15 +267,15 @@ fn execute_cypher(
 
 /// RDF.INSERT command handler
 ///
-/// Syntax: RDF.INSERT <graph_key> <data> [FORMAT turtle|ntriples|nquads|jsonld] [ATOMIC]
+/// Syntax: RDF.INSERT <`graph_key`> <data> [FORMAT turtle|ntriples|nquads|jsonld] [ATOMIC]
 ///
 /// Arguments:
-/// - graph_key: The FalkorDB graph name to insert into
+/// - `graph_key`: The `FalkorDB` graph name to insert into
 /// - data: RDF data as a string
 /// - FORMAT: Optional format specifier (auto-detected if not provided)
 /// - ATOMIC: Optional flag to execute all inserts as a single transaction
 ///
-/// Returns: Array with [triples_parsed, statements_executed, errors]
+/// Returns: Array with [`triples_parsed`, `statements_executed`, errors]
 pub fn rdf_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     // Parse arguments
     let parsed_args = InsertArgs::parse(&args)?;
@@ -293,18 +292,18 @@ pub fn rdf_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
         .format
         .unwrap_or_else(|| RdfFormat::detect(parsed_args.data));
 
-    log::debug!("Using format: {:?}", format);
+    log::debug!("Using format: {format:?}");
 
     // Parse RDF data
     let triples = match parse_rdf(parsed_args.data, format) {
         Ok(t) => t,
         Err(e) => {
-            return Err(RedisError::String(format!("Parse error: {}", e)));
+            return Err(RedisError::String(format!("Parse error: {e}")));
         }
     };
 
     let triples_count = triples.len();
-    log::debug!("Parsed {} triples", triples_count);
+    log::debug!("Parsed {triples_count} triples");
 
     if triples.is_empty() {
         // Return early if no triples
@@ -320,7 +319,7 @@ pub fn rdf_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
     let statements = match mapper.map_triples(&triples) {
         Ok(s) => s,
         Err(e) => {
-            return Err(RedisError::String(format!("Mapping error: {}", e)));
+            return Err(RedisError::String(format!("Mapping error: {e}")));
         }
     };
 

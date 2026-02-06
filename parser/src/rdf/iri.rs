@@ -77,8 +77,7 @@ impl Iri {
         for ch in value.chars() {
             if ch.is_control() || ch == ' ' || ch == '<' || ch == '>' {
                 return Err(ParserError::InvalidInput(format!(
-                    "IRI contains invalid character: {:?}",
-                    ch
+                    "IRI contains invalid character: {ch:?}"
                 )));
             }
         }
@@ -87,17 +86,20 @@ impl Iri {
     }
 
     /// Get the full IRI as a string
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.value
     }
 
     /// Get the scheme part of the IRI (e.g., "http", "https", "urn")
+    #[must_use]
     pub fn scheme(&self) -> &str {
         let end = self.value.find(':').unwrap_or(self.scheme_end);
         &self.value[..end]
     }
 
     /// Get the fragment part of the IRI (after '#'), if present
+    #[must_use]
     pub fn fragment(&self) -> Option<&str> {
         self.fragment_start.map(|start| &self.value[start..])
     }
@@ -105,6 +107,7 @@ impl Iri {
     /// Get the namespace part of the IRI (everything before the local name)
     ///
     /// The namespace is everything up to and including the last '#' or '/'
+    #[must_use]
     pub fn namespace(&self) -> &str {
         if let Some(pos) = self.value.rfind('#') {
             &self.value[..=pos]
@@ -116,6 +119,7 @@ impl Iri {
     }
 
     /// Get the local name part of the IRI (after the last '#' or '/')
+    #[must_use]
     pub fn local_name(&self) -> &str {
         if let Some(pos) = self.value.rfind('#') {
             &self.value[pos + 1..]
@@ -127,10 +131,10 @@ impl Iri {
     }
 
     /// Resolve a relative IRI against this base IRI
-    pub fn resolve(&self, relative: &str) -> Result<Iri, ParserError> {
+    pub fn resolve(&self, relative: &str) -> Result<Self, ParserError> {
         if relative.contains("://") {
             // Already absolute
-            return Iri::new(relative);
+            return Self::new(relative);
         }
 
         if relative.starts_with('#') {
@@ -140,7 +144,7 @@ impl Iri {
             } else {
                 &self.value
             };
-            return Iri::new(format!("{}{}", base, relative));
+            return Self::new(format!("{base}{relative}"));
         }
 
         if relative.starts_with('/') {
@@ -148,16 +152,15 @@ impl Iri {
             if let Some(authority_end) = self.value.find("://").map(|i| {
                 self.value[i + 3..]
                     .find('/')
-                    .map(|j| i + 3 + j)
-                    .unwrap_or(self.value.len())
+                    .map_or(self.value.len(), |j| i + 3 + j)
             }) {
-                return Iri::new(format!("{}{}", &self.value[..authority_end], relative));
+                return Self::new(format!("{}{}", &self.value[..authority_end], relative));
             }
         }
 
         // Relative path reference
         let base = self.namespace();
-        Iri::new(format!("{}{}", base, relative))
+        Self::new(format!("{base}{relative}"))
     }
 }
 
