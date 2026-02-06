@@ -206,7 +206,8 @@ impl<'a> RedisCypherExecutor<'a> {
                 // Default: parse as list
                 CypherValue::List(arr.iter().map(|v| self.parse_value(v)).collect())
             }
-            RedisValue::Null | _ => CypherValue::Null,
+            RedisValue::Null => CypherValue::Null,
+            _ => CypherValue::Null,
         }
     }
 
