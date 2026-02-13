@@ -106,8 +106,12 @@ fn literal_to_cypher_value(datatype: &str, lexical: &str) -> String {
     if datatype == XSD_DECIMAL && is_valid_decimal(lexical) {
         return lexical.to_string();
     }
-    if (datatype == XSD_FLOAT || datatype == XSD_DOUBLE) && lexical.parse::<f64>().is_ok() {
-        return lexical.to_string();
+    if datatype == XSD_FLOAT || datatype == XSD_DOUBLE {
+        if let Ok(parsed) = lexical.parse::<f64>() {
+            if parsed.is_finite() {
+                return lexical.to_string();
+            }
+        }
     }
     if datatype == XSD_BOOLEAN {
         let normalized = lexical.trim();
@@ -604,14 +608,14 @@ impl SparqlToCypher {
                 let edge_obj_var = self.next_var("edge");
 
                 // Register dual binding
-                self.var_bindings.borrow_mut().insert(
-                    v.as_str().to_string(),
-                    VarBinding::Dual {
+                self.var_bindings
+                    .borrow_mut()
+                    .entry(v.as_str().to_string())
+                    .or_insert(VarBinding::Dual {
                         subject_var: subj_var.clone(),
                         prop_key: prop_key.clone(),
                         edge_obj_var: edge_obj_var.clone(),
-                    },
-                );
+                    });
 
                 let optional = format!("({subj_var})-[{rel_var}{pred_str}]->({edge_obj_var})");
 
@@ -1604,6 +1608,20 @@ mod tests {
         assert!(
             cypher.query.contains("s.flag = true"),
             "Should emit normalized boolean token, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_literal_constant_object_typed_double_non_finite_quoted() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/score> \"inf\"^^<http://www.w3.org/2001/XMLSchema#double> }",
+        );
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("s.score = 'inf'"),
+            "Non-finite double should stay quoted, got: {}",
             cypher.query
         );
     }
