@@ -40,6 +40,11 @@ impl SparqlToCypher {
 
     /// Translate a SELECT query
     fn translate_select(&self, select: &SelectQuery) -> Result<CypherQuery, MapperError> {
+        // Check if the top-level pattern is a UNION
+        if let spargebra::algebra::GraphPattern::Union { .. } = select.pattern.inner() {
+            return self.translate_select_union(select);
+        }
+
         let mut cypher = String::new();
 
         // Translate the graph pattern to MATCH clause
@@ -81,6 +86,113 @@ impl SparqlToCypher {
             variables: return_vars.iter().map(|v| v.name.clone()).collect(),
             query_type: CypherQueryType::Select,
         })
+    }
+
+    /// Translate a SELECT query whose top-level pattern is a UNION
+    fn translate_select_union(&self, select: &SelectQuery) -> Result<CypherQuery, MapperError> {
+        // Flatten nested UNIONs into a list of branches
+        let mut branches = Vec::new();
+        Self::flatten_union(select.pattern.inner(), &mut branches);
+
+        // Single pass: process each branch once, collecting match/where parts and variables
+        let mut processed_branches = Vec::with_capacity(branches.len());
+        let mut all_vars = HashSet::new();
+        for branch in &branches {
+            let mut match_parts = Vec::new();
+            let mut where_parts = Vec::new();
+            let mut bound_vars = HashSet::new();
+            self.process_pattern(branch, &mut match_parts, &mut where_parts, &mut bound_vars)?;
+            all_vars.extend(bound_vars);
+            processed_branches.push((match_parts, where_parts));
+        }
+
+        // Determine the return variables
+        let return_vars = if select.is_select_all() {
+            let mut vars: Vec<_> = all_vars.into_iter().collect();
+            vars.sort_by(|a, b| a.name.cmp(&b.name));
+            vars
+        } else {
+            select.projected_variables()
+        };
+
+        // Build a complete Cypher query for each branch from the processed results
+        let mut branch_queries = Vec::with_capacity(processed_branches.len());
+        for (match_parts, where_parts) in &processed_branches {
+            let mut cypher = String::new();
+
+            let match_clause = if match_parts.is_empty() {
+                "MATCH (n)".to_string()
+            } else {
+                format!("MATCH {}", match_parts.join(", "))
+            };
+            cypher.push_str(&match_clause);
+
+            if !where_parts.is_empty() {
+                write!(cypher, "\nWHERE {}", where_parts.join(" AND ")).unwrap();
+            }
+
+            let return_clause = self.build_return_clause(&return_vars, select.distinct);
+            cypher.push_str(&return_clause);
+
+            branch_queries.push(cypher);
+        }
+
+        // Use UNION (deduplicating) when DISTINCT, otherwise UNION ALL
+        let union_separator = if select.distinct {
+            "\nUNION\n"
+        } else {
+            "\nUNION ALL\n"
+        };
+        let union_body = branch_queries.join(union_separator);
+
+        let has_modifiers =
+            select.order_by.is_some() || select.limit.is_some() || select.offset.is_some();
+
+        // Wrap in CALL { ... } subquery when ORDER BY/LIMIT/SKIP are needed,
+        // since FalkorDB does not allow these directly after a UNION
+        let mut cypher = if has_modifiers {
+            let return_items: Vec<String> = return_vars.iter().map(|v| v.name.clone()).collect();
+            let projection = if return_items.is_empty() {
+                "*".to_string()
+            } else {
+                return_items.join(", ")
+            };
+            format!("CALL {{\n{union_body}\n}}\nRETURN {projection}",)
+        } else {
+            union_body
+        };
+
+        // ORDER BY, LIMIT, OFFSET apply to the entire UNION result
+        if let Some(ref order_by) = select.order_by {
+            let order_clause = self.build_order_clause(order_by);
+            cypher.push_str(&order_clause);
+        }
+        if let Some(limit) = select.limit {
+            write!(cypher, "\nLIMIT {limit}").unwrap();
+        }
+        if let Some(offset) = select.offset {
+            write!(cypher, "\nSKIP {offset}").unwrap();
+        }
+
+        Ok(CypherQuery {
+            query: cypher,
+            variables: return_vars.iter().map(|v| v.name.clone()).collect(),
+            query_type: CypherQueryType::Select,
+        })
+    }
+
+    /// Flatten nested UNION patterns into a list of non-UNION branches
+    fn flatten_union<'a>(
+        pattern: &'a spargebra::algebra::GraphPattern,
+        branches: &mut Vec<&'a spargebra::algebra::GraphPattern>,
+    ) {
+        use spargebra::algebra::GraphPattern as GP;
+        if let GP::Union { left, right } = pattern {
+            Self::flatten_union(left, branches);
+            Self::flatten_union(right, branches);
+        } else {
+            branches.push(pattern);
+        }
     }
 
     /// Translate an ASK query
@@ -177,12 +289,12 @@ impl SparqlToCypher {
                 }
             }
             GP::Union { .. } => {
-                // UNION queries require generating multiple separate Cypher queries
-                // and combining results, which is not yet implemented.
-                // Return an error rather than silently dropping the right branch.
+                // Top-level UNION is handled in translate_select_union().
+                // Nested UNION (e.g. UNION inside a JOIN) is not yet supported
+                // because Cypher UNION must appear at the top level.
                 return Err(MapperError::MappingError(
-                    "SPARQL UNION queries are not yet supported. \
-                     Consider rewriting as separate queries."
+                    "Nested SPARQL UNION patterns are not yet supported. \
+                     UNION must be the top-level graph pattern in the query."
                         .into(),
                 ));
             }
@@ -744,13 +856,290 @@ mod tests {
     }
 
     #[test]
-    fn test_union_returns_error() {
-        let result = translate("SELECT ?s WHERE { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } }");
-        assert!(result.is_err(), "UNION queries should return an error");
+    fn test_union_two_branches() {
+        let result = translate(
+            "SELECT ?s WHERE { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } }",
+        );
+        assert!(
+            result.is_ok(),
+            "UNION translation failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("UNION ALL"),
+            "Should contain UNION ALL, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("example.org/a"),
+            "Should contain first branch predicate"
+        );
+        assert!(
+            cypher.query.contains("example.org/b"),
+            "Should contain second branch predicate"
+        );
+        assert_eq!(cypher.query_type, CypherQueryType::Select);
+    }
+
+    #[test]
+    fn test_union_both_branches_have_match_and_return() {
+        let result = translate(
+            "SELECT ?s ?o WHERE { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } }",
+        );
+        assert!(
+            result.is_ok(),
+            "UNION translation failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        let parts: Vec<&str> = cypher.query.split("UNION ALL").collect();
+        assert_eq!(parts.len(), 2, "Should have exactly 2 branches");
+        for (i, part) in parts.iter().enumerate() {
+            assert!(
+                part.contains("MATCH"),
+                "Branch {i} should contain MATCH, got: {part}"
+            );
+            assert!(
+                part.contains("RETURN"),
+                "Branch {i} should contain RETURN, got: {part}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_union_with_three_branches() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+                UNION { ?s <http://example.org/c> ?o } \
+            }",
+        );
+        assert!(result.is_ok(), "Triple UNION failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        let parts: Vec<&str> = cypher.query.split("UNION ALL").collect();
+        assert_eq!(
+            parts.len(),
+            3,
+            "Should have 3 branches, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_with_filter() {
+        let result = translate(
+            "SELECT ?s ?o WHERE { \
+                { ?s <http://example.org/a> ?o . FILTER(?o > 10) } \
+                UNION \
+                { ?s <http://example.org/b> ?o } \
+            }",
+        );
+        assert!(
+            result.is_ok(),
+            "UNION with FILTER failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("UNION ALL"));
+        assert!(cypher.query.contains("WHERE"));
+    }
+
+    #[test]
+    fn test_union_with_limit_offset() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            } LIMIT 10 OFFSET 5",
+        );
+        assert!(
+            result.is_ok(),
+            "UNION with LIMIT/OFFSET failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("UNION ALL"));
+        assert!(cypher.query.contains("LIMIT 10"));
+        assert!(cypher.query.contains("SKIP 5"));
+        // Should be wrapped in CALL { ... } since modifiers are present
+        assert!(
+            cypher.query.contains("CALL {"),
+            "UNION with LIMIT/OFFSET should be wrapped in CALL block, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_variables() {
+        let result = translate(
+            "SELECT ?s ?o WHERE { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.variables.contains(&"s".to_string()));
+        assert!(cypher.variables.contains(&"o".to_string()));
+    }
+
+    #[test]
+    fn test_union_select_star() {
+        let result = translate(
+            "SELECT * WHERE { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } }",
+        );
+        assert!(
+            result.is_ok(),
+            "UNION with SELECT * failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("UNION ALL"));
+        // SELECT * should collect variables from all branches
+        assert!(cypher.variables.contains(&"s".to_string()));
+        assert!(cypher.variables.contains(&"o".to_string()));
+    }
+
+    #[test]
+    fn test_union_with_order_by() {
+        let result = translate(
+            "SELECT ?s ?o WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            } ORDER BY ?s",
+        );
+        assert!(
+            result.is_ok(),
+            "UNION with ORDER BY failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("UNION ALL"));
+        assert!(
+            cypher.query.contains("ORDER BY"),
+            "Should contain ORDER BY clause, got: {}",
+            cypher.query
+        );
+        // Should be wrapped in CALL { ... } since ORDER BY is present
+        assert!(
+            cypher.query.contains("CALL {"),
+            "UNION with ORDER BY should be wrapped in CALL block, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_with_uri_in_branch() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+                { ?s <http://example.org/type> <http://example.org/Cat> } \
+                UNION \
+                { ?s <http://example.org/type> <http://example.org/Dog> } \
+            }",
+        );
+        assert!(result.is_ok(), "UNION with URIs failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("UNION ALL"));
+        // URI objects generate WHERE conditions
+        let parts: Vec<&str> = cypher.query.split("UNION ALL").collect();
+        assert_eq!(parts.len(), 2);
+        assert!(
+            parts[0].contains("WHERE"),
+            "First branch should have WHERE for URI condition"
+        );
+        assert!(
+            parts[1].contains("WHERE"),
+            "Second branch should have WHERE for URI condition"
+        );
+    }
+
+    #[test]
+    fn test_union_distinct_uses_union_separator() {
+        let result = translate(
+            "SELECT DISTINCT ?s WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            }",
+        );
+        assert!(result.is_ok(), "DISTINCT UNION failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        // DISTINCT should use UNION (not UNION ALL) and RETURN DISTINCT
+        assert!(
+            !cypher.query.contains("UNION ALL"),
+            "DISTINCT UNION should not use UNION ALL, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("\nUNION\n"),
+            "DISTINCT UNION should use UNION separator, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("RETURN DISTINCT"),
+            "DISTINCT UNION should use RETURN DISTINCT, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_non_distinct_uses_union_all() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("UNION ALL"),
+            "Non-distinct UNION should use UNION ALL, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_with_limit_wrapped_in_call() {
+        let result = translate(
+            "SELECT ?s ?o WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            } LIMIT 5",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        // Should be: CALL { <union> } RETURN ... LIMIT 5
+        assert!(
+            cypher.query.starts_with("CALL {"),
+            "Should start with CALL block, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("LIMIT 5"),
+            "Should have LIMIT, got: {}",
+            cypher.query
+        );
+        // The RETURN after CALL should project the variables
+        let after_call_close = cypher.query.split("}\n").last().unwrap();
+        assert!(
+            after_call_close.contains("RETURN"),
+            "Should have RETURN after CALL block, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_nested_union_returns_error() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { \
+                ?s <http://example.org/name> ?name . \
+                { { ?s <http://example.org/a> ?o } UNION { ?s <http://example.org/b> ?o } } \
+            }",
+        );
+        assert!(result.is_err(), "Nested UNION should return an error");
         let err = result.unwrap_err();
         assert!(
-            err.to_string().contains("UNION"),
-            "Error should mention UNION"
+            err.to_string().contains("UNION") || err.to_string().contains("Nested"),
+            "Error should mention UNION or Nested"
         );
     }
 
