@@ -147,42 +147,42 @@ impl<R: BufRead> Iterator for TriGQuadCollector<R> {
     type Item = ParseQuadResult;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Return any pending quads first
-        if !self.pending.is_empty() {
-            return Some(Ok(self.pending.remove(0)));
-        }
-
-        if self.finished || self.parser.is_end() {
-            return None;
-        }
-
-        // Parse the next step
-        let pending = &mut self.pending;
-        let converter = &self.converter;
-
-        match self
-            .parser
-            .parse_step(&mut |rio_quad| match converter.convert_quad(rio_quad) {
-                Ok(quad) => {
-                    pending.push(quad);
-                    Ok(())
-                }
-                Err(e) => Err(parser_error_to_turtle_error(e)),
-            }) {
-            Ok(()) => {
-                if !self.pending.is_empty() {
-                    Some(Ok(self.pending.remove(0)))
-                } else if self.parser.is_end() {
-                    self.finished = true;
-                    None
-                } else {
-                    // Try again
-                    self.next()
-                }
+        loop {
+            // Return any pending quads first
+            if !self.pending.is_empty() {
+                return Some(Ok(self.pending.remove(0)));
             }
-            Err(e) => {
-                self.finished = true;
-                Some(Err(ParseErrorInfo::new(e.to_string())))
+
+            if self.finished || self.parser.is_end() {
+                return None;
+            }
+
+            // Parse the next step
+            let pending = &mut self.pending;
+            let converter = &self.converter;
+
+            match self
+                .parser
+                .parse_step(&mut |rio_quad| match converter.convert_quad(rio_quad) {
+                    Ok(quad) => {
+                        pending.push(quad);
+                        Ok(())
+                    }
+                    Err(e) => Err(parser_error_to_turtle_error(e)),
+                }) {
+                Ok(()) => {
+                    if !self.pending.is_empty() {
+                        return Some(Ok(self.pending.remove(0)));
+                    } else if self.parser.is_end() {
+                        self.finished = true;
+                        return None;
+                    }
+                    // No quads produced yet, loop to try again
+                }
+                Err(e) => {
+                    self.finished = true;
+                    return Some(Err(ParseErrorInfo::new(e.to_string())));
+                }
             }
         }
     }

@@ -53,9 +53,11 @@ impl RdfFormat {
             if line_trimmed.is_empty() || line_trimmed.starts_with('#') {
                 continue;
             }
-            let upper = line_trimmed.to_uppercase();
-            if upper.starts_with("GRAPH ") || upper.starts_with("GRAPH\t") {
-                return Self::TriG;
+            if line_trimmed.len() > 5 && line_trimmed[..5].eq_ignore_ascii_case("GRAPH") {
+                match line_trimmed.as_bytes().get(5) {
+                    Some(b' ') | Some(b'\t') => return Self::TriG,
+                    _ => {}
+                }
             }
         }
 
@@ -225,9 +227,11 @@ fn parse_rdf(data: &str, format: RdfFormat) -> Result<Vec<Triple>, String> {
             reader.parse_all_str(data).map_err(|e| e.to_string())
         }
         RdfFormat::TriG => {
-            // Parse as quads, extract triples (graph component is preserved in Quad)
             let reader = TriGReader::new();
             let quads = reader.parse_all_str(data).map_err(|e| e.to_string())?;
+            if quads.iter().any(|q| !q.is_default_graph()) {
+                log::warn!("Input contains named graphs, which are not yet fully supported. All triples will be inserted into the default graph.");
+            }
             Ok(quads.into_iter().map(|q| q.triple).collect())
         }
         RdfFormat::JsonLd => Err("JSON-LD parsing not yet implemented".into()),
