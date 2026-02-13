@@ -151,10 +151,15 @@ impl SparqlToCypher {
         // Wrap in CALL { ... } subquery when ORDER BY/LIMIT/SKIP are needed,
         // since FalkorDB does not allow these directly after a UNION
         let mut cypher = if has_modifiers {
-            let return_items: Vec<String> = return_vars.iter().map(|v| v.name.clone()).collect();
-            format!(
-                "CALL {{\n{union_body}\n}}\nRETURN {}",
+            let return_items: Vec<String> =
+                return_vars.iter().map(|v| v.name.clone()).collect();
+            let projection = if return_items.is_empty() {
+                "*".to_string()
+            } else {
                 return_items.join(", ")
+            };
+            format!(
+                "CALL {{\n{union_body}\n}}\nRETURN {projection}",
             )
         } else {
             union_body
