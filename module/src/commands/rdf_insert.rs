@@ -293,7 +293,7 @@ fn execute_cypher(
 
 /// RDF.INSERT command handler
 ///
-/// Syntax: RDF.INSERT <`graph_key`> <data> [FORMAT turtle|ntriples|nquads|jsonld] [ATOMIC]
+/// Syntax: RDF.INSERT <`graph_key`> <data> [FORMAT turtle|ntriples|nquads|trig|jsonld] [ATOMIC]
 ///
 /// Arguments:
 /// - `graph_key`: The `FalkorDB` graph name to insert into
