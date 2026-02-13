@@ -576,6 +576,23 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_construct_plain_string_literal_has_no_datatype_metadata() {
+        let query = r#"CONSTRUCT { ?s <http://example.org/label> "plain" } WHERE { ?s ?p ?o }"#;
+        let parsed = parse_sparql(query).unwrap();
+        let construct = parsed.as_construct().unwrap();
+        assert_eq!(construct.template.len(), 1);
+
+        match &construct.template[0].object {
+            TermPattern::Literal(lit) => {
+                assert_eq!(lit.value, "plain");
+                assert!(lit.datatype.is_none());
+                assert!(lit.language.is_none());
+            }
+            other => panic!("Expected literal object, got: {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_parse_ask() {
         let query = "ASK { ?s ?p ?o }";
         let parsed = parse_sparql(query).unwrap();

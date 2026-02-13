@@ -613,4 +613,129 @@ mod tests {
         assert_eq!(config.timeout, Some(Duration::from_secs(60)));
         assert_eq!(config.max_results, Some(100));
     }
+
+    #[test]
+    fn test_construct_results_with_constant_literal_datatype_and_blank_node() {
+        let cypher_query = CypherQuery {
+            query: "MATCH ...".to_string(),
+            variables: vec![],
+            query_type: CypherQueryType::Construct,
+            construct_template: Some(vec![crate::query::translator::TemplateTriple {
+                subject: TemplateTerm::BlankNode("b".to_string()),
+                predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                object: TemplateTerm::ConstantLiteral {
+                    value: "42".to_string(),
+                    datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+                    language: None,
+                },
+            }]),
+        };
+
+        let cypher_result = CypherResult {
+            columns: vec![],
+            rows: vec![vec![]],
+            stats: None,
+        };
+
+        let results = ResultConverter::to_construct_results(&cypher_query, cypher_result, 7);
+        assert_eq!(results.triples.len(), 1);
+        let triple = &results.triples[0];
+
+        match &triple.subject {
+            Subject::BlankNode(bn) => assert_eq!(bn.label(), "b_7"),
+            other => panic!("expected blank node subject, got: {other:?}"),
+        }
+        match &triple.object {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "42");
+                assert_eq!(
+                    lit.explicit_datatype().map(Iri::as_str),
+                    Some("http://www.w3.org/2001/XMLSchema#integer")
+                );
+            }
+            other => panic!("expected literal object, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_construct_results_invalid_datatype_falls_back_to_plain_literal() {
+        let cypher_query = CypherQuery {
+            query: "MATCH ...".to_string(),
+            variables: vec![],
+            query_type: CypherQueryType::Construct,
+            construct_template: Some(vec![crate::query::translator::TemplateTriple {
+                subject: TemplateTerm::ConstantIri("http://example.org/s".to_string()),
+                predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                object: TemplateTerm::ConstantLiteral {
+                    value: "hello".to_string(),
+                    datatype: Some("not a valid iri".to_string()),
+                    language: None,
+                },
+            }]),
+        };
+
+        let cypher_result = CypherResult {
+            columns: vec![],
+            rows: vec![vec![]],
+            stats: None,
+        };
+
+        let results = ResultConverter::to_construct_results(&cypher_query, cypher_result, 0);
+        assert_eq!(results.triples.len(), 1);
+        let triple = &results.triples[0];
+
+        match &triple.object {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "hello");
+                assert!(lit.is_plain());
+            }
+            other => panic!("expected literal object, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_construct_results_language_literal_and_bound_variable_paths() {
+        let cypher_query = CypherQuery {
+            query: "MATCH ...".to_string(),
+            variables: vec!["s".to_string()],
+            query_type: CypherQueryType::Construct,
+            construct_template: Some(vec![
+                crate::query::translator::TemplateTriple {
+                    subject: TemplateTerm::Bound("s".to_string()),
+                    predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                    object: TemplateTerm::ConstantLiteral {
+                        value: "bonjour".to_string(),
+                        datatype: None,
+                        language: Some("fr".to_string()),
+                    },
+                },
+                // Invalid subject type (literal bound to subject) should be skipped.
+                crate::query::translator::TemplateTriple {
+                    subject: TemplateTerm::Bound("lit".to_string()),
+                    predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                    object: TemplateTerm::ConstantIri("http://example.org/o".to_string()),
+                },
+            ]),
+        };
+
+        let cypher_result = CypherResult {
+            columns: vec!["s".to_string(), "lit".to_string()],
+            rows: vec![vec![
+                CypherValue::String("http://example.org/s1".to_string()),
+                CypherValue::String("plain literal".to_string()),
+            ]],
+            stats: None,
+        };
+
+        let results = ResultConverter::to_construct_results(&cypher_query, cypher_result, 0);
+        assert_eq!(results.triples.len(), 1);
+
+        match &results.triples[0].object {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "bonjour");
+                assert_eq!(lit.language().as_deref(), Some("fr"));
+            }
+            other => panic!("expected literal object, got: {other:?}"),
+        }
+    }
 }
