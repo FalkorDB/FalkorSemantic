@@ -16,7 +16,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use falkorsemantic_mapper::Mapper;
-use falkorsemantic_parser::formats::NTriplesReader;
+use falkorsemantic_parser::formats::{NTriplesReader, TriGReader};
 use falkorsemantic_parser::rdf::Triple;
 use falkorsemantic_parser::TurtleParser;
 
@@ -153,7 +153,8 @@ impl<'a> BulkInsertArgs<'a> {
                     i += 1;
                     if i >= args.len() {
                         return Err(RedisError::String(
-                            "FORMAT requires a value (turtle, ntriples, nquads, jsonld)".into(),
+                            "FORMAT requires a value (turtle, ntriples, nquads, trig, jsonld)"
+                                .into(),
                         ));
                     }
                     let fmt_str = args[i]
@@ -161,7 +162,7 @@ impl<'a> BulkInsertArgs<'a> {
                         .map_err(|_| RedisError::String("Invalid format value".into()))?;
                     format = Some(RdfFormat::from_str(fmt_str).ok_or_else(|| {
                         RedisError::String(format!(
-                            "Unknown format '{fmt_str}'. Use: turtle, ntriples, nquads, jsonld"
+                            "Unknown format '{fmt_str}'. Use: turtle, ntriples, nquads, trig, jsonld"
                         ))
                     })?);
                 }
@@ -234,6 +235,7 @@ fn detect_format_from_path(path: &Path) -> Option<RdfFormat> {
             "ttl" | "turtle" => Some(RdfFormat::Turtle),
             "nt" | "ntriples" => Some(RdfFormat::NTriples),
             "nq" | "nquads" => Some(RdfFormat::NQuads),
+            "trig" => Some(RdfFormat::TriG),
             "jsonld" | "json" => Some(RdfFormat::JsonLd),
             _ => None,
         })
@@ -388,6 +390,14 @@ fn load_complete_file(
             let mut parser = TurtleParser::new();
             parser.parse(&content).map_err(|e| e.to_string())?
         }
+        RdfFormat::TriG => {
+            let reader = TriGReader::new();
+            let quads = reader.parse_all_str(&content).map_err(|e| e.to_string())?;
+            if quads.iter().any(|q| !q.is_default_graph()) {
+                log::warn!("TriG input contains named graphs; all triples will be inserted into the default graph.");
+            }
+            quads.into_iter().map(|q| q.triple).collect()
+        }
         RdfFormat::JsonLd => {
             return Err("JSON-LD parsing not yet implemented".into());
         }
@@ -505,7 +515,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             )
             .map_err(RedisError::String)?
         }
-        RdfFormat::Turtle | RdfFormat::JsonLd => {
+        RdfFormat::Turtle | RdfFormat::TriG | RdfFormat::JsonLd => {
             // Load complete file for formats requiring full context
             load_complete_file(
                 ctx,
@@ -559,6 +569,10 @@ mod tests {
         assert_eq!(
             detect_format_from_path(Path::new("data.jsonld")),
             Some(RdfFormat::JsonLd)
+        );
+        assert_eq!(
+            detect_format_from_path(Path::new("data.trig")),
+            Some(RdfFormat::TriG)
         );
         assert_eq!(detect_format_from_path(Path::new("data.txt")), None);
     }
