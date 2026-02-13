@@ -333,7 +333,7 @@ impl ResultConverter {
             TemplateTerm::BlankNode(label) => Some(Subject::BlankNode(BlankNode::new(format!(
                 "{label}_{row_id}"
             )))),
-            TemplateTerm::ConstantLiteral(_) => None, // literals cannot be subjects
+            TemplateTerm::ConstantLiteral { .. } => None, // literals cannot be subjects
         }
     }
 
@@ -366,7 +366,21 @@ impl ResultConverter {
                 Term::Literal(lit) => Some(Object::Literal(lit.clone())),
             },
             TemplateTerm::ConstantIri(iri) => Some(Object::Iri(Iri::new_unchecked(iri.clone()))),
-            TemplateTerm::ConstantLiteral(val) => Some(Object::Literal(Literal::new(val.clone()))),
+            TemplateTerm::ConstantLiteral {
+                value,
+                datatype,
+                language,
+            } => {
+                let literal = if let Some(lang) = language {
+                    Literal::with_language(value.clone(), lang.clone())
+                        .unwrap_or_else(|_| Literal::new(value.clone()))
+                } else if let Some(datatype) = datatype {
+                    Literal::with_datatype(value.clone(), Iri::new_unchecked(datatype.clone()))
+                } else {
+                    Literal::new(value.clone())
+                };
+                Some(Object::Literal(literal))
+            }
             TemplateTerm::BlankNode(label) => Some(Object::BlankNode(BlankNode::new(format!(
                 "{label}_{row_id}"
             )))),

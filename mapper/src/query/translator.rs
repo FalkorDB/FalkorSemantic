@@ -286,7 +286,11 @@ impl SparqlToCypher {
                 TemplateTerm::Bound(v.name.clone())
             }
             TermPattern::NamedNode(n) => TemplateTerm::ConstantIri(n.iri.clone()),
-            TermPattern::Literal(s) => TemplateTerm::ConstantLiteral(s.clone()),
+            TermPattern::Literal(lit) => TemplateTerm::ConstantLiteral {
+                value: lit.value.clone(),
+                datatype: lit.datatype.clone(),
+                language: lit.language.clone(),
+            },
             TermPattern::BlankNode(b) => TemplateTerm::BlankNode(b.clone()),
         }
     }
@@ -798,8 +802,12 @@ pub enum TemplateTerm {
     Bound(String),
     /// A constant IRI
     ConstantIri(String),
-    /// A constant literal value
-    ConstantLiteral(String),
+    /// A constant literal value with optional datatype/language metadata
+    ConstantLiteral {
+        value: String,
+        datatype: Option<String>,
+        language: Option<String>,
+    },
     /// A blank node — a fresh blank node is generated per result row using this label
     BlankNode(String),
 }
@@ -1081,6 +1089,51 @@ mod tests {
             query.construct_template.is_some(),
             "construct_template should be populated"
         );
+    }
+
+    #[test]
+    fn test_construct_literal_metadata_preserved() {
+        let result = translate(
+            r#"CONSTRUCT {
+                ?s <http://example.org/p> "42"^^<http://www.w3.org/2001/XMLSchema#integer> .
+                ?s <http://example.org/label> "hello"@en .
+            } WHERE { ?s ?p ?o }"#,
+        );
+        assert!(result.is_ok(), "CONSTRUCT query should succeed");
+        let query = result.unwrap();
+        let template = query
+            .construct_template
+            .expect("construct_template should be populated");
+        assert_eq!(template.len(), 2);
+
+        match &template[0].object {
+            TemplateTerm::ConstantLiteral {
+                value,
+                datatype,
+                language,
+            } => {
+                assert_eq!(value, "42");
+                assert_eq!(
+                    datatype.as_deref(),
+                    Some("http://www.w3.org/2001/XMLSchema#integer")
+                );
+                assert!(language.is_none());
+            }
+            other => panic!("expected ConstantLiteral, got: {other:?}"),
+        }
+
+        match &template[1].object {
+            TemplateTerm::ConstantLiteral {
+                value,
+                datatype,
+                language,
+            } => {
+                assert_eq!(value, "hello");
+                assert_eq!(language.as_deref(), Some("en"));
+                assert!(datatype.is_none());
+            }
+            other => panic!("expected ConstantLiteral, got: {other:?}"),
+        }
     }
 
     #[test]
