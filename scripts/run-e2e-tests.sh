@@ -39,15 +39,19 @@ if redis-cli -p "$TEST_PORT" PING 2>/dev/null | grep -q PONG; then
     echo "Redis already running on port $TEST_PORT"
     STARTED_REDIS=false
 else
-    echo "=== Starting Redis on port $TEST_PORT ==="
-    redis-server \
-        --port "$TEST_PORT" \
-        --loadmodule "$MODULE_PATH" \
-        --daemonize yes \
+    echo "=== Starting FalkorDB container on port $TEST_PORT ==="
+    CONTAINER_NAME="falkorsemantic-e2e-$TEST_PORT"
+
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker run -d --rm \
+        --name "$CONTAINER_NAME" \
+        -p "$TEST_PORT:6379" \
+        -v "$PROJECT_DIR/target/debug:/target" \
+        falkordb/falkordb:latest \
+        --loadmodule /target/libfalkorsemantic_module.so \
         --loglevel warning \
         --save "" \
-        --appendonly no \
-        --pidfile "/tmp/redis-e2e-test-$TEST_PORT.pid"
+        --appendonly no >/dev/null
     
     # Wait for Redis to start
     for i in {1..30}; do
@@ -65,11 +69,19 @@ else
     STARTED_REDIS=true
 fi
 
-# Verify module is loaded
+# Verify modules are loaded
 if ! redis-cli -p "$TEST_PORT" MODULE LIST 2>/dev/null | grep -q falkorsemantic; then
     echo "Error: FalkorSemantic module is not loaded"
     if [ "$STARTED_REDIS" = true ]; then
-        redis-cli -p "$TEST_PORT" SHUTDOWN NOSAVE 2>/dev/null || true
+        docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    fi
+    exit 1
+fi
+
+if ! redis-cli -p "$TEST_PORT" MODULE LIST 2>/dev/null | grep -q falkordb; then
+    echo "Error: FalkorDB module is not loaded"
+    if [ "$STARTED_REDIS" = true ]; then
+        docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
     fi
     exit 1
 fi
@@ -81,14 +93,14 @@ TEST_EXIT_CODE=$?
 
 # Cleanup
 if [ "$STARTED_REDIS" = true ] && [ "$KEEP_RUNNING" = false ]; then
-    echo "=== Shutting down Redis ==="
-    redis-cli -p "$TEST_PORT" SHUTDOWN NOSAVE 2>/dev/null || true
+    echo "=== Shutting down FalkorDB container ==="
+    docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
 fi
 
 if [ "$KEEP_RUNNING" = true ]; then
     echo ""
-    echo "Redis is still running on port $TEST_PORT"
-    echo "To stop: redis-cli -p $TEST_PORT SHUTDOWN NOSAVE"
+    echo "FalkorDB container is still running on port $TEST_PORT"
+    echo "To stop: docker stop $CONTAINER_NAME"
 fi
 
 exit $TEST_EXIT_CODE

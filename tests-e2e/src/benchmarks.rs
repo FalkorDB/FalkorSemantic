@@ -11,8 +11,9 @@
 //! # Build the module in release mode for accurate benchmarks
 //! cargo build -p falkorsemantic-module --release
 //!
-//! # Start Redis with the module
-//! redis-server --loadmodule ./target/release/libfalkorsemantic_module.so --port 6399
+//! # Start FalkorDB with the FalkorSemantic module
+//! docker run --rm -p 6399:6379 -v "$(pwd)/target:/target" falkordb/falkordb:latest \
+//!   --loadmodule /target/release/libfalkorsemantic_module.so
 //!
 //! # Run benchmarks
 //! TEST_REDIS_PORT=6399 cargo test --test benchmarks -- --ignored --nocapture --test-threads=1
@@ -21,10 +22,9 @@
 //! Note: Benchmarks are ignored by default and require significant memory for large tests.
 
 use std::env;
-use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -125,7 +125,7 @@ fn wait_for_redis(port: u16, timeout: Duration) -> bool {
 
 /// Managed Redis server for benchmarking
 struct BenchRedisServer {
-    process: Option<Child>,
+    container_name: Option<String>,
     port: u16,
 }
 
@@ -134,14 +134,14 @@ impl BenchRedisServer {
         let port = get_test_port();
 
         if redis_is_available(port) {
-            if Self::verify_module_loaded(port) {
+            if Self::verify_required_modules_loaded(port) {
                 return Ok(Self {
-                    process: None,
+                    container_name: None,
                     port,
                 });
             } else {
                 return Err(format!(
-                    "Redis is running on port {} but FalkorSemantic module is not loaded",
+                    "Redis is running on port {} but required modules (falkordb + falkorsemantic) are not loaded",
                     port
                 ));
             }
@@ -155,14 +155,34 @@ impl BenchRedisServer {
             ));
         }
 
-        let mut child = Command::new("redis-server")
+        let module_dir = module_path
+            .parent()
+            .ok_or_else(|| format!("Invalid module path: {:?}", module_path))?;
+        let module_file = module_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("Invalid module file name: {:?}", module_path))?;
+        let container_name = format!("falkorsemantic-bench-{}", port);
+
+        // Clean up any stale container with the same name.
+        let _ = Command::new("docker")
+            .args(["rm", "-f", &container_name])
+            .output();
+
+        let output = Command::new("docker")
             .args([
-                "--port",
-                &port.to_string(),
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                &container_name,
+                "-p",
+                &format!("{}:6379", port),
+                "-v",
+                &format!("{}:/target", module_dir.display()),
+                "falkordb/falkordb:latest",
                 "--loadmodule",
-                module_path.to_str().unwrap(),
-                "--daemonize",
-                "no",
+                &format!("/target/{}", module_file),
                 "--loglevel",
                 "warning",
                 "--save",
@@ -172,36 +192,60 @@ impl BenchRedisServer {
                 "--maxmemory",
                 "8gb",
             ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start redis-server: {}", e))?;
+            .output()
+            .map_err(|e| format!("Failed to start FalkorDB container: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(format!(
+                "Failed to start FalkorDB container with Docker: {}",
+                stderr.trim()
+            ));
+        }
 
         if !wait_for_redis(port, REDIS_STARTUP_TIMEOUT) {
-            if let Some(stderr) = child.stderr.take() {
-                let reader = BufReader::new(stderr);
-                let errors: Vec<String> = reader.lines().take(10).filter_map(|l| l.ok()).collect();
-                child.kill().ok();
-                return Err(format!(
-                    "Redis failed to start within {:?}. Errors:\n{}",
-                    REDIS_STARTUP_TIMEOUT,
-                    errors.join("\n")
-                ));
-            }
-            child.kill().ok();
+            let logs = Command::new("docker")
+                .args(["logs", &container_name])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stderr).to_string())
+                .unwrap_or_else(|| "<failed to collect container logs>".to_string());
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
+                .output();
             return Err(format!(
-                "Redis failed to start within {:?}",
-                REDIS_STARTUP_TIMEOUT
+                "Redis failed to start within {:?}. Docker logs:\n{}",
+                REDIS_STARTUP_TIMEOUT, logs
+            ));
+        }
+
+        if !Self::verify_required_modules_loaded(port) {
+            let logs = Command::new("docker")
+                .args(["logs", &container_name])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stderr).to_string())
+                .unwrap_or_else(|| "<failed to collect container logs>".to_string());
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
+                .output();
+            return Err(format!(
+                "Container started on port {} but required modules were not loaded. Docker logs:\n{}",
+                port, logs
             ));
         }
 
         Ok(Self {
-            process: Some(child),
+            container_name: Some(container_name),
             port,
         })
     }
 
-    fn verify_module_loaded(port: u16) -> bool {
+    fn verify_required_modules_loaded(port: u16) -> bool {
+        Self::module_loaded(port, "falkordb") && Self::module_loaded(port, "falkorsemantic")
+    }
+
+    fn module_loaded(port: u16, module_name: &str) -> bool {
         let client = match redis::Client::open(format!("redis://127.0.0.1:{}/", port)) {
             Ok(c) => c,
             Err(_) => return false,
@@ -222,7 +266,7 @@ impl BenchRedisServer {
                             if let redis::Value::BulkString(k) = key {
                                 if k == b"name" {
                                     if let Some(redis::Value::BulkString(v)) = iter.next() {
-                                        if v == b"falkorsemantic" {
+                                        if v == module_name.as_bytes() {
                                             return true;
                                         }
                                     }
@@ -250,13 +294,10 @@ impl BenchRedisServer {
 
 impl Drop for BenchRedisServer {
     fn drop(&mut self) {
-        if let Some(mut process) = self.process.take() {
-            let _ = Command::new("redis-cli")
-                .args(["-p", &self.port.to_string(), "SHUTDOWN", "NOSAVE"])
+        if let Some(container_name) = self.container_name.take() {
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
                 .output();
-            thread::sleep(Duration::from_millis(500));
-            let _ = process.kill();
-            let _ = process.wait();
         }
     }
 }
