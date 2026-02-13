@@ -162,11 +162,7 @@ impl TestRedisServer {
 
         // Clean up any stale container with the same name.
         let _ = Command::new("docker")
-            .args([
-                "rm",
-                "-f",
-                &container_name,
-            ])
+            .args(["rm", "-f", &container_name])
             .output();
 
         // Start FalkorDB with the semantic module loaded.
