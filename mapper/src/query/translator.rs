@@ -614,8 +614,6 @@ impl SparqlToCypher {
                 );
 
                 let optional = format!("({subj_var})-[{rel_var}{pred_str}]->({edge_obj_var})");
-                let opt_cond =
-                    format!("({edge_obj_var} IS NOT NULL OR {subj_var}.{prop_key} IS NOT NULL)");
 
                 bound_vars.insert(Variable::from(v.clone()));
 
@@ -623,7 +621,7 @@ impl SparqlToCypher {
                     required_match: Some(format!("({subj_var})")),
                     optional_match: Some(optional),
                     conditions,
-                    optional_condition: Some(opt_cond),
+                    optional_condition: None,
                     bound_vars,
                 })
             }
