@@ -1,5 +1,5 @@
 [![CI](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-AGPL--v3-blue)](https://opensource.org/licenses/agpl-v3)
+[![License: AGPL](https://img.shields.io/badge/license-AGPL--v3-blue)](https://opensource.org/licenses/agpl-v3)
 [![Codecov](https://codecov.io/gh/falkordb/FalkorSemantic/branch/main/graph/badge.svg)](https://codecov.io/gh/falkordb/FalkorSemantic)
 
 # FalkorSemantic
