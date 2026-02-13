@@ -94,17 +94,20 @@ impl SparqlToCypher {
         let mut branches = Vec::new();
         Self::flatten_union(select.pattern.inner(), &mut branches);
 
+        // Single pass: process each branch once, collecting match/where parts and variables
+        let mut processed_branches = Vec::with_capacity(branches.len());
+        let mut all_vars = HashSet::new();
+        for branch in &branches {
+            let mut match_parts = Vec::new();
+            let mut where_parts = Vec::new();
+            let mut bound_vars = HashSet::new();
+            self.process_pattern(branch, &mut match_parts, &mut where_parts, &mut bound_vars)?;
+            all_vars.extend(bound_vars);
+            processed_branches.push((match_parts, where_parts));
+        }
+
         // Determine the return variables
-        // Collect variables from all branches to handle SELECT *
         let return_vars = if select.is_select_all() {
-            let mut all_vars = HashSet::new();
-            for branch in &branches {
-                let mut match_parts = Vec::new();
-                let mut where_parts = Vec::new();
-                let mut bound_vars = HashSet::new();
-                self.process_pattern(branch, &mut match_parts, &mut where_parts, &mut bound_vars)?;
-                all_vars.extend(bound_vars);
-            }
             let mut vars: Vec<_> = all_vars.into_iter().collect();
             vars.sort_by(|a, b| a.name.cmp(&b.name));
             vars
@@ -112,14 +115,9 @@ impl SparqlToCypher {
             select.projected_variables()
         };
 
-        // Generate a complete Cypher query for each branch
-        let mut branch_queries = Vec::new();
-        for branch in &branches {
-            let mut match_parts = Vec::new();
-            let mut where_parts = Vec::new();
-            let mut bound_vars = HashSet::new();
-            self.process_pattern(branch, &mut match_parts, &mut where_parts, &mut bound_vars)?;
-
+        // Build a complete Cypher query for each branch from the processed results
+        let mut branch_queries = Vec::with_capacity(processed_branches.len());
+        for (match_parts, where_parts) in &processed_branches {
             let mut cypher = String::new();
 
             let match_clause = if match_parts.is_empty() {
