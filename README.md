@@ -1,9 +1,10 @@
+[![CI](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml)
+[![License: AGPL](https://img.shields.io/badge/license-AGPL--v3-blue)](https://opensource.org/licenses/agpl-v3)
+[![Codecov](https://codecov.io/gh/falkordb/FalkorSemantic/branch/main/graph/badge.svg)](https://codecov.io/gh/falkordb/FalkorSemantic)
+
 # FalkorSemantic
 
 A high-performance Redis module that extends [FalkorDB](https://www.falkordb.com/) with RDF and SPARQL capabilities, bridging the property graph and semantic web worlds.
-
-[![CI](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/FalkorSemantic/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-AGPL--v3-blue)](https://opensource.org/licenses/agpl-v3)
  
 ## Overview
 
