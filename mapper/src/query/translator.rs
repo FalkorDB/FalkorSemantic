@@ -2,19 +2,60 @@
 //!
 //! Translates SPARQL queries to Cypher queries for execution against `FalkorDB`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use falkorsemantic_parser::sparql::{GraphPattern, Query, SelectQuery, Variable};
 
-use crate::graph::escape_cypher_string;
+use crate::graph::{escape_cypher_string, sanitize_identifier};
 use crate::MapperError;
+
+/// How a SPARQL variable is bound in the generated Cypher query
+#[derive(Debug, Clone)]
+enum VarBinding {
+    /// Bound as a graph node (existing behavior)
+    Node,
+    /// Could be either node or property — needs OPTIONAL MATCH edge + property fallback
+    Dual {
+        subject_var: String,
+        prop_key: String,
+        edge_obj_var: String,
+    },
+}
+
+/// Result of translating a single triple pattern
+struct TripleResult {
+    /// Pattern for the required MATCH clause (e.g., "(s)-[r]->(o)" or "(s)")
+    required_match: Option<String>,
+    /// Pattern for OPTIONAL MATCH (for dual binding patterns)
+    optional_match: Option<String>,
+    /// WHERE conditions for the required MATCH
+    conditions: Vec<String>,
+    /// WHERE condition for the OPTIONAL MATCH
+    optional_condition: Option<String>,
+    /// Variables bound by this triple
+    bound_vars: HashSet<Variable>,
+}
+
+/// Extract a property key from a predicate IRI, mirroring how `generate_literal_edge()` stores literals
+fn predicate_to_property_key(predicate_iri: &str) -> String {
+    let local_name = if let Some(pos) = predicate_iri.rfind('#') {
+        &predicate_iri[pos + 1..]
+    } else if let Some(pos) = predicate_iri.rfind('/') {
+        &predicate_iri[pos + 1..]
+    } else {
+        predicate_iri
+    };
+    sanitize_identifier(local_name)
+}
 
 /// Translates SPARQL queries to Cypher
 #[derive(Debug, Default)]
 pub struct SparqlToCypher {
     /// Variable counter for generating unique Cypher variables
     var_counter: std::cell::RefCell<usize>,
+    /// Tracks how each SPARQL variable is bound in the generated Cypher
+    var_bindings: std::cell::RefCell<HashMap<String, VarBinding>>,
 }
 
 impl SparqlToCypher {
@@ -45,10 +86,11 @@ impl SparqlToCypher {
             return self.translate_select_union(select);
         }
 
+        self.var_bindings.borrow_mut().clear();
         let mut cypher = String::new();
 
         // Translate the graph pattern to MATCH clause
-        let (match_clause, where_clause, bound_vars) =
+        let (match_clause, where_clause, optional_clauses, bound_vars) =
             self.translate_graph_pattern(&select.pattern)?;
 
         cypher.push_str(&match_clause);
@@ -56,6 +98,8 @@ impl SparqlToCypher {
         if !where_clause.is_empty() {
             write!(cypher, "\nWHERE {where_clause}").unwrap();
         }
+
+        cypher.push_str(&optional_clauses);
 
         // Build RETURN clause
         let return_vars = if select.is_select_all() {
@@ -98,12 +142,21 @@ impl SparqlToCypher {
         let mut processed_branches = Vec::with_capacity(branches.len());
         let mut all_vars = HashSet::new();
         for branch in &branches {
+            self.var_bindings.borrow_mut().clear();
             let mut match_parts = Vec::new();
             let mut where_parts = Vec::new();
+            let mut optional_parts = Vec::new();
             let mut bound_vars = HashSet::new();
-            self.process_pattern(branch, &mut match_parts, &mut where_parts, &mut bound_vars)?;
+            self.process_pattern(
+                branch,
+                &mut match_parts,
+                &mut where_parts,
+                &mut optional_parts,
+                &mut bound_vars,
+            )?;
             all_vars.extend(bound_vars);
-            processed_branches.push((match_parts, where_parts));
+            let branch_bindings = self.var_bindings.borrow().clone();
+            processed_branches.push((match_parts, where_parts, optional_parts, branch_bindings));
         }
 
         // Determine the return variables
@@ -117,7 +170,10 @@ impl SparqlToCypher {
 
         // Build a complete Cypher query for each branch from the processed results
         let mut branch_queries = Vec::with_capacity(processed_branches.len());
-        for (match_parts, where_parts) in &processed_branches {
+        for (match_parts, where_parts, optional_parts, branch_bindings) in &processed_branches {
+            // Restore bindings for this branch's RETURN clause
+            *self.var_bindings.borrow_mut() = branch_bindings.clone();
+
             let mut cypher = String::new();
 
             let match_clause = if match_parts.is_empty() {
@@ -129,6 +185,10 @@ impl SparqlToCypher {
 
             if !where_parts.is_empty() {
                 write!(cypher, "\nWHERE {}", where_parts.join(" AND ")).unwrap();
+            }
+
+            for opt in optional_parts {
+                cypher.push_str(opt);
             }
 
             let return_clause = self.build_return_clause(&return_vars, select.distinct);
@@ -197,12 +257,15 @@ impl SparqlToCypher {
 
     /// Translate an ASK query
     fn translate_ask(&self, pattern: &GraphPattern) -> Result<CypherQuery, MapperError> {
-        let (match_clause, where_clause, _) = self.translate_graph_pattern(pattern)?;
+        self.var_bindings.borrow_mut().clear();
+        let (match_clause, where_clause, optional_clauses, _) =
+            self.translate_graph_pattern(pattern)?;
 
         let mut cypher = match_clause;
         if !where_clause.is_empty() {
             write!(cypher, "\nWHERE {where_clause}").unwrap();
         }
+        cypher.push_str(&optional_clauses);
         cypher.push_str("\nRETURN count(*) > 0 AS result");
 
         Ok(CypherQuery {
@@ -212,19 +275,21 @@ impl SparqlToCypher {
         })
     }
 
-    /// Translate a graph pattern to MATCH and WHERE clauses
+    /// Translate a graph pattern to MATCH, WHERE, and OPTIONAL MATCH clauses
     fn translate_graph_pattern(
         &self,
         pattern: &GraphPattern,
-    ) -> Result<(String, String, HashSet<Variable>), MapperError> {
+    ) -> Result<(String, String, String, HashSet<Variable>), MapperError> {
         let mut match_parts = Vec::new();
         let mut where_parts = Vec::new();
+        let mut optional_parts = Vec::new();
         let mut bound_vars = HashSet::new();
 
         self.process_pattern(
             pattern.inner(),
             &mut match_parts,
             &mut where_parts,
+            &mut optional_parts,
             &mut bound_vars,
         )?;
 
@@ -235,8 +300,9 @@ impl SparqlToCypher {
         };
 
         let where_clause = where_parts.join(" AND ");
+        let optional_clauses = optional_parts.join("");
 
-        Ok((match_clause, where_clause, bound_vars))
+        Ok((match_clause, where_clause, optional_clauses, bound_vars))
     }
 
     /// Process a spargebra graph pattern recursively
@@ -245,6 +311,7 @@ impl SparqlToCypher {
         pattern: &spargebra::algebra::GraphPattern,
         match_parts: &mut Vec<String>,
         where_parts: &mut Vec<String>,
+        optional_parts: &mut Vec<String>,
         bound_vars: &mut HashSet<Variable>,
     ) -> Result<(), MapperError> {
         use spargebra::algebra::GraphPattern as GP;
@@ -252,29 +319,46 @@ impl SparqlToCypher {
         match pattern {
             GP::Bgp { patterns } => {
                 for triple in patterns {
-                    let (match_part, conditions, vars) = self.translate_triple_pattern(triple)?;
-                    match_parts.push(match_part);
-                    where_parts.extend(conditions);
-                    bound_vars.extend(vars);
+                    let result = self.translate_triple_pattern(triple)?;
+                    if let Some(m) = result.required_match {
+                        match_parts.push(m);
+                    }
+                    if let Some(opt) = result.optional_match {
+                        let mut opt_clause = format!("\nOPTIONAL MATCH {opt}");
+                        if let Some(cond) = result.optional_condition {
+                            write!(opt_clause, "\nWHERE {cond}").unwrap();
+                        }
+                        optional_parts.push(opt_clause);
+                    }
+                    where_parts.extend(result.conditions);
+                    bound_vars.extend(result.bound_vars);
                 }
             }
             GP::Join { left, right } => {
-                self.process_pattern(left, match_parts, where_parts, bound_vars)?;
-                self.process_pattern(right, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(left, match_parts, where_parts, optional_parts, bound_vars)?;
+                self.process_pattern(right, match_parts, where_parts, optional_parts, bound_vars)?;
             }
             GP::LeftJoin {
                 left,
                 right,
                 expression,
             } => {
-                self.process_pattern(left, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(left, match_parts, where_parts, optional_parts, bound_vars)?;
                 // OPTIONAL becomes OPTIONAL MATCH in Cypher
                 let mut opt_match = Vec::new();
                 let mut opt_where = Vec::new();
-                self.process_pattern(right, &mut opt_match, &mut opt_where, bound_vars)?;
+                let mut opt_optional = Vec::new();
+                self.process_pattern(
+                    right,
+                    &mut opt_match,
+                    &mut opt_where,
+                    &mut opt_optional,
+                    bound_vars,
+                )?;
                 if !opt_match.is_empty() {
                     match_parts.push(format!("OPTIONAL MATCH {}", opt_match.join(", ")));
                 }
+                optional_parts.extend(opt_optional);
                 // Handle the expression (filter on optional)
                 if let Some(expr) = expression {
                     if let Some(filter) = self.translate_expression(expr)? {
@@ -283,7 +367,7 @@ impl SparqlToCypher {
                 }
             }
             GP::Filter { inner, expr } => {
-                self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(inner, match_parts, where_parts, optional_parts, bound_vars)?;
                 if let Some(filter) = self.translate_expression(expr)? {
                     where_parts.push(filter);
                 }
@@ -303,28 +387,28 @@ impl SparqlToCypher {
                 variable,
                 expression: _,
             } => {
-                self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(inner, match_parts, where_parts, optional_parts, bound_vars)?;
                 bound_vars.insert(Variable::from(variable.clone()));
                 // BIND becomes WITH ... AS in Cypher
             }
             GP::OrderBy { inner, .. } | GP::Distinct { inner } | GP::Reduced { inner } => {
-                self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(inner, match_parts, where_parts, optional_parts, bound_vars)?;
             }
             GP::Project { inner, variables } => {
-                self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(inner, match_parts, where_parts, optional_parts, bound_vars)?;
                 for v in variables {
                     bound_vars.insert(Variable::from(v.clone()));
                 }
             }
             GP::Slice { inner, .. } => {
-                self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(inner, match_parts, where_parts, optional_parts, bound_vars)?;
             }
             GP::Graph { inner, .. } => {
                 // Named graph - translate inner pattern
-                self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(inner, match_parts, where_parts, optional_parts, bound_vars)?;
             }
             GP::Group { inner, .. } => {
-                self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(inner, match_parts, where_parts, optional_parts, bound_vars)?;
             }
             GP::Values {
                 variables,
@@ -365,11 +449,18 @@ impl SparqlToCypher {
             }
             GP::Minus { left, right } => {
                 // MINUS becomes NOT EXISTS in Cypher
-                self.process_pattern(left, match_parts, where_parts, bound_vars)?;
+                self.process_pattern(left, match_parts, where_parts, optional_parts, bound_vars)?;
                 let mut minus_match = Vec::new();
                 let mut minus_where = Vec::new();
+                let mut minus_optional = Vec::new();
                 let mut minus_vars = HashSet::new();
-                self.process_pattern(right, &mut minus_match, &mut minus_where, &mut minus_vars)?;
+                self.process_pattern(
+                    right,
+                    &mut minus_match,
+                    &mut minus_where,
+                    &mut minus_optional,
+                    &mut minus_vars,
+                )?;
                 if !minus_match.is_empty() {
                     where_parts.push(format!("NOT EXISTS {{ MATCH {} }}", minus_match.join(", ")));
                 }
@@ -380,10 +471,18 @@ impl SparqlToCypher {
     }
 
     /// Translate a triple pattern to Cypher MATCH pattern
+    ///
+    /// Dispatches based on object type:
+    /// - Literal constant + known predicate → property WHERE (no edge)
+    /// - Variable object + known predicate → dual pattern (OPTIONAL MATCH edge + property fallback)
+    /// - Named node / blank node / variable predicate → edge pattern (existing behavior)
     fn translate_triple_pattern(
         &self,
         triple: &spargebra::term::TriplePattern,
-    ) -> Result<(String, Vec<String>, HashSet<Variable>), MapperError> {
+    ) -> Result<TripleResult, MapperError> {
+        use spargebra::term::NamedNodePattern as NNP;
+        use spargebra::term::TermPattern as TP;
+
         let mut conditions = Vec::new();
         let mut bound_vars = HashSet::new();
 
@@ -394,24 +493,100 @@ impl SparqlToCypher {
         }
         self.add_term_variable(&triple.subject, &mut bound_vars);
 
-        // Translate predicate
-        let pred_str = self.predicate_to_cypher(&triple.predicate)?;
-        self.add_predicate_variable(&triple.predicate, &mut bound_vars);
-
-        // Translate object
-        let (obj_var, obj_cond) = self.term_to_cypher(&triple.object)?;
-        if let Some(cond) = obj_cond {
-            conditions.push(cond);
+        // Register subject as Node binding (don't overwrite existing bindings)
+        if let TP::Variable(v) = &triple.subject {
+            self.var_bindings
+                .borrow_mut()
+                .entry(v.as_str().to_string())
+                .or_insert(VarBinding::Node);
         }
-        self.add_term_variable(&triple.object, &mut bound_vars);
 
-        // Generate unique relationship variable
-        let rel_var = self.next_var("r");
+        // Get predicate IRI if known
+        let predicate_iri = match &triple.predicate {
+            NNP::NamedNode(n) => Some(n.as_str().to_string()),
+            NNP::Variable(_) => None,
+        };
 
-        // Build MATCH pattern
-        let pattern = format!("({subj_var})-[{rel_var}{pred_str}]->({obj_var})");
+        match (&triple.object, &predicate_iri) {
+            // Case 1: Literal constant object with known predicate → property access
+            (TP::Literal(lit), Some(pred_iri)) => {
+                let prop_key = predicate_to_property_key(pred_iri);
+                let value = escape_cypher_string(lit.value());
+                conditions.push(format!("{subj_var}.{prop_key} = '{value}'"));
 
-        Ok((pattern, conditions, bound_vars))
+                Ok(TripleResult {
+                    required_match: Some(format!("({subj_var})")),
+                    optional_match: None,
+                    conditions,
+                    optional_condition: None,
+                    bound_vars,
+                })
+            }
+
+            // Case 2: Variable object with known predicate → dual pattern
+            (TP::Variable(v), Some(pred_iri)) => {
+                let prop_key = predicate_to_property_key(pred_iri);
+                let pred_str = format!("{{predicate: '{}'}}", escape_cypher_string(pred_iri));
+                let rel_var = self.next_var("r");
+                let edge_obj_var = format!("{}_edge", v.as_str());
+
+                // Register dual binding
+                self.var_bindings.borrow_mut().insert(
+                    v.as_str().to_string(),
+                    VarBinding::Dual {
+                        subject_var: subj_var.clone(),
+                        prop_key: prop_key.clone(),
+                        edge_obj_var: edge_obj_var.clone(),
+                    },
+                );
+
+                let optional = format!("({subj_var})-[{rel_var}{pred_str}]->({edge_obj_var})");
+                let opt_cond =
+                    format!("({edge_obj_var} IS NOT NULL OR {subj_var}.{prop_key} IS NOT NULL)");
+
+                bound_vars.insert(Variable::from(v.clone()));
+
+                Ok(TripleResult {
+                    required_match: Some(format!("({subj_var})")),
+                    optional_match: Some(optional),
+                    conditions,
+                    optional_condition: Some(opt_cond),
+                    bound_vars,
+                })
+            }
+
+            // Case 3: All other cases → edge pattern (existing behavior)
+            // Named node / blank node objects, or any object with variable predicate
+            _ => {
+                let pred_str = self.predicate_to_cypher(&triple.predicate)?;
+                self.add_predicate_variable(&triple.predicate, &mut bound_vars);
+
+                let (obj_var, obj_cond) = self.term_to_cypher(&triple.object)?;
+                if let Some(cond) = obj_cond {
+                    conditions.push(cond);
+                }
+                self.add_term_variable(&triple.object, &mut bound_vars);
+
+                // Register node binding for variable objects
+                if let TP::Variable(v) = &triple.object {
+                    self.var_bindings
+                        .borrow_mut()
+                        .entry(v.as_str().to_string())
+                        .or_insert(VarBinding::Node);
+                }
+
+                let rel_var = self.next_var("r");
+                let pattern = format!("({subj_var})-[{rel_var}{pred_str}]->({obj_var})");
+
+                Ok(TripleResult {
+                    required_match: Some(pattern),
+                    optional_match: None,
+                    conditions,
+                    optional_condition: None,
+                    bound_vars,
+                })
+            }
+        }
     }
 
     /// Convert a term pattern to Cypher variable/value
@@ -663,15 +838,38 @@ impl SparqlToCypher {
     }
 
     /// Build RETURN clause for SELECT
+    ///
+    /// Uses `var_bindings` to determine how to project each variable:
+    /// - Node: `{uri: v.uri, value: v.value}`
+    /// - Dual: prioritize edge node, fall back to property
     fn build_return_clause(&self, variables: &[Variable], distinct: bool) -> String {
+        let bindings = self.var_bindings.borrow();
         let vars: Vec<String> = variables
             .iter()
             .map(|v| {
-                // Return node/relationship properties as structured data
-                format!(
-                    "CASE WHEN {} IS NOT NULL THEN {{ uri: {}.uri, value: {}.value }} ELSE null END AS {}",
-                    v.name, v.name, v.name, v.name
-                )
+                match bindings.get(&v.name) {
+                    Some(VarBinding::Dual {
+                        subject_var,
+                        prop_key,
+                        edge_obj_var,
+                    }) => {
+                        format!(
+                            "CASE WHEN {edge_obj_var} IS NOT NULL THEN \
+                             {{ uri: {edge_obj_var}.uri, value: {edge_obj_var}.value }} \
+                             WHEN {subject_var}.{prop_key} IS NOT NULL THEN \
+                             {{ value: toString({subject_var}.{prop_key}) }} \
+                             ELSE null END AS {}",
+                            v.name
+                        )
+                    }
+                    _ => {
+                        // Node binding or unknown — default behavior
+                        format!(
+                            "CASE WHEN {} IS NOT NULL THEN {{ uri: {}.uri, value: {}.value }} ELSE null END AS {}",
+                            v.name, v.name, v.name, v.name
+                        )
+                    }
+                }
             })
             .collect();
 
@@ -1141,5 +1339,197 @@ mod tests {
             err.to_string().contains("UNION") || err.to_string().contains("Nested"),
             "Error should mention UNION or Nested"
         );
+    }
+
+    // --- Literal property pattern tests ---
+
+    #[test]
+    fn test_literal_constant_object() {
+        // ?s foaf:name "Alice" → property WHERE, no edge
+        let result = translate("SELECT ?s WHERE { ?s <http://xmlns.com/foaf/0.1/name> \"Alice\" }");
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        // Should use property access, not edge pattern
+        assert!(
+            cypher.query.contains("s.name = 'Alice'"),
+            "Should contain property access s.name = 'Alice', got: {}",
+            cypher.query
+        );
+        // Should NOT have a relationship pattern for this predicate
+        assert!(
+            !cypher
+                .query
+                .contains("predicate: 'http://xmlns.com/foaf/0.1/name'"),
+            "Should not use edge pattern for literal object, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_variable_object_dual_pattern() {
+        // ?s foaf:name ?name → OPTIONAL MATCH + property fallback
+        let result =
+            translate("SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name }");
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        // Should have OPTIONAL MATCH for the edge pattern
+        assert!(
+            cypher.query.contains("OPTIONAL MATCH"),
+            "Should contain OPTIONAL MATCH for dual pattern, got: {}",
+            cypher.query
+        );
+        // Should reference the edge object variable
+        assert!(
+            cypher.query.contains("name_edge"),
+            "Should contain name_edge variable, got: {}",
+            cypher.query
+        );
+        // Should have property fallback in WHERE
+        assert!(
+            cypher.query.contains("s.name IS NOT NULL"),
+            "Should have property fallback, got: {}",
+            cypher.query
+        );
+        // RETURN should have dual CASE expression
+        assert!(
+            cypher.query.contains("name_edge IS NOT NULL"),
+            "RETURN should check edge var first, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("toString(s.name)"),
+            "RETURN should have property fallback with toString, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_iri_object_edge_only() {
+        // ?s ex:knows <http://ex.org/Bob> → edge only (unchanged)
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/knows> <http://example.org/Bob> }");
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        // Should use edge pattern
+        assert!(
+            cypher
+                .query
+                .contains("predicate: 'http://example.org/knows'"),
+            "Should have edge pattern with predicate, got: {}",
+            cypher.query
+        );
+        // Should have URI condition for the object
+        assert!(
+            cypher.query.contains("example.org/Bob"),
+            "Should reference Bob URI, got: {}",
+            cypher.query
+        );
+        // Should NOT have OPTIONAL MATCH
+        assert!(
+            !cypher.query.contains("OPTIONAL MATCH"),
+            "Should not have OPTIONAL MATCH for IRI object, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_mixed_literal_and_edge() {
+        // Query with both literal predicate and IRI predicate
+        // Both use dual patterns since we can't know at translation time whether objects are literals or IRIs
+        let result = translate(
+            "SELECT ?s ?name ?friend WHERE { \
+                ?s <http://xmlns.com/foaf/0.1/name> ?name . \
+                ?s <http://example.org/knows> ?friend \
+            }",
+        );
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        // Both should have OPTIONAL MATCH (dual patterns)
+        assert!(
+            cypher.query.contains("name_edge"),
+            "Should have name_edge variable, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("friend_edge"),
+            "Should have friend_edge variable, got: {}",
+            cypher.query
+        );
+        // Both should have property fallbacks in RETURN
+        assert!(
+            cypher.query.contains("toString(s.name)"),
+            "Should have name property fallback, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("toString(s.knows)"),
+            "Should have knows property fallback, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_variable_predicate_edge_only() {
+        // ?s ?p ?o → edge only (no property key derivable)
+        let result = translate("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        // Should use edge pattern (no predicate constraint since ?p is variable)
+        assert!(
+            cypher.query.contains("MATCH (s)-["),
+            "Should have edge pattern, got: {}",
+            cypher.query
+        );
+        // Should NOT have OPTIONAL MATCH
+        assert!(
+            !cypher.query.contains("OPTIONAL MATCH"),
+            "Should not have OPTIONAL MATCH for variable predicate, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_with_literal_object() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+                { ?s <http://xmlns.com/foaf/0.1/name> \"Alice\" } \
+                UNION \
+                { ?s <http://xmlns.com/foaf/0.1/name> \"Bob\" } \
+            }",
+        );
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("UNION ALL"));
+        // Both branches should use property access
+        assert!(
+            cypher.query.contains("s.name = 'Alice'"),
+            "Should have property access for Alice, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("s.name = 'Bob'"),
+            "Should have property access for Bob, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_predicate_to_property_key_extraction() {
+        // Test the property key extraction logic
+        assert_eq!(
+            predicate_to_property_key("http://xmlns.com/foaf/0.1/name"),
+            "name"
+        );
+        // '#' delimiter: "type" starts with a letter, so no underscore prefix
+        assert_eq!(
+            predicate_to_property_key("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            "type"
+        );
+        assert_eq!(
+            predicate_to_property_key("http://example.org/knows"),
+            "knows"
+        );
+        // Numeric start gets underscore prefix
+        assert_eq!(predicate_to_property_key("http://example.org/123"), "_123");
     }
 }
