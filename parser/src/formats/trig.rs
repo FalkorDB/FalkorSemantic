@@ -3,6 +3,7 @@
 //! Streaming parser for the TriG RDF format.
 //! TriG extends Turtle with support for named graphs via `GRAPH <iri> { ... }` blocks.
 
+use std::collections::VecDeque;
 use std::io::BufRead;
 
 use oxiri::Iri;
@@ -52,21 +53,16 @@ impl TriGReader {
         self
     }
 
-    /// Get the configured converter
-    fn converter(&self) -> RioConverter {
-        match &self.blank_node_prefix {
-            Some(prefix) => RioConverter::with_blank_node_prefix(prefix.clone()),
-            None => RioConverter::new(),
-        }
-    }
-
     /// Parse all quads from a reader into a vector
     ///
     /// Returns an error on the first parse failure.
     pub fn parse_all<R: BufRead>(&self, reader: R) -> Result<Vec<Quad>, ParseErrorInfo> {
         let mut quads = Vec::new();
         let mut parser = TriGParser::new(reader, self.base_iri.clone());
-        let converter = self.converter();
+        let converter = match &self.blank_node_prefix {
+            Some(prefix) => RioConverter::with_blank_node_prefix(prefix.clone()),
+            None => RioConverter::new(),
+        };
 
         while !parser.is_end() {
             if let Err(e) =
@@ -124,7 +120,7 @@ impl QuadParser for TriGReader {
 pub struct TriGQuadCollector<R: BufRead> {
     parser: TriGParser<R>,
     converter: RioConverter,
-    pending: Vec<Quad>,
+    pending: VecDeque<Quad>,
     finished: bool,
 }
 
@@ -137,7 +133,7 @@ impl<R: BufRead> TriGQuadCollector<R> {
         Self {
             parser: TriGParser::new(reader, base_iri),
             converter,
-            pending: Vec::new(),
+            pending: VecDeque::new(),
             finished: false,
         }
     }
@@ -150,7 +146,7 @@ impl<R: BufRead> Iterator for TriGQuadCollector<R> {
         loop {
             // Return any pending quads first
             if !self.pending.is_empty() {
-                return Some(Ok(self.pending.remove(0)));
+                return Some(Ok(self.pending.pop_front().unwrap()));
             }
 
             if self.finished || self.parser.is_end() {
@@ -165,14 +161,14 @@ impl<R: BufRead> Iterator for TriGQuadCollector<R> {
                 .parser
                 .parse_step(&mut |rio_quad| match converter.convert_quad(rio_quad) {
                     Ok(quad) => {
-                        pending.push(quad);
+                        pending.push_back(quad);
                         Ok(())
                     }
                     Err(e) => Err(parser_error_to_turtle_error(e)),
                 }) {
                 Ok(()) => {
                     if !self.pending.is_empty() {
-                        return Some(Ok(self.pending.remove(0)));
+                        return Some(Ok(self.pending.pop_front().unwrap()));
                     } else if self.parser.is_end() {
                         self.finished = true;
                         return None;
