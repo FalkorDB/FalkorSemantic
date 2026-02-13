@@ -564,6 +564,7 @@ dependencies = [
  "falkorsemantic-storage",
  "log",
  "mockall",
+ "oxrdf",
  "serde",
  "serde_json",
  "spargebra",

@@ -55,22 +55,46 @@ fn get_test_port() -> u16 {
 
 /// Get the path to the compiled module
 fn get_module_path() -> PathBuf {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let path = PathBuf::from(manifest_dir);
+    let manifest_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
+    let workspace_dir = manifest_dir
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| manifest_dir.clone());
 
-    // Try debug first, then release
-    let debug_path = path.join("target/debug/libfalkorsemantic_module.so");
-    if debug_path.exists() {
-        return debug_path;
+    let mut target_dirs = Vec::new();
+    if let Ok(target_dir) = env::var("CARGO_TARGET_DIR") {
+        let target_dir = PathBuf::from(target_dir);
+        if target_dir.is_absolute() {
+            target_dirs.push(target_dir);
+        } else {
+            target_dirs.push(workspace_dir.join(&target_dir));
+            target_dirs.push(manifest_dir.join(&target_dir));
+        }
     }
 
-    let release_path = path.join("target/release/libfalkorsemantic_module.so");
-    if release_path.exists() {
-        return release_path;
+    target_dirs.push(workspace_dir.join("target"));
+    target_dirs.push(workspace_dir.join("target/llvm-cov-target"));
+    target_dirs.push(manifest_dir.join("target"));
+    target_dirs.push(manifest_dir.join("target/llvm-cov-target"));
+
+    // Try debug first, then release.
+    for target_dir in &target_dirs {
+        let debug_path = target_dir.join("debug/libfalkorsemantic_module.so");
+        if debug_path.exists() {
+            return debug_path;
+        }
     }
 
-    // Return debug path anyway - will fail with helpful message
-    debug_path
+    for target_dir in &target_dirs {
+        let release_path = target_dir.join("release/libfalkorsemantic_module.so");
+        if release_path.exists() {
+            return release_path;
+        }
+    }
+
+    // Return a likely debug path for a helpful error message.
+    workspace_dir.join("target/debug/libfalkorsemantic_module.so")
 }
 
 /// Check if Redis is available on the test port
@@ -2045,4 +2069,16 @@ mod rdf_query_values {
             json
         );
     }
+}
+
+/// Coverage smoke test that avoids external FalkorDB runtime dependencies.
+#[test]
+#[ignore]
+fn test_module_binary_exists_for_coverage() {
+    let module_path = get_module_path();
+    assert!(
+        module_path.exists(),
+        "Expected compiled module binary at {:?}. Run 'cargo build -p falkorsemantic-module' first.",
+        module_path
+    );
 }
