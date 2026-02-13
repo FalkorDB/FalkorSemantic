@@ -92,13 +92,21 @@ impl TriGReader {
 
     /// Parse TriG from a reader, returning an iterator
     pub fn parse_iter<R: BufRead>(&self, reader: R) -> TriGQuadCollector<R> {
-        TriGQuadCollector::new(reader, self.blank_node_prefix.clone(), self.base_iri.clone())
+        TriGQuadCollector::new(
+            reader,
+            self.blank_node_prefix.clone(),
+            self.base_iri.clone(),
+        )
     }
 
     /// Parse TriG from a string, returning an iterator
     #[must_use]
     pub fn parse_str<'a>(&self, input: &'a str) -> TriGQuadCollector<&'a [u8]> {
-        TriGQuadCollector::new(input.as_bytes(), self.blank_node_prefix.clone(), self.base_iri.clone())
+        TriGQuadCollector::new(
+            input.as_bytes(),
+            self.blank_node_prefix.clone(),
+            self.base_iri.clone(),
+        )
     }
 }
 

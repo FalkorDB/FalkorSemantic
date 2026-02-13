@@ -175,7 +175,8 @@ impl<'a> InsertArgs<'a> {
                     i += 1;
                     if i >= args.len() {
                         return Err(RedisError::String(
-                            "FORMAT requires a value (turtle, ntriples, nquads, trig, jsonld)".into(),
+                            "FORMAT requires a value (turtle, ntriples, nquads, trig, jsonld)"
+                                .into(),
                         ));
                     }
                     let fmt_str = args[i]
