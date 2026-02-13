@@ -5,6 +5,7 @@
 pub mod common;
 pub mod nquads;
 pub mod ntriples;
+pub mod trig;
 pub mod turtle;
 
 // Common types and traits
@@ -20,3 +21,6 @@ pub use ntriples::{
     parse_ntriples, parse_ntriples_reader, NTriplesIterator, NTriplesReader, ParseTripleResult,
     TripleCollector,
 };
+
+// TriG parser
+pub use trig::{parse_trig, parse_trig_reader, TriGIterator, TriGQuadCollector, TriGReader};

@@ -231,39 +231,57 @@ RDF.GRAPH STATS <graph>
 
 | Form | Status | Notes |
 |------|--------|-------|
-| SELECT | ✅ | Full support |
-| CONSTRUCT | ✅ | Full support |
+| SELECT | ✅ | Including DISTINCT, ORDER BY, LIMIT/OFFSET |
 | ASK | ✅ | Full support |
-| DESCRIBE | ✅ | CBD-based |
+| CONSTRUCT | 🚧 | Planned ([#53](https://github.com/FalkorDB/FalkorSemantic/issues/53)) |
+| DESCRIBE | 🚧 | Planned ([#54](https://github.com/FalkorDB/FalkorSemantic/issues/54)) |
 
 ### Graph Patterns
 
-| Feature | Status |
-|---------|--------|
-| Basic Graph Patterns | ✅ |
-| OPTIONAL | ✅ |
-| UNION | ✅ |
-| MINUS | ✅ |
-| FILTER | ✅ |
-| BIND | ✅ |
-| VALUES | ✅ |
-| Subqueries | ✅ |
-| Named Graphs (GRAPH) | ✅ |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Basic Graph Patterns | ✅ | |
+| OPTIONAL | ✅ | |
+| UNION | ✅ | Top-level UNION with DISTINCT support |
+| MINUS | ✅ | |
+| FILTER | ✅ | See supported functions below |
+| BIND | 🚧 | Variable tracked, expression ignored ([#69](https://github.com/FalkorDB/FalkorSemantic/issues/69)) |
+| VALUES | 🚧 | Variables tracked, bindings ignored ([#70](https://github.com/FalkorDB/FalkorSemantic/issues/70)) |
+| Subqueries | 🚧 | Flattened instead of nested ([#78](https://github.com/FalkorDB/FalkorSemantic/issues/78)) |
+| Named Graphs (GRAPH) | 🚧 | Parsed but not translated |
 
 ### Property Paths
 
+Property paths are parsed but currently simplified to a generic traversal pattern. Full path semantics are planned ([#77](https://github.com/FalkorDB/FalkorSemantic/issues/77)).
+
 | Path | Syntax | Status |
 |------|--------|--------|
-| Sequence | a/b | ✅ |
-| Alternative | a\|b | ✅ |
-| Inverse | ^a | ✅ |
-| Zero-or-more | a* | ✅ |
-| One-or-more | a+ | ✅ |
-| Zero-or-one | a? | ✅ |
+| Sequence | a/b | 🚧 |
+| Alternative | a\|b | 🚧 |
+| Inverse | ^a | 🚧 |
+| Zero-or-more | a* | 🚧 |
+| One-or-more | a+ | 🚧 |
+| Zero-or-one | a? | 🚧 |
 
-### Functions
+### Functions & Expressions
 
-Supported functions include: `STR`, `LANG`, `DATATYPE`, `IRI`, `BNODE`, `BOUND`, `IF`, `COALESCE`, `EXISTS`, `STRLEN`, `SUBSTR`, `UCASE`, `LCASE`, `CONTAINS`, `REGEX`, `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP_CONCAT`, and more.
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Comparison (=, !=, <, >, <=, >=) | ✅ | |
+| Logical (&&, \|\|, !) | ✅ | |
+| Arithmetic (+, -, *, /) | 🚧 | Planned ([#65](https://github.com/FalkorDB/FalkorSemantic/issues/65)) |
+| `STR`, `IRI`, `BNODE` | ✅ | |
+| `BOUND`, `IF`, `COALESCE` | ✅ | |
+| `STRLEN`, `UCASE`, `LCASE` | ✅ | |
+| `STRSTARTS`, `STRENDS`, `CONTAINS` | ✅ | |
+| `REGEX` | ✅ | |
+| `SUBSTR`, `CONCAT`, `REPLACE` | 🚧 | Planned ([#73](https://github.com/FalkorDB/FalkorSemantic/issues/73)) |
+| `LANG`, `DATATYPE` | 🚧 | Planned ([#73](https://github.com/FalkorDB/FalkorSemantic/issues/73)) |
+| `isIRI`, `isBlank`, `isLiteral`, `isNumeric` | 🚧 | Planned ([#74](https://github.com/FalkorDB/FalkorSemantic/issues/74)) |
+| `EXISTS` / `NOT EXISTS` | 🚧 | Planned ([#67](https://github.com/FalkorDB/FalkorSemantic/issues/67)) |
+| `IN` / `NOT IN` | ✅ / 🚧 | NOT IN planned ([#66](https://github.com/FalkorDB/FalkorSemantic/issues/66)) |
+| Aggregates (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`) | 🚧 | Planned ([#71](https://github.com/FalkorDB/FalkorSemantic/issues/71)) |
+| `GROUP BY` / `HAVING` | 🚧 | Planned ([#72](https://github.com/FalkorDB/FalkorSemantic/issues/72)) |
 
 ## RDF to Graph Mapping
 
