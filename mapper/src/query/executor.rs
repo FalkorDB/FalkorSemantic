@@ -375,7 +375,10 @@ impl ResultConverter {
                     Literal::with_language(value.clone(), lang.clone())
                         .unwrap_or_else(|_| Literal::new(value.clone()))
                 } else if let Some(datatype) = datatype {
-                    Literal::with_datatype(value.clone(), Iri::new_unchecked(datatype.clone()))
+                    match Iri::new(datatype.clone()) {
+                        Ok(iri) => Literal::with_datatype(value.clone(), iri),
+                        Err(_) => Literal::new(value.clone()),
+                    }
                 } else {
                     Literal::new(value.clone())
                 };

@@ -397,7 +397,9 @@ fn convert_term_pattern(tp: &spargebra::term::TermPattern) -> TermPattern {
         spargebra::term::TermPattern::Literal(l) => {
             let lexical = l.value().to_string();
             let language = l.language().map(std::string::ToString::to_string);
-            let datatype = if language.is_none() && l.to_string().contains("^^<") {
+            let datatype = if language.is_none()
+                && l.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string"
+            {
                 Some(l.datatype().as_str().to_string())
             } else {
                 None

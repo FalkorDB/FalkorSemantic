@@ -364,6 +364,13 @@ fn format_construct_results(
     }
 }
 
+fn construct_format_or_default(format: OutputFormat) -> OutputFormat {
+    match format {
+        OutputFormat::Json => OutputFormat::Turtle,
+        other => other,
+    }
+}
+
 /// RDF.QUERY command handler
 ///
 /// Syntax: RDF.QUERY <`graph_key`> <`sparql_query`> [FORMAT json|xml|csv|tsv] [TIMEOUT ms]
@@ -425,7 +432,8 @@ pub fn rdf_query(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             Ok(RedisValue::BulkString(formatted))
         }
         QueryResult::Construct(results) => {
-            let formatted = format_construct_results(&results, query_args.format)?;
+            let format = construct_format_or_default(query_args.format);
+            let formatted = format_construct_results(&results, format)?;
             Ok(RedisValue::BulkString(formatted))
         }
         QueryResult::Error(err) => Err(RedisError::String(format!("Query error: {err}"))),
@@ -443,11 +451,27 @@ mod tests {
         assert_eq!(OutputFormat::from_str("xml"), Some(OutputFormat::Xml));
         assert_eq!(OutputFormat::from_str("csv"), Some(OutputFormat::Csv));
         assert_eq!(OutputFormat::from_str("tsv"), Some(OutputFormat::Tsv));
+        assert_eq!(OutputFormat::from_str("turtle"), Some(OutputFormat::Turtle));
+        assert_eq!(OutputFormat::from_str("ttl"), Some(OutputFormat::Turtle));
+        assert_eq!(OutputFormat::from_str("rdf+json"), Some(OutputFormat::RdfJson));
+        assert_eq!(OutputFormat::from_str("rdfjson"), Some(OutputFormat::RdfJson));
         assert_eq!(OutputFormat::from_str("invalid"), None);
     }
 
     #[test]
     fn test_output_format_default() {
         assert_eq!(OutputFormat::default(), OutputFormat::Json);
+    }
+
+    #[test]
+    fn test_construct_format_default_from_json() {
+        assert_eq!(
+            construct_format_or_default(OutputFormat::Json),
+            OutputFormat::Turtle
+        );
+        assert_eq!(
+            construct_format_or_default(OutputFormat::RdfJson),
+            OutputFormat::RdfJson
+        );
     }
 }
