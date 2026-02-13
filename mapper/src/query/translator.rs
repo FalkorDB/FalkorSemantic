@@ -5,7 +5,9 @@
 use std::collections::HashSet;
 use std::fmt::Write;
 
-use falkorsemantic_parser::sparql::{GraphPattern, Query, SelectQuery, Variable};
+use falkorsemantic_parser::sparql::{
+    ConstructQuery, GraphPattern, Query, SelectQuery, TermPattern, Variable,
+};
 
 use crate::graph::escape_cypher_string;
 use crate::MapperError;
@@ -29,9 +31,7 @@ impl SparqlToCypher {
         match query {
             Query::Select(select) => self.translate_select(select),
             Query::Ask(ask) => self.translate_ask(&ask.pattern),
-            Query::Construct(_) => Err(MapperError::MappingError(
-                "CONSTRUCT queries not yet supported".into(),
-            )),
+            Query::Construct(construct) => self.translate_construct(construct),
             Query::Describe(_) => Err(MapperError::MappingError(
                 "DESCRIBE queries not yet supported".into(),
             )),
@@ -80,6 +80,7 @@ impl SparqlToCypher {
             query: cypher,
             variables: return_vars.iter().map(|v| v.name.clone()).collect(),
             query_type: CypherQueryType::Select,
+            construct_template: None,
         })
     }
 
@@ -97,7 +98,84 @@ impl SparqlToCypher {
             query: cypher,
             variables: vec!["result".to_string()],
             query_type: CypherQueryType::Ask,
+            construct_template: None,
         })
+    }
+
+    /// Translate a CONSTRUCT query
+    fn translate_construct(&self, construct: &ConstructQuery) -> Result<CypherQuery, MapperError> {
+        // Translate WHERE pattern to MATCH/WHERE clauses
+        let (match_clause, where_clause, _) = self.translate_graph_pattern(&construct.pattern)?;
+
+        // Collect unique variables referenced in the template (in order of first appearance)
+        let mut template_vars: Vec<String> = Vec::new();
+        let mut seen_vars: HashSet<String> = HashSet::new();
+
+        // Build the template, recording which variables are needed
+        let mut template_triples: Vec<TemplateTriple> = Vec::new();
+        for triple in &construct.template {
+            let subject =
+                Self::term_to_template(&triple.subject, &mut template_vars, &mut seen_vars);
+            let predicate =
+                Self::term_to_template(&triple.predicate, &mut template_vars, &mut seen_vars);
+            let object = Self::term_to_template(&triple.object, &mut template_vars, &mut seen_vars);
+            template_triples.push(TemplateTriple {
+                subject,
+                predicate,
+                object,
+            });
+        }
+
+        // Build Cypher query
+        let mut cypher = match_clause;
+        if !where_clause.is_empty() {
+            write!(cypher, "\nWHERE {where_clause}").unwrap();
+        }
+
+        // RETURN clause: expose each bound variable as a structured map
+        if template_vars.is_empty() {
+            // No variables in template — still need a valid RETURN for empty pattern
+            cypher.push_str("\nRETURN 1 LIMIT 1");
+        } else {
+            let return_parts: Vec<String> = template_vars
+                .iter()
+                .map(|var| {
+                    format!(
+                        "CASE WHEN {var} IS NOT NULL THEN \
+                         {{ uri: {var}.uri, value: {var}.value }} \
+                         ELSE null END AS {var}"
+                    )
+                })
+                .collect();
+            write!(cypher, "\nRETURN {}", return_parts.join(", ")).unwrap();
+        }
+
+        Ok(CypherQuery {
+            query: cypher,
+            variables: template_vars,
+            query_type: CypherQueryType::Construct,
+            construct_template: Some(template_triples),
+        })
+    }
+
+    /// Convert a SPARQL AST `TermPattern` to a `TemplateTerm`, recording any
+    /// new variable names into `template_vars`.
+    fn term_to_template(
+        term: &TermPattern,
+        template_vars: &mut Vec<String>,
+        seen_vars: &mut HashSet<String>,
+    ) -> TemplateTerm {
+        match term {
+            TermPattern::Variable(v) => {
+                if seen_vars.insert(v.name.clone()) {
+                    template_vars.push(v.name.clone());
+                }
+                TemplateTerm::Bound(v.name.clone())
+            }
+            TermPattern::NamedNode(n) => TemplateTerm::ConstantIri(n.iri.clone()),
+            TermPattern::Literal(s) => TemplateTerm::ConstantLiteral(s.clone()),
+            TermPattern::BlankNode(b) => TemplateTerm::BlankNode(b.clone()),
+        }
     }
 
     /// Translate a graph pattern to MATCH and WHERE clauses
@@ -600,6 +678,30 @@ impl SparqlToCypher {
     }
 }
 
+/// A term in a CONSTRUCT template — either a bound variable or a constant
+#[derive(Debug, Clone, PartialEq)]
+pub enum TemplateTerm {
+    /// Variable bound in the WHERE clause; the string is the column name
+    Bound(String),
+    /// A constant IRI
+    ConstantIri(String),
+    /// A constant literal value
+    ConstantLiteral(String),
+    /// A blank node — a fresh blank node is generated per result row using this label
+    BlankNode(String),
+}
+
+/// A triple in a CONSTRUCT template
+#[derive(Debug, Clone)]
+pub struct TemplateTriple {
+    /// Subject term
+    pub subject: TemplateTerm,
+    /// Predicate term
+    pub predicate: TemplateTerm,
+    /// Object term
+    pub object: TemplateTerm,
+}
+
 /// A translated Cypher query
 #[derive(Debug, Clone)]
 pub struct CypherQuery {
@@ -609,6 +711,8 @@ pub struct CypherQuery {
     pub variables: Vec<String>,
     /// Type of query
     pub query_type: CypherQueryType,
+    /// Template triples for CONSTRUCT queries (None for SELECT/ASK)
+    pub construct_template: Option<Vec<TemplateTriple>>,
 }
 
 /// Type of Cypher query
@@ -755,10 +859,54 @@ mod tests {
     }
 
     #[test]
-    fn test_construct_returns_error() {
+    fn test_construct_basic() {
         let result = translate("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
-        assert!(result.is_err(), "CONSTRUCT queries should return an error");
-        assert!(result.unwrap_err().to_string().contains("CONSTRUCT"));
+        assert!(result.is_ok(), "CONSTRUCT query should succeed");
+        let query = result.unwrap();
+        assert!(
+            query.query.contains("MATCH"),
+            "Query should contain MATCH clause"
+        );
+        assert!(
+            query.query.contains("RETURN"),
+            "Query should contain RETURN clause"
+        );
+        assert_eq!(query.query_type, CypherQueryType::Construct);
+    }
+
+    #[test]
+    fn test_construct_with_filter() {
+        let result = translate("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o . FILTER(?o > 5) }");
+        assert!(result.is_ok(), "CONSTRUCT with FILTER should succeed");
+        let query = result.unwrap();
+        assert!(
+            query.query.contains("MATCH"),
+            "Query should contain MATCH clause"
+        );
+        assert!(
+            query.query.contains("WHERE"),
+            "Query should contain WHERE clause for filter"
+        );
+        assert!(
+            query.query.contains("RETURN"),
+            "Query should contain RETURN clause"
+        );
+    }
+
+    #[test]
+    fn test_construct_query_type() {
+        let result = translate("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+        assert!(result.is_ok());
+        let query = result.unwrap();
+        assert_eq!(
+            query.query_type,
+            CypherQueryType::Construct,
+            "Query type should be Construct"
+        );
+        assert!(
+            query.construct_template.is_some(),
+            "construct_template should be populated"
+        );
     }
 
     #[test]

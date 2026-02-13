@@ -12,8 +12,8 @@ use falkorsemantic_mapper::query::{
     SparqlToCypher,
 };
 use falkorsemantic_parser::results::{
-    ask_to_csv, ask_to_json, ask_to_tsv, ask_to_xml, select_to_csv, select_to_json, select_to_tsv,
-    select_to_xml,
+    ask_to_csv, ask_to_json, ask_to_tsv, ask_to_xml, construct_to_rdf_json, construct_to_turtle,
+    select_to_csv, select_to_json, select_to_tsv, select_to_xml,
 };
 use falkorsemantic_parser::SparqlParser;
 
@@ -29,6 +29,10 @@ pub enum OutputFormat {
     Csv,
     /// TSV Results Format
     Tsv,
+    /// Turtle (text/turtle) — for CONSTRUCT results
+    Turtle,
+    /// RDF/JSON (application/rdf+json) — for CONSTRUCT results
+    RdfJson,
 }
 
 impl OutputFormat {
@@ -39,6 +43,8 @@ impl OutputFormat {
             "xml" => Some(Self::Xml),
             "csv" => Some(Self::Csv),
             "tsv" => Some(Self::Tsv),
+            "turtle" | "ttl" => Some(Self::Turtle),
+            "rdf+json" | "rdfjson" => Some(Self::RdfJson),
             _ => None,
         }
     }
@@ -81,7 +87,7 @@ impl QueryArgs {
                     let fmt_str = args[i].to_string_lossy();
                     format = OutputFormat::from_str(&fmt_str).ok_or_else(|| {
                         RedisError::String(format!(
-                            "Unknown format '{fmt_str}'. Use: json, xml, csv, tsv"
+                            "Unknown format '{fmt_str}'. Use: json, xml, csv, tsv, turtle, rdf+json"
                         ))
                     })?;
                 }
@@ -333,6 +339,27 @@ fn format_ask_results(
     }
 }
 
+/// Format CONSTRUCT results to string
+fn format_construct_results(
+    results: &falkorsemantic_parser::results::ConstructResults,
+    format: OutputFormat,
+) -> Result<String, RedisError> {
+    match format {
+        OutputFormat::Turtle | OutputFormat::Json | OutputFormat::Xml => {
+            // Default CONSTRUCT output is Turtle; JSON/XML also use Turtle
+            construct_to_turtle(results)
+                .map_err(|e| RedisError::String(format!("Turtle serialization error: {e}")))
+        }
+        OutputFormat::RdfJson => construct_to_rdf_json(results)
+            .map_err(|e| RedisError::String(format!("RDF/JSON serialization error: {e}"))),
+        OutputFormat::Csv | OutputFormat::Tsv => {
+            // Not meaningful for RDF triples; fall back to Turtle
+            construct_to_turtle(results)
+                .map_err(|e| RedisError::String(format!("Turtle serialization error: {e}")))
+        }
+    }
+}
+
 /// RDF.QUERY command handler
 ///
 /// Syntax: RDF.QUERY <`graph_key`> <`sparql_query`> [FORMAT json|xml|csv|tsv] [TIMEOUT ms]
@@ -391,6 +418,10 @@ pub fn rdf_query(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
         }
         QueryResult::Ask(result) => {
             let formatted = format_ask_results(&result, query_args.format)?;
+            Ok(RedisValue::BulkString(formatted))
+        }
+        QueryResult::Construct(results) => {
+            let formatted = format_construct_results(&results, query_args.format)?;
             Ok(RedisValue::BulkString(formatted))
         }
         QueryResult::Error(err) => Err(RedisError::String(format!("Query error: {err}"))),

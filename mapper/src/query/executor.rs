@@ -5,9 +5,10 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use falkorsemantic_parser::results::{AskResult, Binding, SelectResults, Term};
+use falkorsemantic_parser::rdf::{BlankNode, Iri, Literal, Object, Subject, Triple};
+use falkorsemantic_parser::results::{AskResult, Binding, ConstructResults, SelectResults, Term};
 
-use super::translator::{CypherQuery, CypherQueryType};
+use super::translator::{CypherQuery, CypherQueryType, TemplateTerm};
 
 /// Configuration for query execution
 #[derive(Debug, Clone)]
@@ -66,6 +67,8 @@ pub enum QueryResult {
     Select(SelectResults),
     /// ASK query result
     Ask(AskResult),
+    /// CONSTRUCT query results (RDF triples)
+    Construct(ConstructResults),
     /// Error during execution
     Error(QueryError),
 }
@@ -270,6 +273,106 @@ impl ResultConverter {
         results
     }
 
+    /// Convert Cypher result to CONSTRUCT results by instantiating the template
+    ///
+    /// `row_offset` is used to generate unique blank-node IDs across calls.
+    #[must_use]
+    pub fn to_construct_results(
+        cypher_query: &CypherQuery,
+        cypher_result: CypherResult,
+        row_offset: usize,
+    ) -> ConstructResults {
+        let template = match &cypher_query.construct_template {
+            Some(t) => t,
+            None => return ConstructResults::new(),
+        };
+
+        let variables = &cypher_query.variables;
+        let mut results = ConstructResults::new();
+
+        for (row_idx, row) in cypher_result.rows.into_iter().enumerate() {
+            // Build variable → Term map for this row
+            let mut binding: HashMap<String, Term> = HashMap::new();
+            for (i, val) in row.into_iter().enumerate() {
+                if i < variables.len() {
+                    if let Some(term) = val.to_term() {
+                        binding.insert(variables[i].clone(), term);
+                    }
+                }
+            }
+
+            let global_row = row_offset + row_idx;
+
+            for tmpl in template {
+                let subj = Self::instantiate_subject(&tmpl.subject, &binding, global_row);
+                let pred = Self::instantiate_predicate(&tmpl.predicate, &binding, global_row);
+                let obj = Self::instantiate_object(&tmpl.object, &binding, global_row);
+
+                if let (Some(s), Some(p), Some(o)) = (subj, pred, obj) {
+                    results.add_triple(Triple::new(s, p, o));
+                }
+            }
+        }
+
+        results
+    }
+
+    /// Instantiate a subject term from a result binding
+    fn instantiate_subject(
+        term: &TemplateTerm,
+        binding: &HashMap<String, Term>,
+        row_id: usize,
+    ) -> Option<Subject> {
+        match term {
+            TemplateTerm::Bound(col) => match binding.get(col)? {
+                Term::Iri(iri) => Some(Subject::Iri(iri.clone())),
+                Term::BlankNode(bn) => Some(Subject::BlankNode(bn.clone())),
+                Term::Literal(_) => None, // literals cannot be subjects
+            },
+            TemplateTerm::ConstantIri(iri) => Some(Subject::Iri(Iri::new_unchecked(iri.clone()))),
+            TemplateTerm::BlankNode(label) => Some(Subject::BlankNode(BlankNode::new(format!(
+                "{label}_{row_id}"
+            )))),
+            TemplateTerm::ConstantLiteral(_) => None, // literals cannot be subjects
+        }
+    }
+
+    /// Instantiate a predicate term from a result binding (must resolve to an IRI)
+    fn instantiate_predicate(
+        term: &TemplateTerm,
+        binding: &HashMap<String, Term>,
+        _row_id: usize,
+    ) -> Option<Iri> {
+        match term {
+            TemplateTerm::Bound(col) => match binding.get(col)? {
+                Term::Iri(iri) => Some(iri.clone()),
+                _ => None, // predicates must be IRIs
+            },
+            TemplateTerm::ConstantIri(iri) => Some(Iri::new_unchecked(iri.clone())),
+            _ => None,
+        }
+    }
+
+    /// Instantiate an object term from a result binding
+    fn instantiate_object(
+        term: &TemplateTerm,
+        binding: &HashMap<String, Term>,
+        row_id: usize,
+    ) -> Option<Object> {
+        match term {
+            TemplateTerm::Bound(col) => match binding.get(col)? {
+                Term::Iri(iri) => Some(Object::Iri(iri.clone())),
+                Term::BlankNode(bn) => Some(Object::BlankNode(bn.clone())),
+                Term::Literal(lit) => Some(Object::Literal(lit.clone())),
+            },
+            TemplateTerm::ConstantIri(iri) => Some(Object::Iri(Iri::new_unchecked(iri.clone()))),
+            TemplateTerm::ConstantLiteral(val) => Some(Object::Literal(Literal::new(val.clone()))),
+            TemplateTerm::BlankNode(label) => Some(Object::BlankNode(BlankNode::new(format!(
+                "{label}_{row_id}"
+            )))),
+        }
+    }
+
     /// Convert Cypher result to ASK result
     #[must_use]
     pub fn to_ask_result(cypher_result: CypherResult) -> AskResult {
@@ -356,12 +459,9 @@ impl<E: CypherExecutor> QueryExecutor<E> {
                         QueryResult::Ask(ask_result)
                     }
                     CypherQueryType::Construct => {
-                        // Not yet implemented
-                        QueryResult::Error(QueryError {
-                            message: "CONSTRUCT not yet implemented".into(),
-                            code: None,
-                            query: Some(cypher_query.query.clone()),
-                        })
+                        let construct_results =
+                            ResultConverter::to_construct_results(cypher_query, cypher_result, 0);
+                        QueryResult::Construct(construct_results)
                     }
                 }
             }
@@ -432,6 +532,7 @@ mod tests {
             query: "MATCH ...".to_string(),
             variables: vec!["s".to_string(), "p".to_string(), "o".to_string()],
             query_type: CypherQueryType::Select,
+            construct_template: None,
         };
 
         let cypher_result = CypherResult {
@@ -479,6 +580,7 @@ mod tests {
             query: "MATCH (s) RETURN s".to_string(),
             variables: vec!["s".to_string()],
             query_type: CypherQueryType::Select,
+            construct_template: None,
         };
 
         let result = query_executor.execute(&cypher_query);
