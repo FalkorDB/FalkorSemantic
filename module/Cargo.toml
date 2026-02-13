@@ -24,4 +24,4 @@ env_logger.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
-tempfile = "3.10"
+tempfile = "3.25"
