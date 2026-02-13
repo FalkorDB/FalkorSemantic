@@ -720,4 +720,266 @@ mod tests {
         let hint = manager.get_hint(None, false, None);
         assert!(matches!(hint, IndexHint::FullScan));
     }
+
+    #[test]
+    fn test_namespace_index_get_namespace() {
+        let index = NamespaceIndex::new();
+        index.add(1, "http://example.org/");
+
+        assert_eq!(
+            index.get_namespace(1),
+            Some("http://example.org/".to_string())
+        );
+        assert_eq!(index.get_namespace(999), None);
+    }
+
+    #[test]
+    fn test_namespace_index_namespaces() {
+        let index = NamespaceIndex::new();
+        index.add(1, "http://example.org/");
+        index.add(2, "http://other.org/");
+
+        let namespaces = index.namespaces();
+        assert_eq!(namespaces.len(), 2);
+        assert!(namespaces.contains(&"http://example.org/".to_string()));
+    }
+
+    #[test]
+    fn test_namespace_index_len_and_empty() {
+        let index = NamespaceIndex::new();
+        assert!(index.is_empty());
+        assert_eq!(index.len(), 0);
+
+        index.add(1, "http://example.org/");
+        assert!(!index.is_empty());
+        assert_eq!(index.len(), 1);
+    }
+
+    #[test]
+    fn test_namespace_index_remove() {
+        let index = NamespaceIndex::new();
+        index.add(1, "http://example.org/");
+        index.add(2, "http://example.org/");
+
+        index.remove(1);
+        let ids = index.get_by_namespace("http://example.org/");
+        assert_eq!(ids.len(), 1);
+        assert!(ids.contains(&2));
+        assert_eq!(index.len(), 1);
+
+        // Removing last IRI in a namespace cleans up the namespace entry
+        index.remove(2);
+        assert!(index.get_by_namespace("http://example.org/").is_empty());
+        assert!(index.is_empty());
+    }
+
+    #[test]
+    fn test_namespace_index_remove_unknown_id() {
+        let index = NamespaceIndex::new();
+        // Removing a non-existent ID should be a no-op
+        index.remove(999);
+        assert!(index.is_empty());
+    }
+
+    #[test]
+    fn test_namespace_index_clear() {
+        let index = NamespaceIndex::new();
+        index.add(1, "http://example.org/");
+        index.clear();
+        assert!(index.is_empty());
+        assert!(index.get_by_namespace("http://example.org/").is_empty());
+    }
+
+    #[test]
+    fn test_namespace_index_get_by_namespace_missing() {
+        let index = NamespaceIndex::new();
+        assert!(index.get_by_namespace("http://missing.org/").is_empty());
+        assert_eq!(index.namespace_count("http://missing.org/"), 0);
+    }
+
+    #[test]
+    fn test_local_name_index_clear() {
+        let index = LocalNameIndex::new();
+        index.add(1, "Person");
+        index.clear();
+        assert!(!index.contains("Person"));
+        assert!(index.get_by_local_name("Person").is_empty());
+    }
+
+    #[test]
+    fn test_type_index_all_types() {
+        let index = TypeIndex::new();
+        index.add_type(1, 100);
+        index.add_type(2, 200);
+
+        let types = index.all_types();
+        assert_eq!(types.len(), 2);
+        assert!(types.contains(&100));
+        assert!(types.contains(&200));
+    }
+
+    #[test]
+    fn test_type_index_len_and_empty() {
+        let index = TypeIndex::new();
+        assert!(index.is_empty());
+        assert_eq!(index.len(), 0);
+
+        index.add_type(1, 100);
+        index.add_type(1, 200);
+        assert!(!index.is_empty());
+        assert_eq!(index.len(), 2);
+    }
+
+    #[test]
+    fn test_type_index_remove_type() {
+        let index = TypeIndex::new();
+        index.add_type(1, 100);
+        index.add_type(1, 200);
+
+        index.remove_type(1, 100);
+        assert!(!index.has_type(1, 100));
+        assert!(index.has_type(1, 200));
+
+        // Removing the last type cleans up the entry
+        index.remove_type(1, 200);
+        assert!(index.get_types_for_subject(1).is_empty());
+        assert_eq!(index.type_count(100), 0);
+    }
+
+    #[test]
+    fn test_type_index_remove_type_nonexistent() {
+        let index = TypeIndex::new();
+        // Should be a no-op
+        index.remove_type(999, 100);
+        assert!(index.is_empty());
+    }
+
+    #[test]
+    fn test_type_index_remove_subject() {
+        let index = TypeIndex::new();
+        index.add_type(1, 100);
+        index.add_type(1, 200);
+        index.add_type(2, 100);
+
+        index.remove_subject(1);
+        assert!(index.get_types_for_subject(1).is_empty());
+        // Subject 2 still has type 100
+        assert!(index.has_type(2, 100));
+        // type 100 still has subject 2
+        assert_eq!(index.type_count(100), 1);
+    }
+
+    #[test]
+    fn test_type_index_clear() {
+        let index = TypeIndex::new();
+        index.add_type(1, 100);
+        index.clear();
+        assert!(index.is_empty());
+        assert!(index.get_subjects_by_type(100).is_empty());
+    }
+
+    #[test]
+    fn test_predicate_index_remove() {
+        let index = PredicateIndex::new();
+        index.add(10, 1, 2);
+        index.add(10, 1, 3);
+
+        index.remove(10, 1, 2);
+        assert_eq!(index.predicate_count(10), 1);
+        assert_eq!(index.len(), 1);
+
+        // Remove the last triple for this predicate
+        index.remove(10, 1, 3);
+        assert_eq!(index.predicate_count(10), 0);
+        assert_eq!(index.len(), 0);
+        assert!(index.is_empty());
+    }
+
+    #[test]
+    fn test_predicate_index_remove_nonexistent() {
+        let index = PredicateIndex::new();
+        // Removing a non-existent triple should be a no-op
+        index.remove(10, 1, 2);
+        assert!(index.is_empty());
+    }
+
+    #[test]
+    fn test_predicate_index_clear() {
+        let index = PredicateIndex::new();
+        index.add(10, 1, 2);
+        index.add(20, 3, 4);
+        index.clear();
+        assert!(index.is_empty());
+        assert_eq!(index.predicate_count(10), 0);
+        assert_eq!(index.len(), 0);
+    }
+
+    #[test]
+    fn test_predicate_index_subjects_and_objects() {
+        let index = PredicateIndex::new();
+        index.add(10, 1, 2);
+        index.add(10, 1, 3);
+        index.add(10, 4, 5);
+
+        let subjects = index.get_subjects_by_predicate(10);
+        assert!(subjects.contains(&1));
+        assert!(subjects.contains(&4));
+
+        let objects = index.get_objects_by_predicate(10);
+        assert!(objects.contains(&2));
+        assert!(objects.contains(&3));
+        assert!(objects.contains(&5));
+    }
+
+    #[test]
+    fn test_predicate_index_all_predicates() {
+        let index = PredicateIndex::new();
+        index.add(10, 1, 2);
+        index.add(20, 3, 4);
+
+        let predicates = index.all_predicates();
+        assert!(predicates.contains(&10));
+        assert!(predicates.contains(&20));
+    }
+
+    #[test]
+    fn test_predicate_selectivity_empty_index() {
+        let index = PredicateIndex::new();
+        // Should return 1.0 when no triples indexed
+        assert_eq!(index.selectivity(99), 1.0);
+        assert!(index.predicates_by_selectivity().is_empty());
+    }
+
+    #[test]
+    fn test_index_hint_namespace() {
+        let hint = IndexHint::UseNamespaceIndex {
+            namespace: "http://example.org/".to_string(),
+        };
+        assert!(hint.uses_index());
+        assert_eq!(hint.estimated_cost(), 0.5);
+    }
+
+    #[test]
+    fn test_index_manager_clear() {
+        let manager = IndexManager::new();
+        manager.namespace_index.add(1, "http://example.org/");
+        manager.type_index.add_type(1, 100);
+        manager.predicate_index.add(10, 1, 2);
+
+        manager.clear();
+
+        assert!(manager.namespace_index.is_empty());
+        assert!(manager.type_index.is_empty());
+        assert!(manager.predicate_index.is_empty());
+    }
+
+    #[test]
+    fn test_index_manager_no_type_id() {
+        let manager = IndexManager::new();
+        manager.predicate_index.add(10, 1, 2);
+
+        // is_type_pattern=true but no type_id → falls through to predicate index
+        let hint = manager.get_hint(Some(10), true, None);
+        assert!(matches!(hint, IndexHint::UsePredicateIndex { .. }));
+    }
 }

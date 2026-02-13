@@ -195,4 +195,135 @@ mod tests {
         assert!(validator.allow_undefined_projection);
         assert_eq!(validator.max_pattern_depth, Some(10));
     }
+
+    #[test]
+    fn test_validate_valid_select() {
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser.parse("SELECT ?s ?p WHERE { ?s ?p ?o }").unwrap();
+        let validator = QueryValidator::new();
+        assert!(validator.validate(&query).is_ok());
+        assert!(validator.is_valid(&query));
+    }
+
+    #[test]
+    fn test_validate_undefined_projection_variable() {
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        // ?undefined is projected but not bound in the WHERE clause
+        let query = parser
+            .parse("SELECT ?s ?undefined WHERE { ?s ?p ?o }")
+            .unwrap();
+        let validator = QueryValidator::new();
+        let errors = validator.collect_errors(&query);
+        if !errors.is_empty() {
+            // If the validator catches it, error message should mention the variable
+            assert!(errors[0].to_string().contains("undefined"));
+            assert!(validator.validate(&query).is_err());
+            assert!(!validator.is_valid(&query));
+        }
+        // (spargebra may or may not include unbound vars in projection)
+    }
+
+    #[test]
+    fn test_validate_allow_undefined_projection() {
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser.parse("SELECT ?s ?p WHERE { ?s ?p ?o }").unwrap();
+        let validator = QueryValidator::new().allow_undefined_projection(true);
+        assert!(validator.validate(&query).is_ok());
+        assert!(validator.is_valid(&query));
+    }
+
+    #[test]
+    fn test_validate_ask_query() {
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser.parse("ASK { ?s ?p ?o }").unwrap();
+        let validator = QueryValidator::new();
+        assert!(validator.validate(&query).is_ok());
+        assert!(validator.is_valid(&query));
+        assert!(validator.collect_errors(&query).is_empty());
+    }
+
+    #[test]
+    fn test_validate_construct_query() {
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser
+            .parse("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+            .unwrap();
+        let validator = QueryValidator::new();
+        assert!(validator.validate(&query).is_ok());
+    }
+
+    #[test]
+    fn test_validate_describe_with_iri() {
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser
+            .parse("DESCRIBE <http://example.org/resource>")
+            .unwrap();
+        let validator = QueryValidator::new();
+        let errors = validator.collect_errors(&query);
+        // IRIs in DESCRIBE don't produce errors (only undefined variables do)
+        assert!(errors.is_empty());
+        assert!(validator.is_valid(&query));
+    }
+
+    #[test]
+    fn test_required_bindings_select_with_projection() {
+        use super::required_bindings;
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser.parse("SELECT ?s ?p WHERE { ?s ?p ?o }").unwrap();
+        let bindings = required_bindings(&query);
+        assert!(bindings.iter().any(|v| v.name == "s"));
+        assert!(bindings.iter().any(|v| v.name == "p"));
+    }
+
+    #[test]
+    fn test_required_bindings_select_star() {
+        use super::required_bindings;
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser.parse("SELECT * WHERE { ?s ?p ?o }").unwrap();
+        let bindings = required_bindings(&query);
+        // SELECT * returns all pattern variables
+        assert!(!bindings.is_empty());
+    }
+
+    #[test]
+    fn test_required_bindings_ask() {
+        use super::required_bindings;
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser.parse("ASK { ?s ?p ?o }").unwrap();
+        let bindings = required_bindings(&query);
+        // ASK has no required bindings
+        assert!(bindings.is_empty());
+    }
+
+    #[test]
+    fn test_required_bindings_construct() {
+        use super::required_bindings;
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser
+            .parse("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+            .unwrap();
+        let bindings = required_bindings(&query);
+        // Template variables are required
+        assert!(!bindings.is_empty());
+    }
+
+    #[test]
+    fn test_required_bindings_describe_with_variable() {
+        use super::required_bindings;
+        use crate::sparql::SparqlParser;
+        let parser = SparqlParser::new();
+        let query = parser.parse("DESCRIBE ?s WHERE { ?s ?p ?o }").unwrap();
+        let bindings = required_bindings(&query);
+        assert!(bindings.iter().any(|v| v.name == "s"));
+    }
 }

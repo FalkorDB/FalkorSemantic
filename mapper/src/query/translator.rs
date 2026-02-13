@@ -753,4 +753,297 @@ mod tests {
             "Error should mention UNION"
         );
     }
+
+    #[test]
+    fn test_construct_returns_error() {
+        let result = translate("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+        assert!(result.is_err(), "CONSTRUCT queries should return an error");
+        assert!(result.unwrap_err().to_string().contains("CONSTRUCT"));
+    }
+
+    #[test]
+    fn test_describe_returns_error() {
+        let result = translate("DESCRIBE <http://example.org/resource>");
+        assert!(result.is_err(), "DESCRIBE queries should return an error");
+        assert!(result.unwrap_err().to_string().contains("DESCRIBE"));
+    }
+
+    #[test]
+    fn test_select_star() {
+        let result = translate("SELECT * WHERE { ?s ?p ?o }");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("RETURN"));
+    }
+
+    #[test]
+    fn test_optional_pattern() {
+        let result = translate(
+            "SELECT ?s ?r WHERE { ?s ?p ?o . OPTIONAL { ?s <http://example.org/q> ?r } }",
+        );
+        assert!(result.is_ok(), "OPTIONAL should translate successfully");
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("OPTIONAL MATCH"));
+    }
+
+    #[test]
+    fn test_optional_with_filter_expression() {
+        let result = translate(
+            "SELECT ?s ?r WHERE { ?s <http://example.org/age> ?age . \
+             OPTIONAL { ?s <http://example.org/q> ?r . FILTER(?r > 0) } }",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_and_expression() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/x> ?x . FILTER(?x > 1 && ?x < 100) }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("AND"));
+    }
+
+    #[test]
+    fn test_filter_or_expression() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/x> ?x . FILTER(?x < 1 || ?x > 100) }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("OR"));
+    }
+
+    #[test]
+    fn test_filter_not_expression() {
+        let result = translate("SELECT ?s WHERE { ?s ?p ?o . FILTER(!BOUND(?s)) }");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("NOT"));
+    }
+
+    #[test]
+    fn test_filter_bound_expression() {
+        let result = translate("SELECT ?s WHERE { ?s ?p ?o . FILTER(BOUND(?s)) }");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("IS NOT NULL"));
+    }
+
+    #[test]
+    fn test_filter_same_term() {
+        let result = translate("SELECT ?s WHERE { ?s ?p ?o . FILTER(sameTerm(?s, ?o)) }");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_less() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/age> ?age . FILTER(?age < 18) }");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains('<'));
+    }
+
+    #[test]
+    fn test_filter_less_or_equal() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/age> ?age . FILTER(?age <= 18) }");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("<="));
+    }
+
+    #[test]
+    fn test_filter_greater_or_equal() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/age> ?age . FILTER(?age >= 18) }");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains(">="));
+    }
+
+    #[test]
+    fn test_filter_named_node() {
+        let result =
+            translate("SELECT ?s WHERE { ?s ?p ?o . FILTER(?p = <http://example.org/type>) }");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_str_function() {
+        let result = translate(r#"SELECT ?s WHERE { ?s ?p ?o . FILTER(str(?s) = "test") }"#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_strlen_function() {
+        let result = translate("SELECT ?s WHERE { ?s ?p ?o . FILTER(strlen(str(?s)) > 5) }");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_ucase_function() {
+        let result = translate(r#"SELECT ?s WHERE { ?s ?p ?o . FILTER(ucase(str(?s)) = "TEST") }"#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_lcase_function() {
+        let result = translate(r#"SELECT ?s WHERE { ?s ?p ?o . FILTER(lcase(str(?s)) = "test") }"#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_contains_function() {
+        let result =
+            translate(r#"SELECT ?s WHERE { ?s ?p ?o . FILTER(contains(str(?s), "example")) }"#);
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.to_uppercase().contains("CONTAINS"));
+    }
+
+    #[test]
+    fn test_filter_strstarts_function() {
+        let result =
+            translate(r#"SELECT ?s WHERE { ?s ?p ?o . FILTER(strstarts(str(?s), "http")) }"#);
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("STARTS WITH"));
+    }
+
+    #[test]
+    fn test_filter_strends_function() {
+        let result =
+            translate(r#"SELECT ?s WHERE { ?s ?p ?o . FILTER(strends(str(?s), "suffix")) }"#);
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("ENDS WITH"));
+    }
+
+    #[test]
+    fn test_filter_regex_function() {
+        let result = translate(r#"SELECT ?s WHERE { ?s ?p ?o . FILTER(regex(str(?s), ".*")) }"#);
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("=~"));
+    }
+
+    #[test]
+    fn test_filter_abs_function() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/n> ?n . FILTER(abs(?n) > 0) }");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_ceil_function() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/n> ?n . FILTER(ceil(?n) > 0) }");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_floor_function() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/n> ?n . FILTER(floor(?n) > 0) }");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_round_function() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/n> ?n . FILTER(round(?n) > 0) }");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_in_expression() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/type> ?t . \
+             FILTER(?t IN (<http://example.org/Person>, <http://example.org/Animal>)) }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("IN"));
+    }
+
+    #[test]
+    fn test_filter_if_expression() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/x> ?x . \
+             FILTER(IF(BOUND(?x), ?x, 0) > 0) }",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_coalesce_expression() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/x> ?x . \
+             FILTER(COALESCE(?x, 0) > 0) }",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_minus_pattern() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s ?p ?o . \
+             MINUS { ?s <http://example.org/exclude> ?x } }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("NOT EXISTS"));
+    }
+
+    #[test]
+    fn test_named_graph_pattern() {
+        let result = translate("SELECT ?s WHERE { GRAPH <http://example.org/graph> { ?s ?p ?o } }");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("MATCH"));
+    }
+
+    #[test]
+    fn test_values_pattern() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+             VALUES ?s { <http://example.org/a> <http://example.org/b> } \
+             ?s ?p ?o }",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_service_returns_error() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+             SERVICE <http://endpoint.example.org/sparql> { ?s ?p ?o } }",
+        );
+        assert!(result.is_err(), "SERVICE clause should return an error");
+        assert!(result.unwrap_err().to_string().contains("SERVICE"));
+    }
+
+    #[test]
+    fn test_bind_extend_pattern() {
+        let result = translate(
+            "SELECT ?s ?upper WHERE { \
+             ?s <http://example.org/name> ?name . \
+             BIND(ucase(?name) AS ?upper) }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.variables.contains(&"upper".to_string()));
+    }
+
+    #[test]
+    fn test_select_with_limit_and_offset() {
+        let result = translate("SELECT ?s WHERE { ?s ?p ?o } LIMIT 10 OFFSET 5");
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(cypher.query.contains("LIMIT 10"));
+        assert!(cypher.query.contains("SKIP 5"));
+    }
 }
