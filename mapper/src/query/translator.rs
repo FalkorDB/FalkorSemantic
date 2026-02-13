@@ -49,6 +49,79 @@ fn predicate_to_property_key(predicate_iri: &str) -> String {
     sanitize_identifier(local_name)
 }
 
+/// Convert an RDF literal to a Cypher literal token.
+///
+/// Numeric/boolean XSD datatypes are emitted unquoted when valid.
+/// All other datatypes (or invalid lexical forms) are emitted as quoted strings.
+fn literal_to_cypher_value(datatype: &str, lexical: &str) -> String {
+    const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
+    const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
+    const XSD_FLOAT: &str = "http://www.w3.org/2001/XMLSchema#float";
+    const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
+    const XSD_BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
+
+    let is_valid_integer = |s: &str| {
+        let bytes = s.as_bytes();
+        if bytes.is_empty() {
+            return false;
+        }
+        let start = if bytes[0] == b'+' || bytes[0] == b'-' {
+            if bytes.len() == 1 {
+                return false;
+            }
+            1
+        } else {
+            0
+        };
+        bytes[start..].iter().all(u8::is_ascii_digit)
+    };
+
+    let is_valid_decimal = |s: &str| {
+        let bytes = s.as_bytes();
+        if bytes.is_empty() {
+            return false;
+        }
+        let s = if bytes[0] == b'+' || bytes[0] == b'-' {
+            if bytes.len() == 1 {
+                return false;
+            }
+            &s[1..]
+        } else {
+            s
+        };
+        if let Some(dot) = s.find('.') {
+            let left = &s[..dot];
+            let right = &s[dot + 1..];
+            let left_ok = left.is_empty() || left.bytes().all(|b| b.is_ascii_digit());
+            let right_ok = right.is_empty() || right.bytes().all(|b| b.is_ascii_digit());
+            (left_ok && right_ok) && (!left.is_empty() || !right.is_empty())
+        } else {
+            s.bytes().all(|b| b.is_ascii_digit())
+        }
+    };
+
+    if datatype == XSD_INTEGER && is_valid_integer(lexical) {
+        return lexical.to_string();
+    }
+    if datatype == XSD_DECIMAL && is_valid_decimal(lexical) {
+        return lexical.to_string();
+    }
+    if (datatype == XSD_FLOAT || datatype == XSD_DOUBLE) && lexical.parse::<f64>().is_ok() {
+        return lexical.to_string();
+    }
+    if datatype == XSD_BOOLEAN {
+        let normalized = lexical.trim();
+        if normalized.eq_ignore_ascii_case("true") || normalized == "1" {
+            return "true".to_string();
+        }
+        if normalized.eq_ignore_ascii_case("false") || normalized == "0" {
+            return "false".to_string();
+        }
+    }
+
+    format!("'{}'", escape_cypher_string(lexical))
+}
+
 /// Translates SPARQL queries to Cypher
 #[derive(Debug, Default)]
 pub struct SparqlToCypher {
@@ -511,8 +584,8 @@ impl SparqlToCypher {
             // Case 1: Literal constant object with known predicate → property access
             (TP::Literal(lit), Some(pred_iri)) => {
                 let prop_key = predicate_to_property_key(pred_iri);
-                let value = escape_cypher_string(lit.value());
-                conditions.push(format!("{subj_var}.{prop_key} = '{value}'"));
+                let value = literal_to_cypher_value(lit.datatype().as_str(), lit.value());
+                conditions.push(format!("{subj_var}.{prop_key} = {value}"));
 
                 Ok(TripleResult {
                     required_match: Some(format!("({subj_var})")),
@@ -528,7 +601,7 @@ impl SparqlToCypher {
                 let prop_key = predicate_to_property_key(pred_iri);
                 let pred_str = format!("{{predicate: '{}'}}", escape_cypher_string(pred_iri));
                 let rel_var = self.next_var("r");
-                let edge_obj_var = format!("{}_edge", v.as_str());
+                let edge_obj_var = self.next_var("edge");
 
                 // Register dual binding
                 self.var_bindings.borrow_mut().insert(
@@ -1380,8 +1453,8 @@ mod tests {
         );
         // Should reference the edge object variable
         assert!(
-            cypher.query.contains("name_edge"),
-            "Should contain name_edge variable, got: {}",
+            cypher.query.contains("edge_"),
+            "Should contain generated edge variable, got: {}",
             cypher.query
         );
         // Should have property fallback in WHERE
@@ -1392,7 +1465,7 @@ mod tests {
         );
         // RETURN should have dual CASE expression
         assert!(
-            cypher.query.contains("name_edge IS NOT NULL"),
+            cypher.query.contains("edge_") && cypher.query.contains("IS NOT NULL"),
             "RETURN should check edge var first, got: {}",
             cypher.query
         );
@@ -1446,15 +1519,11 @@ mod tests {
         let cypher = result.unwrap();
         // Both should have OPTIONAL MATCH (dual patterns)
         assert!(
-            cypher.query.contains("name_edge"),
-            "Should have name_edge variable, got: {}",
+            cypher.query.contains("edge_"),
+            "Should have generated edge variables, got: {}",
             cypher.query
         );
-        assert!(
-            cypher.query.contains("friend_edge"),
-            "Should have friend_edge variable, got: {}",
-            cypher.query
-        );
+        assert_eq!(cypher.query.matches("OPTIONAL MATCH").count(), 2);
         // Both should have property fallbacks in RETURN
         assert!(
             cypher.query.contains("toString(s.name)"),
@@ -1509,6 +1578,34 @@ mod tests {
         assert!(
             cypher.query.contains("s.name = 'Bob'"),
             "Should have property access for Bob, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_literal_constant_object_typed_integer_unquoted() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/age> \"42\"^^<http://www.w3.org/2001/XMLSchema#integer> }",
+        );
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("s.age = 42"),
+            "Should emit unquoted integer property comparison, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_literal_constant_object_typed_boolean_normalized() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/flag> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> }",
+        );
+        assert!(result.is_ok(), "Failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("s.flag = true"),
+            "Should emit normalized boolean token, got: {}",
             cypher.query
         );
     }
