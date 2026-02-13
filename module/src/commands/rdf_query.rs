@@ -356,8 +356,7 @@ fn format_construct_results(
         OutputFormat::RdfJson => construct_to_rdf_json(results)
             .map_err(|e| RedisError::String(format!("RDF/JSON serialization error: {e}"))),
         OutputFormat::Json | OutputFormat::Xml => Err(RedisError::String(
-            "Unsupported CONSTRUCT FORMAT: json/xml. Use FORMAT turtle or FORMAT rdf+json."
-                .into(),
+            "Unsupported CONSTRUCT FORMAT: json/xml. Use FORMAT turtle or FORMAT rdf+json.".into(),
         )),
         OutputFormat::Csv | OutputFormat::Tsv => Err(RedisError::String(
             "Unsupported CONSTRUCT FORMAT: csv/tsv. Use FORMAT turtle or FORMAT rdf+json.".into(),
