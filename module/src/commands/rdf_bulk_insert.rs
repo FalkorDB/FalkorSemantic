@@ -234,6 +234,7 @@ fn detect_format_from_path(path: &Path) -> Option<RdfFormat> {
             "ttl" | "turtle" => Some(RdfFormat::Turtle),
             "nt" | "ntriples" => Some(RdfFormat::NTriples),
             "nq" | "nquads" => Some(RdfFormat::NQuads),
+            "trig" => Some(RdfFormat::TriG),
             "jsonld" | "json" => Some(RdfFormat::JsonLd),
             _ => None,
         })
@@ -505,7 +506,7 @@ pub fn rdf_bulk_insert(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             )
             .map_err(RedisError::String)?
         }
-        RdfFormat::Turtle | RdfFormat::JsonLd => {
+        RdfFormat::Turtle | RdfFormat::TriG | RdfFormat::JsonLd => {
             // Load complete file for formats requiring full context
             load_complete_file(
                 ctx,
