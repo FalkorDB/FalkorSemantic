@@ -453,8 +453,14 @@ mod tests {
         assert_eq!(OutputFormat::from_str("tsv"), Some(OutputFormat::Tsv));
         assert_eq!(OutputFormat::from_str("turtle"), Some(OutputFormat::Turtle));
         assert_eq!(OutputFormat::from_str("ttl"), Some(OutputFormat::Turtle));
-        assert_eq!(OutputFormat::from_str("rdf+json"), Some(OutputFormat::RdfJson));
-        assert_eq!(OutputFormat::from_str("rdfjson"), Some(OutputFormat::RdfJson));
+        assert_eq!(
+            OutputFormat::from_str("rdf+json"),
+            Some(OutputFormat::RdfJson)
+        );
+        assert_eq!(
+            OutputFormat::from_str("rdfjson"),
+            Some(OutputFormat::RdfJson)
+        );
         assert_eq!(OutputFormat::from_str("invalid"), None);
     }
 
