@@ -141,7 +141,7 @@ jobs:
           cargo llvm-cov --package falkorsemantic-e2e-tests \
             --test e2e \
             --no-report \
-            test_infrastructure_works -- --ignored --test-threads=1
+            -- test_infrastructure_works --ignored --test-threads=1
 
       - name: Generate coverage report
         run: cargo llvm-cov report --lcov --output-path lcov.info
