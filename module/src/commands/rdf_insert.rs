@@ -6,7 +6,7 @@
 use redis_module::{Context, RedisError, RedisResult, RedisString, RedisValue};
 
 use falkorsemantic_mapper::Mapper;
-use falkorsemantic_parser::formats::NTriplesReader;
+use falkorsemantic_parser::formats::{NTriplesReader, TriGReader};
 use falkorsemantic_parser::rdf::Triple;
 use falkorsemantic_parser::TurtleParser;
 
@@ -19,6 +19,8 @@ pub enum RdfFormat {
     NTriples,
     /// N-Quads format
     NQuads,
+    /// TriG format (Turtle with named graphs)
+    TriG,
     /// JSON-LD format (not yet implemented)
     JsonLd,
 }
@@ -30,6 +32,7 @@ impl RdfFormat {
             "turtle" | "ttl" => Some(Self::Turtle),
             "ntriples" | "nt" => Some(Self::NTriples),
             "nquads" | "nq" => Some(Self::NQuads),
+            "trig" => Some(Self::TriG),
             "jsonld" | "json-ld" => Some(Self::JsonLd),
             _ => None,
         }
@@ -42,6 +45,20 @@ impl RdfFormat {
         // Check for JSON-LD (starts with { or [)
         if trimmed.starts_with('{') || trimmed.starts_with('[') {
             return Self::JsonLd;
+        }
+
+        // Check for TriG (GRAPH keyword with braces indicates named graphs)
+        for line in trimmed.lines() {
+            let line_trimmed = line.trim();
+            if line_trimmed.is_empty() || line_trimmed.starts_with('#') {
+                continue;
+            }
+            if line_trimmed.len() > 5 && line_trimmed[..5].eq_ignore_ascii_case("GRAPH") {
+                match line_trimmed.as_bytes().get(5) {
+                    Some(b' ') | Some(b'\t') => return Self::TriG,
+                    _ => {}
+                }
+            }
         }
 
         // First pass: scan ALL lines for Turtle-specific indicators
@@ -160,7 +177,8 @@ impl<'a> InsertArgs<'a> {
                     i += 1;
                     if i >= args.len() {
                         return Err(RedisError::String(
-                            "FORMAT requires a value (turtle, ntriples, nquads, jsonld)".into(),
+                            "FORMAT requires a value (turtle, ntriples, nquads, trig, jsonld)"
+                                .into(),
                         ));
                     }
                     let fmt_str = args[i]
@@ -168,7 +186,7 @@ impl<'a> InsertArgs<'a> {
                         .map_err(|_| RedisError::String("Invalid format value".into()))?;
                     format = Some(RdfFormat::from_str(fmt_str).ok_or_else(|| {
                         RedisError::String(format!(
-                            "Unknown format '{fmt_str}'. Use: turtle, ntriples, nquads, jsonld"
+                            "Unknown format '{fmt_str}'. Use: turtle, ntriples, nquads, trig, jsonld"
                         ))
                     })?);
                 }
@@ -207,6 +225,14 @@ fn parse_rdf(data: &str, format: RdfFormat) -> Result<Vec<Triple>, String> {
             // TODO: Implement proper N-Quads support with named graphs
             let reader = NTriplesReader::new();
             reader.parse_all_str(data).map_err(|e| e.to_string())
+        }
+        RdfFormat::TriG => {
+            let reader = TriGReader::new();
+            let quads = reader.parse_all_str(data).map_err(|e| e.to_string())?;
+            if quads.iter().any(|q| !q.is_default_graph()) {
+                log::warn!("Input contains named graphs, which are not yet fully supported. All triples will be inserted into the default graph.");
+            }
+            Ok(quads.into_iter().map(|q| q.triple).collect())
         }
         RdfFormat::JsonLd => Err("JSON-LD parsing not yet implemented".into()),
     }
@@ -267,7 +293,7 @@ fn execute_cypher(
 
 /// RDF.INSERT command handler
 ///
-/// Syntax: RDF.INSERT <`graph_key`> <data> [FORMAT turtle|ntriples|nquads|jsonld] [ATOMIC]
+/// Syntax: RDF.INSERT <`graph_key`> <data> [FORMAT turtle|ntriples|nquads|trig|jsonld] [ATOMIC]
 ///
 /// Arguments:
 /// - `graph_key`: The `FalkorDB` graph name to insert into
