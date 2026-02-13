@@ -162,4 +162,87 @@ mod tests {
             Some("http://example.org/")
         );
     }
+
+    #[test]
+    fn test_namespace_mapping_invalid_json() {
+        let result = NamespaceMapping::from_json("not valid json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_namespace_store_contains() {
+        let mut store = NamespaceStore::new();
+        assert!(!store.contains("graph1"));
+
+        let registry = NamespaceRegistry::new();
+        store.set("graph1", &registry);
+        assert!(store.contains("graph1"));
+        assert!(!store.contains("graph2"));
+    }
+
+    #[test]
+    fn test_namespace_store_remove() {
+        let mut store = NamespaceStore::new();
+        let mut registry = NamespaceRegistry::new();
+        registry.add("ex", "http://example.org/");
+        store.set("graph1", &registry);
+
+        let removed = store.remove("graph1");
+        assert!(removed.is_some());
+        assert!(!store.contains("graph1"));
+
+        // Removing non-existent graph returns None
+        let missing = store.remove("nonexistent");
+        assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_namespace_store_graph_names() {
+        let mut store = NamespaceStore::new();
+        let registry = NamespaceRegistry::new();
+        store.set("graph1", &registry);
+        store.set("graph2", &registry);
+
+        let names: Vec<&str> = store.graph_names().collect();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"graph1"));
+        assert!(names.contains(&"graph2"));
+    }
+
+    #[test]
+    fn test_namespace_store_clear() {
+        let mut store = NamespaceStore::new();
+        let registry = NamespaceRegistry::new();
+        store.set("graph1", &registry);
+        store.set("graph2", &registry);
+
+        store.clear();
+        assert!(!store.contains("graph1"));
+        assert!(!store.contains("graph2"));
+        assert_eq!(store.graph_names().count(), 0);
+    }
+
+    #[test]
+    fn test_namespace_store_export_import() {
+        let mut store = NamespaceStore::new();
+        let mut registry = NamespaceRegistry::new();
+        registry.add("ex", "http://example.org/");
+        store.set("graph1", &registry);
+
+        let json = store.export().unwrap();
+        assert!(json.contains("graph1"));
+
+        let mut new_store = NamespaceStore::new();
+        new_store.import(&json).unwrap();
+        assert!(new_store.contains("graph1"));
+        let retrieved = new_store.get("graph1").unwrap();
+        assert_eq!(retrieved.get_namespace("ex"), Some("http://example.org/"));
+    }
+
+    #[test]
+    fn test_namespace_store_import_invalid_json() {
+        let mut store = NamespaceStore::new();
+        let result = store.import("invalid json");
+        assert!(result.is_err());
+    }
 }

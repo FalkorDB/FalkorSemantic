@@ -111,3 +111,99 @@ impl ExportFormat {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rdf::{Iri, Literal, Quad, Subject, Triple};
+
+    #[test]
+    fn test_export_format_mime_types() {
+        assert_eq!(ExportFormat::NTriples.mime_type(), "text/n-triples");
+        assert_eq!(ExportFormat::NQuads.mime_type(), "text/n-quads");
+        assert_eq!(ExportFormat::Turtle.mime_type(), "text/turtle");
+        assert_eq!(ExportFormat::JsonLd.mime_type(), "application/ld+json");
+    }
+
+    #[test]
+    fn test_export_format_extensions() {
+        assert_eq!(ExportFormat::NTriples.extension(), "nt");
+        assert_eq!(ExportFormat::NQuads.extension(), "nq");
+        assert_eq!(ExportFormat::Turtle.extension(), "ttl");
+        assert_eq!(ExportFormat::JsonLd.extension(), "jsonld");
+    }
+
+    #[test]
+    fn test_export_format_equality() {
+        assert_eq!(ExportFormat::NTriples, ExportFormat::NTriples);
+        assert_ne!(ExportFormat::NTriples, ExportFormat::Turtle);
+    }
+
+    #[test]
+    fn test_export_error_display() {
+        let io_err = ExportError::Io(std::io::Error::new(std::io::ErrorKind::Other, "test"));
+        assert!(io_err.to_string().contains("IO error"));
+
+        let ser_err = ExportError::Serialization("bad data".to_string());
+        assert!(ser_err.to_string().contains("bad data"));
+
+        let inv_err = ExportError::InvalidData("invalid".to_string());
+        assert!(inv_err.to_string().contains("invalid"));
+    }
+
+    fn make_triple() -> Triple {
+        Triple::new(
+            Subject::Iri(Iri::new("http://example.org/s").unwrap()),
+            Iri::new("http://example.org/p").unwrap(),
+            Literal::new("hello"),
+        )
+    }
+
+    fn make_quad() -> Quad {
+        Quad::new(make_triple(), None)
+    }
+
+    // Minimal TripleWriter impl to exercise the default write_triples method
+    struct TestTripleWriter;
+    impl TripleWriter for TestTripleWriter {
+        fn write_triple<W: Write>(
+            &self,
+            _triple: &crate::rdf::Triple,
+            _writer: &mut W,
+        ) -> ExportResult<()> {
+            Ok(())
+        }
+    }
+
+    // Minimal QuadWriter impl to exercise the default write_quads method
+    struct TestQuadWriter;
+    impl QuadWriter for TestQuadWriter {
+        fn write_quad<W: Write>(
+            &self,
+            _quad: &crate::rdf::Quad,
+            _writer: &mut W,
+        ) -> ExportResult<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_triple_writer_write_triples_default() {
+        let writer = TestTripleWriter;
+        let triple = make_triple();
+        let triples = [triple];
+        let mut buf = Vec::new();
+        let result = writer.write_triples(triples.iter(), &mut buf);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_quad_writer_write_quads_default() {
+        let writer = TestQuadWriter;
+        let quad = make_quad();
+        let quads = [quad];
+        let mut buf = Vec::new();
+        let result = writer.write_quads(quads.iter(), &mut buf);
+        assert!(result.is_ok());
+    }
+}
