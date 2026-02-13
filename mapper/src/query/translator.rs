@@ -112,7 +112,7 @@ impl SparqlToCypher {
             select.projected_variables()
         };
 
-        // Generate a complete Cypher query for each branch and join with UNION ALL
+        // Generate a complete Cypher query for each branch
         let mut branch_queries = Vec::new();
         for branch in &branches {
             let mut match_parts = Vec::new();
@@ -133,13 +133,35 @@ impl SparqlToCypher {
                 write!(cypher, "\nWHERE {}", where_parts.join(" AND ")).unwrap();
             }
 
-            let return_clause = self.build_return_clause(&return_vars, false);
+            let return_clause = self.build_return_clause(&return_vars, select.distinct);
             cypher.push_str(&return_clause);
 
             branch_queries.push(cypher);
         }
 
-        let mut cypher = branch_queries.join("\nUNION ALL\n");
+        // Use UNION (deduplicating) when DISTINCT, otherwise UNION ALL
+        let union_separator = if select.distinct {
+            "\nUNION\n"
+        } else {
+            "\nUNION ALL\n"
+        };
+        let union_body = branch_queries.join(union_separator);
+
+        let has_modifiers =
+            select.order_by.is_some() || select.limit.is_some() || select.offset.is_some();
+
+        // Wrap in CALL { ... } subquery when ORDER BY/LIMIT/SKIP are needed,
+        // since FalkorDB does not allow these directly after a UNION
+        let mut cypher = if has_modifiers {
+            let return_items: Vec<String> =
+                return_vars.iter().map(|v| v.name.clone()).collect();
+            format!(
+                "CALL {{\n{union_body}\n}}\nRETURN {}",
+                return_items.join(", ")
+            )
+        } else {
+            union_body
+        };
 
         // ORDER BY, LIMIT, OFFSET apply to the entire UNION result
         if let Some(ref order_by) = select.order_by {
@@ -942,6 +964,12 @@ mod tests {
         assert!(cypher.query.contains("UNION ALL"));
         assert!(cypher.query.contains("LIMIT 10"));
         assert!(cypher.query.contains("SKIP 5"));
+        // Should be wrapped in CALL { ... } since modifiers are present
+        assert!(
+            cypher.query.contains("CALL {"),
+            "UNION with LIMIT/OFFSET should be wrapped in CALL block, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
@@ -992,6 +1020,12 @@ mod tests {
             "Should contain ORDER BY clause, got: {}",
             cypher.query
         );
+        // Should be wrapped in CALL { ... } since ORDER BY is present
+        assert!(
+            cypher.query.contains("CALL {"),
+            "UNION with ORDER BY should be wrapped in CALL block, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
@@ -1016,6 +1050,81 @@ mod tests {
         assert!(
             parts[1].contains("WHERE"),
             "Second branch should have WHERE for URI condition"
+        );
+    }
+
+    #[test]
+    fn test_union_distinct_uses_union_separator() {
+        let result = translate(
+            "SELECT DISTINCT ?s WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            }",
+        );
+        assert!(result.is_ok(), "DISTINCT UNION failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        // DISTINCT should use UNION (not UNION ALL) and RETURN DISTINCT
+        assert!(
+            !cypher.query.contains("UNION ALL"),
+            "DISTINCT UNION should not use UNION ALL, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("\nUNION\n"),
+            "DISTINCT UNION should use UNION separator, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("RETURN DISTINCT"),
+            "DISTINCT UNION should use RETURN DISTINCT, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_non_distinct_uses_union_all() {
+        let result = translate(
+            "SELECT ?s WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("UNION ALL"),
+            "Non-distinct UNION should use UNION ALL, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_union_with_limit_wrapped_in_call() {
+        let result = translate(
+            "SELECT ?s ?o WHERE { \
+                { ?s <http://example.org/a> ?o } \
+                UNION { ?s <http://example.org/b> ?o } \
+            } LIMIT 5",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        // Should be: CALL { <union> } RETURN ... LIMIT 5
+        assert!(
+            cypher.query.starts_with("CALL {"),
+            "Should start with CALL block, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("LIMIT 5"),
+            "Should have LIMIT, got: {}",
+            cypher.query
+        );
+        // The RETURN after CALL should project the variables
+        let after_call_close = cypher.query.split("}\n").last().unwrap();
+        assert!(
+            after_call_close.contains("RETURN"),
+            "Should have RETURN after CALL block, got: {}",
+            cypher.query
         );
     }
 
