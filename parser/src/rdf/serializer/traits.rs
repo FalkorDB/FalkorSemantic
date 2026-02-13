@@ -146,4 +146,119 @@ mod tests {
         assert_eq!(escape_json_string("hello\nworld"), "hello\\nworld");
         assert_eq!(escape_json_string("say \"hi\""), "say \\\"hi\\\"");
     }
+
+    #[test]
+    fn test_escape_string_carriage_return() {
+        assert_eq!(escape_string("line\rend"), "line\\rend");
+    }
+
+    #[test]
+    fn test_escape_string_control_char() {
+        // BEL character (0x07) should be escaped as \u0007
+        assert_eq!(escape_string("\x07"), "\\u0007");
+    }
+
+    #[test]
+    fn test_escape_json_string_backspace_formfeed() {
+        assert_eq!(escape_json_string("\x08"), "\\b");
+        assert_eq!(escape_json_string("\x0C"), "\\f");
+    }
+
+    #[test]
+    fn test_escape_json_string_control_char() {
+        assert_eq!(escape_json_string("\x07"), "\\u0007");
+    }
+
+    #[test]
+    fn test_is_valid_local_name_valid() {
+        assert!(is_valid_local_name("Person"));
+        assert!(is_valid_local_name("schema_type"));
+        assert!(is_valid_local_name("my-name"));
+        assert!(is_valid_local_name("abc123"));
+    }
+
+    #[test]
+    fn test_is_valid_local_name_invalid() {
+        assert!(!is_valid_local_name("")); // empty
+        assert!(!is_valid_local_name("has space"));
+        assert!(!is_valid_local_name("has.dot"));
+        assert!(!is_valid_local_name("has/slash"));
+    }
+
+    // A minimal TripleSerializer to exercise default serialize_triples
+    struct NoOpTripleSerializer;
+    impl super::TripleSerializer for NoOpTripleSerializer {
+        fn serialize_triple<W: std::io::Write>(
+            &mut self,
+            _triple: &crate::rdf::Triple,
+            _writer: &mut W,
+        ) -> super::SerializerResult<()> {
+            Ok(())
+        }
+    }
+
+    // A minimal QuadSerializer to exercise default serialize_quads
+    struct NoOpQuadSerializer;
+    impl super::QuadSerializer for NoOpQuadSerializer {
+        fn serialize_quad<W: std::io::Write>(
+            &mut self,
+            _quad: &crate::rdf::Quad,
+            _writer: &mut W,
+        ) -> super::SerializerResult<()> {
+            Ok(())
+        }
+    }
+
+    // GraphSerializer requires TripleSerializer
+    impl super::GraphSerializer for NoOpTripleSerializer {}
+
+    fn make_triple() -> crate::rdf::Triple {
+        use crate::rdf::{Iri, Literal, Subject, Triple};
+        Triple::new(
+            Subject::Iri(Iri::new("http://example.org/s").unwrap()),
+            Iri::new("http://example.org/p").unwrap(),
+            Literal::new("hello"),
+        )
+    }
+
+    fn make_quad() -> crate::rdf::Quad {
+        crate::rdf::Quad::new(make_triple(), None)
+    }
+
+    #[test]
+    fn test_serialize_triples_default() {
+        let mut ser = NoOpTripleSerializer;
+        let triple = make_triple();
+        let triples = [triple];
+        let mut buf = Vec::new();
+        assert!(ser.serialize_triples(triples.iter(), &mut buf).is_ok());
+    }
+
+    #[test]
+    fn test_serialize_quads_default() {
+        let mut ser = NoOpQuadSerializer;
+        let quad = make_quad();
+        let quads = [quad];
+        let mut buf = Vec::new();
+        assert!(ser.serialize_quads(quads.iter(), &mut buf).is_ok());
+    }
+
+    #[test]
+    fn test_serialize_graph_default() {
+        let mut ser = NoOpTripleSerializer;
+        let triple = make_triple();
+        let triples = [triple];
+        let mut buf = Vec::new();
+        assert!(ser.serialize_graph(triples.iter(), &mut buf).is_ok());
+    }
+
+    #[test]
+    fn test_finish_default() {
+        let mut ser = NoOpTripleSerializer;
+        let mut buf = Vec::new();
+        assert!(ser.finish(&mut buf).is_ok());
+
+        let mut qser = NoOpQuadSerializer;
+        assert!(qser.finish(&mut buf).is_ok());
+    }
 }
