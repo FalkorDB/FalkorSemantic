@@ -319,6 +319,9 @@ fn format_select_results(
             .map_err(|e| RedisError::String(format!("CSV serialization error: {e}"))),
         OutputFormat::Tsv => select_to_tsv(results)
             .map_err(|e| RedisError::String(format!("TSV serialization error: {e}"))),
+        OutputFormat::Turtle | OutputFormat::RdfJson => Err(RedisError::String(
+            "FORMAT turtle/rdf+json is only supported for CONSTRUCT queries".into(),
+        )),
     }
 }
 
@@ -336,6 +339,9 @@ fn format_ask_results(
             .map_err(|e| RedisError::String(format!("CSV serialization error: {e}"))),
         OutputFormat::Tsv => ask_to_tsv(result)
             .map_err(|e| RedisError::String(format!("TSV serialization error: {e}"))),
+        OutputFormat::Turtle | OutputFormat::RdfJson => Err(RedisError::String(
+            "FORMAT turtle/rdf+json is only supported for CONSTRUCT queries".into(),
+        )),
     }
 }
 
