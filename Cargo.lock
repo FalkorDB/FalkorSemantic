@@ -1072,9 +1072,9 @@ dependencies = [
 
 [[package]]
 name = "json-ld"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5c23bd3696fabd231e88dc57a893455af22509aae15578f94ce47b9c821e705"
+checksum = "8cdc6c86920abb463859d06615e8bbd9e1e2696a71e3b508c63a1e28ea18478d"
 dependencies = [
  "contextual",
  "futures",
@@ -1093,9 +1093,9 @@ dependencies = [
 
 [[package]]
 name = "json-ld-compaction"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad3ab3dfb6249b1e53359c06c2c3c554d3704b64c9d17cb9eaa624248b6161cf"
+checksum = "cb411ffda77dfe07929698a01954f694b9f484b5c4f59c0847f00650cc4b6996"
 dependencies = [
  "contextual",
  "educe 0.4.23",
@@ -1115,9 +1115,9 @@ dependencies = [
 
 [[package]]
 name = "json-ld-context-processing"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dac28ce9f01c5bb4f54804817e15c0f94697aaca8e42a4ca56913297b2b4e1e"
+checksum = "7a22b5624d1810014bd0e708c20b10f434b26b2f162663406d58a45df278ee42"
 dependencies = [
  "contextual",
  "futures",
@@ -1132,9 +1132,9 @@ dependencies = [
 
 [[package]]
 name = "json-ld-core"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0b91506169548cf5636661a5911bfeb65468a3f14801514583c113b6592c366"
+checksum = "fdbf04c8e11107c8b5550178bfd27d691da32baea721722a5c79841916f95c1e"
 dependencies = [
  "contextual",
  "educe 0.4.23",
@@ -1160,9 +1160,9 @@ dependencies = [
 
 [[package]]
 name = "json-ld-expansion"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff5d4c0d8331a9d15ab34bd8cd7c11b6512f07e7e0a7f5a63350c2632635bf0b"
+checksum = "91fa25e45530154061f97d3f18f57d011325f144ae3d31a1fb7c49e76686c305"
 dependencies = [
  "contextual",
  "educe 0.4.23",
@@ -1181,9 +1181,9 @@ dependencies = [
 
 [[package]]
 name = "json-ld-serialization"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "344f0a6042745d76a358b808878ae0d125a472de30b3eabc9eb82c6cf7f0c23e"
+checksum = "acb2f6e46331645c82250da6dbc0127a46696a2d7201291dde2fbb27e4390029"
 dependencies = [
  "indexmap 2.13.0",
  "iref",
@@ -1197,9 +1197,9 @@ dependencies = [
 
 [[package]]
 name = "json-ld-syntax"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbff6d43084d4c04c3ffbdcd8031dd187c4a8c6f43d5c5585be230949c573747"
+checksum = "64f27b6bb444307d6cafb1965813adfe78815d060bd3e4a7442c2669501d8652"
 dependencies = [
  "contextual",
  "decoded-char",
