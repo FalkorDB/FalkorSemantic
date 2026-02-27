@@ -1655,9 +1655,9 @@ checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
 name = "oxrdf"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "647ec1bce9b009b5ef00d678587ff263d53ac793cfa0652d0f1e85bc9f9699d3"
+checksum = "0afd5c28e4a399c57ee2bc3accd40c7b671fdc7b6537499f14e95b265af7d7e0"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -2271,9 +2271,9 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5de637e47b4189ed93f22ee5175bb7cd158ecfde5f346c4b8543658655754c04"
+checksum = "e9a6bc0ae1da1bf2516fb872d2ad0cf5efa3c7a7dbea58909b39eed321dc5117"
 dependencies = [
  "oxilangtag",
  "oxiri",
