@@ -1946,3 +1946,103 @@ mod rdf_query_bind {
         );
     }
 }
+
+// ============================================================================
+// RDF.QUERY E2E Tests - VALUES Inline Data (#70)
+// ============================================================================
+
+mod rdf_query_values {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_values_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "Alice" .
+<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://example.org/name> "Bob" .
+<http://example.org/person/2> <http://example.org/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://example.org/name> "Charlie" .
+<http://example.org/person/3> <http://example.org/age> "35"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_values_single_variable() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "single");
+
+        let sparql = r#"SELECT ?name WHERE {
+            VALUES ?s { <http://example.org/person/1> <http://example.org/person/3> }
+            ?s <http://example.org/name> ?name .
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with VALUES should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice") && json.contains("Charlie"),
+            "Should find Alice and Charlie, got: {}",
+            json
+        );
+        assert!(!json.contains("Bob"), "Should NOT find Bob, got: {}", json);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_values_multi_variable() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "multi");
+
+        let sparql = r#"SELECT ?name ?age WHERE {
+            VALUES (?name ?age) { ("Alice" "30") ("Charlie" "35") }
+            ?s <http://example.org/name> ?name .
+            ?s <http://example.org/age> ?age .
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with multi-variable VALUES should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice") || json.contains("Charlie"),
+            "Should find Alice or Charlie, got: {}",
+            json
+        );
+    }
+}
