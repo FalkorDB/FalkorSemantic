@@ -1856,3 +1856,93 @@ mod rdf_query_exists {
         );
     }
 }
+
+// ============================================================================
+// RDF.QUERY E2E Tests - BIND / Extend (#69)
+// ============================================================================
+
+mod rdf_query_bind {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_bind_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "alice" .
+<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://example.org/name> "bob" .
+<http://example.org/person/2> <http://example.org/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_bind_ucase() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "ucase");
+
+        let sparql = r#"SELECT ?name ?upper WHERE {
+            ?s <http://example.org/name> ?name .
+            BIND(UCASE(?name) AS ?upper)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with BIND(UCASE) should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("ALICE"),
+            "Expected UCASE transformation to produce ALICE, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_bind_str_function() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "str");
+
+        let sparql = r#"SELECT ?s ?label WHERE {
+            ?s <http://example.org/name> ?name .
+            BIND(STR(?name) AS ?label)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with BIND(STR) should succeed: {:?}",
+            result.err()
+        );
+    }
+}
