@@ -570,7 +570,24 @@ impl SparqlToCypher {
             E::Variable(v) => Some(v.as_str().to_string()),
             E::Literal(lit) => {
                 let value = lit.value();
-                Some(format!("'{}'", escape_cypher_string(value)))
+                let dt = lit.datatype();
+                // Render numeric and boolean literals unquoted for valid Cypher arithmetic
+                if dt == oxrdf::vocab::xsd::INTEGER
+                    || dt == oxrdf::vocab::xsd::DECIMAL
+                    || dt == oxrdf::vocab::xsd::DOUBLE
+                    || dt == oxrdf::vocab::xsd::FLOAT
+                    || dt == oxrdf::vocab::xsd::BOOLEAN
+                    || dt == oxrdf::vocab::xsd::NON_NEGATIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::POSITIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::NEGATIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::NON_POSITIVE_INTEGER
+                {
+                    Some(value.to_string())
+                } else if dt == oxrdf::vocab::xsd::DATE {
+                    Some(format!("date('{}')", escape_cypher_string(value)))
+                } else {
+                    Some(format!("'{}'", escape_cypher_string(value)))
+                }
             }
             E::NamedNode(node) => Some(format!("'{}'", escape_cypher_string(node.as_str()))),
             E::Bound(v) => Some(format!("{} IS NOT NULL", v.as_str())),
@@ -656,7 +673,44 @@ impl SparqlToCypher {
                     _ => None,
                 }
             }
-            _ => None, // Unsupported expression (Add, Subtract, Multiply, Divide, Exists, etc.)
+            E::Add(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} + {r})")),
+                    _ => None,
+                }
+            }
+            E::Subtract(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} - {r})")),
+                    _ => None,
+                }
+            }
+            E::Multiply(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} * {r})")),
+                    _ => None,
+                }
+            }
+            E::Divide(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} / {r})")),
+                    _ => None,
+                }
+            }
+            E::UnaryPlus(inner) => self.translate_expression(inner)?,
+            E::UnaryMinus(inner) => {
+                let i = self.translate_expression(inner)?;
+                i.map(|i| format!("-({i})"))
+            }
+            _ => None, // Unsupported expression (Exists, etc.)
         };
 
         Ok(result)
@@ -1434,5 +1488,119 @@ mod tests {
         let cypher = result.unwrap();
         assert!(cypher.query.contains("LIMIT 10"));
         assert!(cypher.query.contains("SKIP 5"));
+    }
+
+    // --- Arithmetic expression tests (#65) ---
+
+    #[test]
+    fn test_arithmetic_addition() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . ?s <http://example.org/b> ?b . FILTER(?a + ?b > 10) }",
+        );
+        assert!(result.is_ok(), "Addition failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains('+'),
+            "Should contain +, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_subtraction() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . ?s <http://example.org/b> ?b . FILTER(?a - ?b < 5) }",
+        );
+        assert!(result.is_ok(), "Subtraction failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(" - "),
+            "Should contain subtraction operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_multiplication() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a * 2 > 100) }");
+        assert!(result.is_ok(), "Multiplication failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(" * "),
+            "Should contain multiplication operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_division() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a / 2 < 50) }");
+        assert!(result.is_ok(), "Division failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(" / "),
+            "Should contain division operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_nested() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . ?s <http://example.org/b> ?b . FILTER((?a + ?b) * 2 > 10) }",
+        );
+        assert!(
+            result.is_ok(),
+            "Nested arithmetic failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains('+'),
+            "Should contain +, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains('*'),
+            "Should contain *, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_unary_minus() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(-?a > 0) }");
+        assert!(result.is_ok(), "Unary minus failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("-("),
+            "Should contain negation, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- NOT IN expression test (#66) ---
+
+    #[test]
+    fn test_not_in_expression() {
+        let result = translate(
+            "SELECT ?s ?type WHERE { ?s <http://example.org/type> ?type . \
+             FILTER(?type NOT IN (\"A\", \"B\")) }",
+        );
+        assert!(result.is_ok(), "NOT IN failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("NOT ("),
+            "Should contain NOT applied to expression, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains(" IN ["),
+            "Should contain IN list expression, got: {}",
+            cypher.query
+        );
     }
 }

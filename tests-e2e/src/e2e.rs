@@ -1393,3 +1393,152 @@ fn test_infrastructure_works() {
     let pong: RedisResult<String> = redis::cmd("PING").query(ctx.conn());
     assert_eq!(pong.unwrap(), "PONG");
 }
+
+// ============================================================================
+// RDF.QUERY E2E Tests - Arithmetic & NOT IN (#65, #66)
+// ============================================================================
+
+mod rdf_query_arithmetic {
+    use super::*;
+
+    /// Insert test data and return the graph key used
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_arithmetic_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/1> <http://example.org/name> "Alice" .
+<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/1> <http://example.org/score> "85"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/2> <http://example.org/name> "Bob" .
+<http://example.org/person/2> <http://example.org/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://example.org/score> "92"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/3> <http://example.org/name> "Charlie" .
+<http://example.org/person/3> <http://example.org/age> "35"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://example.org/score> "78"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://example.org/status> "inactive" ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_addition_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "addition");
+
+        // SPARQL: Find persons where age + 10 > 40
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            ?s <http://example.org/age> ?age .
+            FILTER(?age + 10 > 40)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with addition filter should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        // Should return Charlie (35+10=45>40) and Alice (30+10=40, not >40)
+        assert!(
+            json.contains("Charlie"),
+            "Should find Charlie (age 35 + 10 > 40), got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_multiplication_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "multiplication");
+
+        // SPARQL: Find persons where score * 2 > 170
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            ?s <http://example.org/score> ?score .
+            FILTER(?score * 2 > 170)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with multiplication should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        // Bob has score 92*2=184>170, Alice has 85*2=170 (not >170)
+        assert!(
+            json.contains("Bob"),
+            "Should find Bob (score 92*2 > 170), got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_not_in_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "not_in");
+
+        // SPARQL: Find persons whose name is NOT IN ("Alice", "Charlie")
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(?name NOT IN ("Alice", "Charlie"))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with NOT IN should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Bob"),
+            "Should find Bob (not in Alice/Charlie), got: {}",
+            json
+        );
+        assert!(
+            !json.contains("Alice"),
+            "Should NOT find Alice, got: {}",
+            json
+        );
+    }
+}
