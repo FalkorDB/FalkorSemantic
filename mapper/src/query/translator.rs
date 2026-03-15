@@ -754,7 +754,25 @@ impl SparqlToCypher {
                 let i = self.translate_expression(inner)?;
                 i.map(|i| format!("-({i})"))
             }
-            _ => None, // Unsupported expression (Exists, etc.)
+            E::Exists(pattern) => {
+                let mut match_parts = Vec::new();
+                let mut where_parts = Vec::new();
+                let mut bound_vars = HashSet::new();
+                self.process_pattern(pattern, &mut match_parts, &mut where_parts, &mut bound_vars)?;
+                if match_parts.is_empty() {
+                    None
+                } else {
+                    let match_str = format!("MATCH {}", match_parts.join(", "));
+                    if where_parts.is_empty() {
+                        Some(format!("EXISTS {{ {match_str} }}"))
+                    } else {
+                        Some(format!(
+                            "EXISTS {{ {match_str} WHERE {} }}",
+                            where_parts.join(" AND ")
+                        ))
+                    }
+                }
+            }
         };
 
         Ok(result)
@@ -1785,6 +1803,52 @@ mod tests {
         assert!(
             cypher.query.contains("toFloat(") && cypher.query.contains("IS NOT NULL"),
             "Should contain toFloat(...) IS NOT NULL, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- EXISTS / NOT EXISTS tests (#67) ---
+
+    #[test]
+    fn test_filter_exists() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/name> ?name . \
+             FILTER EXISTS { ?s <http://example.org/email> ?email } }",
+        );
+        assert!(result.is_ok(), "FILTER EXISTS failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("EXISTS {") && cypher.query.contains("MATCH"),
+            "Should contain EXISTS {{ MATCH ..., got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("example.org/email"),
+            "EXISTS body should reference the inner predicate, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_filter_not_exists() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/name> ?name . \
+             FILTER NOT EXISTS { ?s <http://example.org/deleted> ?d } }",
+        );
+        assert!(
+            result.is_ok(),
+            "FILTER NOT EXISTS failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("NOT (EXISTS {"),
+            "Should contain NOT (EXISTS {{, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("example.org/deleted"),
+            "NOT EXISTS body should reference the inner predicate, got: {}",
             cypher.query
         );
     }
