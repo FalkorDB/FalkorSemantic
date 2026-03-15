@@ -120,11 +120,7 @@ impl SparqlToCypher {
         for (match_parts, where_parts) in &processed_branches {
             let mut cypher = String::new();
 
-            let match_clause = if match_parts.is_empty() {
-                "MATCH (n)".to_string()
-            } else {
-                format!("MATCH {}", match_parts.join(", "))
-            };
+            let match_clause = Self::build_match_clause(match_parts);
             cypher.push_str(&match_clause);
 
             if !where_parts.is_empty() {
@@ -228,15 +224,40 @@ impl SparqlToCypher {
             &mut bound_vars,
         )?;
 
-        let match_clause = if match_parts.is_empty() {
-            "MATCH (n)".to_string() // Fallback for empty patterns
-        } else {
-            format!("MATCH {}", match_parts.join(", "))
-        };
+        let match_clause = Self::build_match_clause(&match_parts);
 
         let where_clause = where_parts.join(" AND ");
 
         Ok((match_clause, where_clause, bound_vars))
+    }
+
+    /// Build a MATCH clause from parts, properly separating OPTIONAL MATCH and
+    /// WITH clauses from regular MATCH patterns.
+    fn build_match_clause(match_parts: &[String]) -> String {
+        if match_parts.is_empty() {
+            return "MATCH (n)".to_string();
+        }
+
+        let mut clauses = Vec::new();
+        let mut current_patterns = Vec::new();
+
+        for part in match_parts {
+            if part.starts_with("OPTIONAL MATCH") || part.starts_with("WITH ") {
+                if !current_patterns.is_empty() {
+                    clauses.push(format!("MATCH {}", current_patterns.join(", ")));
+                    current_patterns.clear();
+                }
+                clauses.push(part.clone());
+            } else {
+                current_patterns.push(part.clone());
+            }
+        }
+
+        if !current_patterns.is_empty() {
+            clauses.push(format!("MATCH {}", current_patterns.join(", ")));
+        }
+
+        clauses.join("\n")
     }
 
     /// Process a spargebra graph pattern recursively
@@ -301,11 +322,24 @@ impl SparqlToCypher {
             GP::Extend {
                 inner,
                 variable,
-                expression: _,
+                expression,
             } => {
                 self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                let expr_str = self.translate_expression(expression)?.ok_or_else(|| {
+                    MapperError::InvalidTransformation(format!(
+                        "Unsupported expression in BIND: {:?}",
+                        expression
+                    ))
+                })?;
+                let var_name = variable.as_str();
+                // Use WITH * only when there are prior patterns to carry forward
+                let has_prior_patterns = !match_parts.is_empty();
+                if has_prior_patterns {
+                    match_parts.push(format!("WITH *, {expr_str} AS {var_name}"));
+                } else {
+                    match_parts.push(format!("WITH {expr_str} AS {var_name}"));
+                }
                 bound_vars.insert(Variable::from(variable.clone()));
-                // BIND becomes WITH ... AS in Cypher
             }
             GP::OrderBy { inner, .. } | GP::Distinct { inner } | GP::Reduced { inner } => {
                 self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
@@ -1538,9 +1572,81 @@ mod tests {
              ?s <http://example.org/name> ?name . \
              BIND(ucase(?name) AS ?upper) }",
         );
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "BIND failed: {:?}", result.err());
         let cypher = result.unwrap();
         assert!(cypher.variables.contains(&"upper".to_string()));
+        assert!(
+            cypher.query.contains("WITH *,") || cypher.query.contains("WITH * ,"),
+            "BIND should produce WITH *, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("AS upper"),
+            "BIND should produce AS upper, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("toUpper("),
+            "BIND(ucase(...)) should translate to toUpper, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_bind_simple_expression() {
+        let result = translate(
+            "SELECT ?s ?label WHERE { \
+             ?s <http://example.org/name> ?name . \
+             BIND(str(?name) AS ?label) }",
+        );
+        assert!(
+            result.is_ok(),
+            "BIND simple expression failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("WITH *"),
+            "Should contain WITH *, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("AS label"),
+            "Should contain AS label, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_bind_variable_in_projection() {
+        let result = translate(
+            "SELECT ?s ?upper WHERE { \
+             ?s <http://example.org/name> ?name . \
+             BIND(ucase(?name) AS ?upper) }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.variables.contains(&"upper".to_string()),
+            "Bound variable should appear in projection"
+        );
+    }
+
+    #[test]
+    fn test_bind_without_preceding_match() {
+        let result = translate("SELECT ?x WHERE { BIND(42 AS ?x) }");
+        assert!(result.is_ok(), "BIND-only failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            !cypher.query.contains("WITH *"),
+            "BIND-only should not use WITH *, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("WITH") && cypher.query.contains("AS x"),
+            "Should contain WITH ... AS x, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
