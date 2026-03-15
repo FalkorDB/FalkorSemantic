@@ -1915,8 +1915,8 @@ mod rdf_query_bind {
         );
         let json = result.unwrap();
         assert!(
-            json.contains("ALICE") || json.contains("alice"),
-            "Should contain name data, got: {}",
+            json.contains("ALICE"),
+            "Expected UCASE transformation to produce ALICE, got: {}",
             json
         );
     }
