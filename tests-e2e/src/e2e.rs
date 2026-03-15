@@ -12,7 +12,7 @@
 //! cargo build -p falkorsemantic-module
 //!
 //! # Start FalkorDB with the FalkorSemantic module (in another terminal)
-//! docker run --rm -p 6399:6379 -v "$(pwd)/target:/target" falkordb/falkordb:latest \
+//! docker run --rm -p 6399:6379 -v "$(pwd)/target:/target" falkordb/falkordb:v4.16.7 \
 //!   --loadmodule /target/debug/libfalkorsemantic_module.so
 //!
 //! # Run the tests
@@ -177,7 +177,7 @@ impl TestRedisServer {
                 &format!("{}:6379", port),
                 "-v",
                 &format!("{}:/target", module_dir.display()),
-                "falkordb/falkordb:latest",
+                "falkordb/falkordb:v4.16.7",
                 "--loadmodule",
                 &format!("/target/{}", module_file),
                 "--loglevel",
@@ -204,7 +204,7 @@ impl TestRedisServer {
                 .args(["logs", &container_name])
                 .output()
                 .ok()
-                .map(|o| String::from_utf8_lossy(&o.stderr).to_string())
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
                 .unwrap_or_else(|| "<failed to collect container logs>".to_string());
             let _ = Command::new("docker")
                 .args(["stop", &container_name])
@@ -220,7 +220,7 @@ impl TestRedisServer {
                 .args(["logs", &container_name])
                 .output()
                 .ok()
-                .map(|o| String::from_utf8_lossy(&o.stderr).to_string())
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
                 .unwrap_or_else(|| "<failed to collect container logs>".to_string());
             let _ = Command::new("docker")
                 .args(["stop", &container_name])
@@ -267,17 +267,27 @@ impl TestRedisServer {
                         // Check each field pair for "name" -> "falkorsemantic"
                         let mut iter = fields.iter();
                         while let Some(key) = iter.next() {
-                            if let redis::Value::BulkString(k) = key {
-                                if k == b"name" {
-                                    if let Some(redis::Value::BulkString(v)) = iter.next() {
-                                        if v == module_name.as_bytes() {
-                                            return true;
+                            let is_name_key = match key {
+                                redis::Value::BulkString(k) => k == b"name",
+                                redis::Value::SimpleString(s) => s == "name",
+                                _ => false,
+                            };
+                            if is_name_key {
+                                if let Some(val) = iter.next() {
+                                    let matches = match val {
+                                        redis::Value::BulkString(v) => {
+                                            v == module_name.as_bytes()
                                         }
+                                        redis::Value::SimpleString(s) => s == module_name,
+                                        _ => false,
+                                    };
+                                    if matches {
+                                        return true;
                                     }
-                                } else {
-                                    // Skip the value for other keys
-                                    iter.next();
                                 }
+                            } else {
+                                // Skip the value for other keys
+                                iter.next();
                             }
                         }
                     }
