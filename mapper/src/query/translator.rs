@@ -242,7 +242,10 @@ impl SparqlToCypher {
         let mut current_patterns = Vec::new();
 
         for part in match_parts {
-            if part.starts_with("OPTIONAL MATCH") || part.starts_with("WITH ") {
+            if part.starts_with("OPTIONAL MATCH")
+                || part.starts_with("WITH ")
+                || part.starts_with("UNWIND ")
+            {
                 if !current_patterns.is_empty() {
                     clauses.push(format!("MATCH {}", current_patterns.join(", ")));
                     current_patterns.clear();
@@ -362,11 +365,66 @@ impl SparqlToCypher {
             }
             GP::Values {
                 variables,
-                bindings: _,
+                bindings,
             } => {
-                // VALUES clause - translate to WHERE ... IN ...
                 for var in variables {
                     bound_vars.insert(Variable::from(var.clone()));
+                }
+
+                if variables.len() == 1 && !bindings.is_empty() {
+                    // Single variable: WHERE var.uri/value IN ['v1', 'v2', ...]
+                    let var_name = variables[0].as_str();
+                    let terms: Vec<&spargebra::term::GroundTerm> = bindings
+                        .iter()
+                        .filter_map(|row| row.first().and_then(|v| v.as_ref()))
+                        .collect();
+                    if !terms.is_empty() {
+                        let all_iris = terms
+                            .iter()
+                            .all(|t| matches!(t, spargebra::term::GroundTerm::NamedNode(_)));
+                        let prop = if all_iris { "uri" } else { "value" };
+                        let values: Vec<String> = terms
+                            .iter()
+                            .map(|term| self.ground_term_to_cypher(term))
+                            .collect();
+                        where_parts.push(format!("{var_name}.{prop} IN [{}]", values.join(", ")));
+                    }
+                } else if variables.len() > 1 && !bindings.is_empty() {
+                    // Multi variable: UNWIND [{x: 'v1', y: 'v2'}, ...] AS _values
+                    let rows: Vec<String> = bindings
+                        .iter()
+                        .map(|row| {
+                            let fields: Vec<String> = variables
+                                .iter()
+                                .zip(row.iter())
+                                .filter_map(|(var, val)| {
+                                    val.as_ref().map(|term| {
+                                        format!(
+                                            "{}: {}",
+                                            var.as_str(),
+                                            self.ground_term_to_cypher(term)
+                                        )
+                                    })
+                                })
+                                .collect();
+                            format!("{{{}}}", fields.join(", "))
+                        })
+                        .collect();
+                    match_parts.push(format!("UNWIND [{}] AS _values", rows.join(", ")));
+                    for (i, var) in variables.iter().enumerate() {
+                        let name = var.as_str();
+                        let first_term = bindings
+                            .iter()
+                            .find_map(|row| row.get(i).and_then(|v| v.as_ref()));
+                        let prop = if first_term
+                            .is_some_and(|t| matches!(t, spargebra::term::GroundTerm::NamedNode(_)))
+                        {
+                            "uri"
+                        } else {
+                            "value"
+                        };
+                        where_parts.push(format!("{name}.{prop} = _values.{name}"));
+                    }
                 }
             }
             GP::Service { .. } => {
@@ -859,6 +917,17 @@ impl SparqlToCypher {
         let count = *self.var_counter.borrow();
         *self.var_counter.borrow_mut() += 1;
         format!("{prefix}_{count}")
+    }
+
+    /// Convert a spargebra GroundTerm to a Cypher literal string
+    fn ground_term_to_cypher(&self, term: &spargebra::term::GroundTerm) -> String {
+        use spargebra::term::GroundTerm;
+        match term {
+            GroundTerm::NamedNode(n) => format!("'{}'", escape_cypher_string(n.as_str())),
+            GroundTerm::Literal(lit) => format!("'{}'", escape_cypher_string(lit.value())),
+            #[allow(unreachable_patterns)]
+            _ => "'?'".to_string(),
+        }
     }
 }
 
@@ -1552,7 +1621,39 @@ mod tests {
              VALUES ?s { <http://example.org/a> <http://example.org/b> } \
              ?s ?p ?o }",
         );
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "VALUES failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".uri IN ["),
+            "Single-variable VALUES with IRIs should use .uri IN, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_values_multi_variable() {
+        let result = translate(
+            "SELECT ?name ?age WHERE { \
+             VALUES (?name ?age) { (\"Alice\" \"30\") (\"Bob\" \"25\") } \
+             ?s <http://example.org/name> ?name . \
+             ?s <http://example.org/age> ?age }",
+        );
+        assert!(
+            result.is_ok(),
+            "Multi-variable VALUES failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("UNWIND"),
+            "Multi-variable VALUES should use UNWIND, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("_values.name") && cypher.query.contains("_values.age"),
+            "Should compare against _values fields, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
