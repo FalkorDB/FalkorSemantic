@@ -1542,3 +1542,210 @@ mod rdf_query_arithmetic {
         );
     }
 }
+
+// ============================================================================
+// RDF.QUERY E2E Tests - String & Type-Checking Functions (#73, #74)
+// ============================================================================
+
+mod rdf_query_string_functions {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_strings_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/1> <http://example.org/name> "Alice Smith" .
+<http://example.org/person/1> <http://example.org/label> "Hello World"@en .
+<http://example.org/person/2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/2> <http://example.org/name> "Bob Jones" .
+<http://example.org/person/2> <http://example.org/label> "Bonjour"@fr .
+<http://example.org/person/3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/3> <http://example.org/name> "Charlie Brown" .
+<http://example.org/person/3> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_substr() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "substr");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(SUBSTR(?name, 1, 5) = "Alice")
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with SUBSTR should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice"),
+            "Should find Alice Smith, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_concat() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "concat");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(CONTAINS(CONCAT(?name, "!"), "Alice"))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with CONCAT should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_replace() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "replace");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(REPLACE(?name, "Smith", "Johnson") = "Alice Johnson")
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with REPLACE should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice"),
+            "Should find Alice Smith via REPLACE, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_lang_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "lang");
+
+        let sparql = r#"SELECT ?label WHERE {
+            ?s <http://example.org/label> ?label .
+            FILTER(LANG(?label) = "en")
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with LANG filter should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Hello World"),
+            "Should find English label, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_is_literal() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "is_literal");
+
+        let sparql = r#"SELECT ?o WHERE {
+            ?s ?p ?o .
+            FILTER(isLiteral(?o))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with isLiteral should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_is_iri() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "is_iri");
+
+        let sparql = r#"SELECT ?o WHERE {
+            ?s ?p ?o .
+            FILTER(isIRI(?o))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with isIRI should succeed: {:?}",
+            result.err()
+        );
+    }
+}

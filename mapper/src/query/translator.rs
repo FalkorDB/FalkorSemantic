@@ -653,6 +653,50 @@ impl SparqlToCypher {
                             None
                         }
                     }
+                    F::SubStr => {
+                        // SPARQL SUBSTR is 1-indexed, Cypher substring is 0-indexed
+                        match arg_strs.len() {
+                            2 => Some(format!("substring({}, {} - 1)", arg_strs[0], arg_strs[1])),
+                            3.. => Some(format!(
+                                "substring({}, {} - 1, {})",
+                                arg_strs[0], arg_strs[1], arg_strs[2]
+                            )),
+                            _ => None,
+                        }
+                    }
+                    F::Concat => {
+                        if arg_strs.is_empty() {
+                            None
+                        } else {
+                            Some(format!("({})", arg_strs.join(" + ")))
+                        }
+                    }
+                    F::Replace => {
+                        // SPARQL REPLACE has 3 args (str, pattern, replacement)
+                        // 4th arg (flags) is not supported in Cypher
+                        if arg_strs.len() == 3 {
+                            Some(format!(
+                                "replace({}, {}, {})",
+                                arg_strs[0], arg_strs[1], arg_strs[2]
+                            ))
+                        } else {
+                            None
+                        }
+                    }
+                    F::Lang => arg_strs
+                        .first()
+                        .map(|a| format!("coalesce({a}.language, '')")),
+                    F::Datatype => arg_strs.first().map(|a| format!("{a}.datatype")),
+                    F::IsIri => arg_strs.first().map(|a| {
+                        format!("({a}.uri IS NOT NULL AND coalesce({a}.isBlank, false) = false)")
+                    }),
+                    F::IsBlank => arg_strs
+                        .first()
+                        .map(|a| format!("({a}.uri IS NOT NULL AND {a}.isBlank = true)")),
+                    F::IsLiteral => arg_strs.first().map(|a| format!("{a}.value IS NOT NULL")),
+                    F::IsNumeric => arg_strs
+                        .first()
+                        .map(|a| format!("toFloat({a}.value) IS NOT NULL")),
                     F::Abs => arg_strs.first().map(|a| format!("abs({a})")),
                     F::Ceil => arg_strs.first().map(|a| format!("ceil({a})")),
                     F::Floor => arg_strs.first().map(|a| format!("floor({a})")),
@@ -1600,6 +1644,147 @@ mod tests {
         assert!(
             cypher.query.contains(" IN ["),
             "Should contain IN list expression, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- String function tests (#73) ---
+
+    #[test]
+    fn test_substr_two_args() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . FILTER(SUBSTR(?name, 1) = \"A\") }",
+        );
+        assert!(result.is_ok(), "SUBSTR(2 args) failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("substring(") && cypher.query.contains("- 1"),
+            "Should contain substring with 1-indexed adjustment (- 1), got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_substr_three_args() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . FILTER(SUBSTR(?name, 1, 5) = \"Alice\") }",
+        );
+        assert!(result.is_ok(), "SUBSTR(3 args) failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("substring(") && cypher.query.contains("- 1"),
+            "Should contain substring with 1-indexed adjustment (- 1), got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_concat_function() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/first> ?first . ?s <http://example.org/last> ?last . \
+             FILTER(CONCAT(?first, ?last) = \"JohnDoe\") }",
+        );
+        assert!(result.is_ok(), "CONCAT failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains('+'),
+            "CONCAT should use + operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_replace_function() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . \
+             FILTER(REPLACE(?name, \"old\", \"new\") = \"new\") }",
+        );
+        assert!(result.is_ok(), "REPLACE failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("replace("),
+            "Should contain replace, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_lang_function() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . FILTER(LANG(?name) = \"en\") }",
+        );
+        assert!(result.is_ok(), "LANG failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("coalesce(") && cypher.query.contains(".language"),
+            "Should contain coalesce(...language, ''), got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_datatype_function() {
+        let result = translate(
+            "SELECT ?s ?age WHERE { ?s <http://example.org/age> ?age . \
+             FILTER(DATATYPE(?age) = <http://www.w3.org/2001/XMLSchema#integer>) }",
+        );
+        assert!(result.is_ok(), "DATATYPE failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".datatype"),
+            "Should contain .datatype, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- Type-checking function tests (#74) ---
+
+    #[test]
+    fn test_is_iri() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isIRI(?o)) }");
+        assert!(result.is_ok(), "isIRI failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".uri IS NOT NULL")
+                && cypher.query.contains("isBlank")
+                && cypher.query.contains("false"),
+            "Should check uri IS NOT NULL and isBlank = false, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_is_blank() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isBlank(?o)) }");
+        assert!(result.is_ok(), "isBlank failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".uri IS NOT NULL") && cypher.query.contains("isBlank = true"),
+            "Should check uri IS NOT NULL and isBlank = true, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_is_literal() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isLiteral(?o)) }");
+        assert!(result.is_ok(), "isLiteral failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("value IS NOT NULL"),
+            "Should contain value IS NOT NULL, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_is_numeric() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isNumeric(?o)) }");
+        assert!(result.is_ok(), "isNumeric failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("toFloat(") && cypher.query.contains("IS NOT NULL"),
+            "Should contain toFloat(...) IS NOT NULL, got: {}",
             cypher.query
         );
     }
