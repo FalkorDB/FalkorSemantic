@@ -17,6 +17,7 @@ log.workspace = true
 
 # SPARQL parsing (same version as parser)
 spargebra = "0.4"
+oxrdf = "0.3"
 
 [dev-dependencies]
 mockall.workspace = true

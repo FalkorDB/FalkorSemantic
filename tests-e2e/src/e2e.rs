@@ -1402,8 +1402,12 @@ mod rdf_query_arithmetic {
     use super::*;
 
     /// Insert test data and return the graph key used
-    fn setup_test_data(ctx: &mut TestContext) -> String {
-        let graph_key = "test_query_arithmetic";
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_arithmetic_{suffix}_{nanos}");
         let ntriples = r#"<http://example.org/person/1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
 <http://example.org/person/1> <http://example.org/name> "Alice" .
 <http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
@@ -1419,7 +1423,7 @@ mod rdf_query_arithmetic {
 <http://example.org/person/3> <http://example.org/status> "inactive" ."#;
 
         let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
-            .arg(graph_key)
+            .arg(&graph_key)
             .arg(ntriples)
             .arg("FORMAT")
             .arg("ntriples")
@@ -1430,14 +1434,14 @@ mod rdf_query_arithmetic {
             "RDF.INSERT setup should succeed: {:?}",
             result.err()
         );
-        graph_key.to_string()
+        graph_key
     }
 
     #[test]
     #[ignore]
     fn test_query_addition_filter() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
-        let graph_key = setup_test_data(&mut ctx);
+        let graph_key = setup_test_data(&mut ctx, "addition");
 
         // SPARQL: Find persons where age + 10 > 40
         let sparql = r#"SELECT ?name WHERE {
@@ -1471,7 +1475,7 @@ mod rdf_query_arithmetic {
     #[ignore]
     fn test_query_multiplication_filter() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
-        let graph_key = setup_test_data(&mut ctx);
+        let graph_key = setup_test_data(&mut ctx, "multiplication");
 
         // SPARQL: Find persons where score * 2 > 170
         let sparql = r#"SELECT ?name WHERE {
@@ -1505,7 +1509,7 @@ mod rdf_query_arithmetic {
     #[ignore]
     fn test_query_not_in_filter() {
         let mut ctx = TestContext::new().expect("Failed to create test context");
-        let graph_key = setup_test_data(&mut ctx);
+        let graph_key = setup_test_data(&mut ctx, "not_in");
 
         // SPARQL: Find persons whose name is NOT IN ("Alice", "Charlie")
         let sparql = r#"SELECT ?name WHERE {

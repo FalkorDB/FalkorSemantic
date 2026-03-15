@@ -570,7 +570,24 @@ impl SparqlToCypher {
             E::Variable(v) => Some(v.as_str().to_string()),
             E::Literal(lit) => {
                 let value = lit.value();
-                Some(format!("'{}'", escape_cypher_string(value)))
+                let dt = lit.datatype();
+                // Render numeric and boolean literals unquoted for valid Cypher arithmetic
+                if dt == oxrdf::vocab::xsd::INTEGER
+                    || dt == oxrdf::vocab::xsd::DECIMAL
+                    || dt == oxrdf::vocab::xsd::DOUBLE
+                    || dt == oxrdf::vocab::xsd::FLOAT
+                    || dt == oxrdf::vocab::xsd::BOOLEAN
+                    || dt == oxrdf::vocab::xsd::NON_NEGATIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::POSITIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::NEGATIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::NON_POSITIVE_INTEGER
+                {
+                    Some(value.to_string())
+                } else if dt == oxrdf::vocab::xsd::DATE {
+                    Some(format!("date('{}')", escape_cypher_string(value)))
+                } else {
+                    Some(format!("'{}'", escape_cypher_string(value)))
+                }
             }
             E::NamedNode(node) => Some(format!("'{}'", escape_cypher_string(node.as_str()))),
             E::Bound(v) => Some(format!("{} IS NOT NULL", v.as_str())),
