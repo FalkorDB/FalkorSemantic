@@ -1749,3 +1749,110 @@ mod rdf_query_string_functions {
         );
     }
 }
+
+// ============================================================================
+// RDF.QUERY E2E Tests - EXISTS / NOT EXISTS (#67)
+// ============================================================================
+
+mod rdf_query_exists {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_exists_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "Alice" .
+<http://example.org/person/1> <http://example.org/email> "alice@example.org" .
+<http://example.org/person/2> <http://example.org/name> "Bob" .
+<http://example.org/person/3> <http://example.org/name> "Charlie" .
+<http://example.org/person/3> <http://example.org/email> "charlie@example.org" ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_filter_exists() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "exists");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER EXISTS { ?s <http://example.org/email> ?email }
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with EXISTS should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice") && json.contains("Charlie"),
+            "Should find Alice and Charlie (both have email), got: {}",
+            json
+        );
+        assert!(
+            !json.contains("Bob"),
+            "Should NOT find Bob (no email), got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_filter_not_exists() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "not_exists");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER NOT EXISTS { ?s <http://example.org/email> ?email }
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with NOT EXISTS should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Bob"),
+            "Should find Bob (no email), got: {}",
+            json
+        );
+        assert!(
+            !json.contains("Alice"),
+            "Should NOT find Alice (has email), got: {}",
+            json
+        );
+    }
+}
