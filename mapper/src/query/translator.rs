@@ -1497,8 +1497,8 @@ mod tests {
         assert!(result.is_ok(), "Subtraction failed: {:?}", result.err());
         let cypher = result.unwrap();
         assert!(
-            cypher.query.contains('-'),
-            "Should contain -, got: {}",
+            cypher.query.contains(" - "),
+            "Should contain subtraction operator, got: {}",
             cypher.query
         );
     }
@@ -1510,8 +1510,8 @@ mod tests {
         assert!(result.is_ok(), "Multiplication failed: {:?}", result.err());
         let cypher = result.unwrap();
         assert!(
-            cypher.query.contains('*'),
-            "Should contain *, got: {}",
+            cypher.query.contains(" * "),
+            "Should contain multiplication operator, got: {}",
             cypher.query
         );
     }
@@ -1523,8 +1523,8 @@ mod tests {
         assert!(result.is_ok(), "Division failed: {:?}", result.err());
         let cypher = result.unwrap();
         assert!(
-            cypher.query.contains('/'),
-            "Should contain /, got: {}",
+            cypher.query.contains(" / "),
+            "Should contain division operator, got: {}",
             cypher.query
         );
     }
@@ -1576,13 +1576,13 @@ mod tests {
         assert!(result.is_ok(), "NOT IN failed: {:?}", result.err());
         let cypher = result.unwrap();
         assert!(
-            cypher.query.contains("NOT"),
-            "Should contain NOT, got: {}",
+            cypher.query.contains("NOT ("),
+            "Should contain NOT applied to expression, got: {}",
             cypher.query
         );
         assert!(
-            cypher.query.contains("IN"),
-            "Should contain IN, got: {}",
+            cypher.query.contains(" IN ["),
+            "Should contain IN list expression, got: {}",
             cypher.query
         );
     }
