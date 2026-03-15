@@ -1482,7 +1482,11 @@ mod tests {
         );
         assert!(result.is_ok(), "Addition failed: {:?}", result.err());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains('+'), "Should contain +, got: {}", cypher.query);
+        assert!(
+            cypher.query.contains('+'),
+            "Should contain +, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
@@ -1492,27 +1496,37 @@ mod tests {
         );
         assert!(result.is_ok(), "Subtraction failed: {:?}", result.err());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains('-'), "Should contain -, got: {}", cypher.query);
+        assert!(
+            cypher.query.contains('-'),
+            "Should contain -, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
     fn test_arithmetic_multiplication() {
-        let result = translate(
-            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a * 2 > 100) }",
-        );
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a * 2 > 100) }");
         assert!(result.is_ok(), "Multiplication failed: {:?}", result.err());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains('*'), "Should contain *, got: {}", cypher.query);
+        assert!(
+            cypher.query.contains('*'),
+            "Should contain *, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
     fn test_arithmetic_division() {
-        let result = translate(
-            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a / 2 < 50) }",
-        );
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a / 2 < 50) }");
         assert!(result.is_ok(), "Division failed: {:?}", result.err());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains('/'), "Should contain /, got: {}", cypher.query);
+        assert!(
+            cypher.query.contains('/'),
+            "Should contain /, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
@@ -1520,20 +1534,35 @@ mod tests {
         let result = translate(
             "SELECT ?s WHERE { ?s <http://example.org/a> ?a . ?s <http://example.org/b> ?b . FILTER((?a + ?b) * 2 > 10) }",
         );
-        assert!(result.is_ok(), "Nested arithmetic failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Nested arithmetic failed: {:?}",
+            result.err()
+        );
         let cypher = result.unwrap();
-        assert!(cypher.query.contains('+'), "Should contain +, got: {}", cypher.query);
-        assert!(cypher.query.contains('*'), "Should contain *, got: {}", cypher.query);
+        assert!(
+            cypher.query.contains('+'),
+            "Should contain +, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains('*'),
+            "Should contain *, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
     fn test_unary_minus() {
-        let result = translate(
-            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(-?a > 0) }",
-        );
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(-?a > 0) }");
         assert!(result.is_ok(), "Unary minus failed: {:?}", result.err());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains("-("), "Should contain negation, got: {}", cypher.query);
+        assert!(
+            cypher.query.contains("-("),
+            "Should contain negation, got: {}",
+            cypher.query
+        );
     }
 
     // --- NOT IN expression test (#66) ---
@@ -1546,7 +1575,15 @@ mod tests {
         );
         assert!(result.is_ok(), "NOT IN failed: {:?}", result.err());
         let cypher = result.unwrap();
-        assert!(cypher.query.contains("NOT"), "Should contain NOT, got: {}", cypher.query);
-        assert!(cypher.query.contains("IN"), "Should contain IN, got: {}", cypher.query);
+        assert!(
+            cypher.query.contains("NOT"),
+            "Should contain NOT, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("IN"),
+            "Should contain IN, got: {}",
+            cypher.query
+        );
     }
 }
