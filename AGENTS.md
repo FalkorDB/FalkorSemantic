@@ -38,7 +38,7 @@ This document provides comprehensive information about the FalkorSemantic projec
 
 ## Available Make Targets
 
-```
+```text
 Building:
   make build          - Build all crates
   make module         - Build Redis module in release mode
@@ -205,7 +205,7 @@ File: `mapper/src/query/translator.rs` (2062 lines)
 - **Test Infrastructure**:
   - Manual Redis setup instructions included
   - Docker container setup support
-  - Full stack testing from Redis commands through parser
+  - Full-stack testing from Redis commands through parser
   - Test threads: 1 (serialized to prevent port conflicts)
 - **Benchmarks Scope**:
   - Bulk insert performance (1M, 10M, 100M triples)
@@ -235,7 +235,7 @@ File: `mapper/src/query/translator.rs` (2062 lines)
   - SPARQL: https://www.w3.org/2009/sparql/docs/tests/
 
 ### Test Organization Summary
-```
+```text
 tests/                 → Integration tests (requires running services)
 tests-e2e/            → End-to-end tests + benchmarks (requires module)
 tests-compliance/     → W3C standards compliance testing
@@ -287,7 +287,7 @@ tests-compliance/     → W3C standards compliance testing
 
 ## Project Structure
 
-```
+```text
 FalkorSemantic/
 ├── Cargo.toml                 # Workspace configuration
 ├── Makefile                   # Development targets
@@ -345,7 +345,7 @@ FalkorSemantic/
 │   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs
-│       ├── e2e.rs          # Full stack integration tests
+│       ├── e2e.rs          # Full-stack integration tests
 │       └── benchmarks.rs   # Performance benchmarks
 │
 ├── tests-compliance/        # W3C compliance tests
