@@ -11,8 +11,9 @@
 //! # Build the module
 //! cargo build -p falkorsemantic-module
 //!
-//! # Start Redis with the module (in another terminal)
-//! redis-server --loadmodule ./target/debug/libfalkorsemantic_module.so --port 6399
+//! # Start FalkorDB with the FalkorSemantic module (in another terminal)
+//! docker run --rm -p 6399:6379 -v "$(pwd)/target:/target" falkordb/falkordb:v4.16.7 \
+//!   --loadmodule /target/debug/libfalkorsemantic_module.so
 //!
 //! # Run the tests
 //! TEST_REDIS_PORT=6399 cargo test --test e2e -- --test-threads=1
@@ -30,10 +31,9 @@
 //! ```
 
 use std::env;
-use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
@@ -55,22 +55,46 @@ fn get_test_port() -> u16 {
 
 /// Get the path to the compiled module
 fn get_module_path() -> PathBuf {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let path = PathBuf::from(manifest_dir);
+    let manifest_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
+    let workspace_dir = manifest_dir
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| manifest_dir.clone());
 
-    // Try debug first, then release
-    let debug_path = path.join("target/debug/libfalkorsemantic_module.so");
-    if debug_path.exists() {
-        return debug_path;
+    let mut target_dirs = Vec::new();
+    if let Ok(target_dir) = env::var("CARGO_TARGET_DIR") {
+        let target_dir = PathBuf::from(target_dir);
+        if target_dir.is_absolute() {
+            target_dirs.push(target_dir);
+        } else {
+            target_dirs.push(workspace_dir.join(&target_dir));
+            target_dirs.push(manifest_dir.join(&target_dir));
+        }
     }
 
-    let release_path = path.join("target/release/libfalkorsemantic_module.so");
-    if release_path.exists() {
-        return release_path;
+    target_dirs.push(workspace_dir.join("target"));
+    target_dirs.push(workspace_dir.join("target/llvm-cov-target"));
+    target_dirs.push(manifest_dir.join("target"));
+    target_dirs.push(manifest_dir.join("target/llvm-cov-target"));
+
+    // Try debug first, then release.
+    for target_dir in &target_dirs {
+        let debug_path = target_dir.join("debug/libfalkorsemantic_module.so");
+        if debug_path.exists() {
+            return debug_path;
+        }
     }
 
-    // Return debug path anyway - will fail with helpful message
-    debug_path
+    for target_dir in &target_dirs {
+        let release_path = target_dir.join("release/libfalkorsemantic_module.so");
+        if release_path.exists() {
+            return release_path;
+        }
+    }
+
+    // Return a likely debug path for a helpful error message.
+    workspace_dir.join("target/debug/libfalkorsemantic_module.so")
 }
 
 /// Check if Redis is available on the test port
@@ -94,26 +118,26 @@ fn wait_for_redis(port: u16, timeout: Duration) -> bool {
 
 /// Managed Redis server for testing
 struct TestRedisServer {
-    process: Option<Child>,
+    container_name: Option<String>,
     port: u16,
 }
 
 impl TestRedisServer {
-    /// Start a new Redis server with the FalkorSemantic module
+    /// Start a new FalkorDB container with the FalkorSemantic module.
     fn start() -> Result<Self, String> {
         let port = get_test_port();
 
         // Check if Redis is already running on this port
         if redis_is_available(port) {
-            // Verify it has our module loaded
-            if Self::verify_module_loaded(port) {
+            // Verify required modules are loaded.
+            if Self::verify_required_modules_loaded(port) {
                 return Ok(Self {
-                    process: None,
+                    container_name: None,
                     port,
                 });
             } else {
                 return Err(format!(
-                    "Redis is running on port {} but FalkorSemantic module is not loaded",
+                    "Redis is running on port {} but required modules (falkordb + falkorsemantic) are not loaded",
                     port
                 ));
             }
@@ -127,55 +151,103 @@ impl TestRedisServer {
             ));
         }
 
-        // Start Redis with the module
-        let mut child = Command::new("redis-server")
+        let module_dir = module_path
+            .parent()
+            .ok_or_else(|| format!("Invalid module path: {:?}", module_path))?;
+        let module_file = module_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("Invalid module file name: {:?}", module_path))?;
+        let container_name = format!("falkorsemantic-e2e-{}", port);
+
+        // Clean up any stale container with the same name.
+        let _ = Command::new("docker")
+            .args(["rm", "-f", &container_name])
+            .output();
+
+        // Start FalkorDB with the semantic module loaded.
+        let output = Command::new("docker")
             .args([
-                "--port",
-                &port.to_string(),
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                &container_name,
+                "-p",
+                &format!("{}:6379", port),
+                "-v",
+                &format!("{}:/target", module_dir.display()),
+                "falkordb/falkordb:v4.16.7",
                 "--loadmodule",
-                module_path.to_str().unwrap(),
-                "--daemonize",
-                "no",
+                &format!("/target/{}", module_file),
                 "--loglevel",
                 "warning",
                 "--save",
-                "", // Disable RDB persistence
+                "",
                 "--appendonly",
-                "no", // Disable AOF persistence
+                "no",
             ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start redis-server: {}", e))?;
+            .output()
+            .map_err(|e| format!("Failed to start FalkorDB container: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(format!(
+                "Failed to start FalkorDB container with Docker: {}",
+                stderr.trim()
+            ));
+        }
 
         // Wait for Redis to start
         if !wait_for_redis(port, REDIS_STARTUP_TIMEOUT) {
-            // Try to get error output
-            if let Some(stderr) = child.stderr.take() {
-                let reader = BufReader::new(stderr);
-                let errors: Vec<String> = reader.lines().take(10).filter_map(|l| l.ok()).collect();
-                child.kill().ok();
-                return Err(format!(
-                    "Redis failed to start within {:?}. Errors:\n{}",
-                    REDIS_STARTUP_TIMEOUT,
-                    errors.join("\n")
-                ));
-            }
-            child.kill().ok();
+            let logs = Command::new("docker")
+                .args(["logs", &container_name])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_else(|| "<failed to collect container logs>".to_string());
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
+                .output();
             return Err(format!(
-                "Redis failed to start within {:?}",
-                REDIS_STARTUP_TIMEOUT
+                "Redis failed to start within {:?}. Docker logs:\n{}",
+                REDIS_STARTUP_TIMEOUT, logs
+            ));
+        }
+
+        if !Self::verify_required_modules_loaded(port) {
+            let logs = Command::new("docker")
+                .args(["logs", &container_name])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_else(|| "<failed to collect container logs>".to_string());
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
+                .output();
+            return Err(format!(
+                "Container started on port {} but required modules were not loaded. Docker logs:\n{}",
+                port, logs
             ));
         }
 
         Ok(Self {
-            process: Some(child),
+            container_name: Some(container_name),
             port,
         })
     }
 
     /// Verify that the FalkorSemantic module is loaded
     fn verify_module_loaded(port: u16) -> bool {
+        Self::module_loaded(port, "falkorsemantic")
+    }
+
+    /// Verify that both FalkorDB and FalkorSemantic modules are loaded.
+    fn verify_required_modules_loaded(port: u16) -> bool {
+        Self::module_loaded(port, "falkordb") && Self::module_loaded(port, "falkorsemantic")
+    }
+
+    fn module_loaded(port: u16, module_name: &str) -> bool {
         let client = match redis::Client::open(format!("redis://127.0.0.1:{}/", port)) {
             Ok(c) => c,
             Err(_) => return false,
@@ -195,17 +267,25 @@ impl TestRedisServer {
                         // Check each field pair for "name" -> "falkorsemantic"
                         let mut iter = fields.iter();
                         while let Some(key) = iter.next() {
-                            if let redis::Value::BulkString(k) = key {
-                                if k == b"name" {
-                                    if let Some(redis::Value::BulkString(v)) = iter.next() {
-                                        if v == b"falkorsemantic" {
-                                            return true;
-                                        }
+                            let is_name_key = match key {
+                                redis::Value::BulkString(k) => k == b"name",
+                                redis::Value::SimpleString(s) => s == "name",
+                                _ => false,
+                            };
+                            if is_name_key {
+                                if let Some(val) = iter.next() {
+                                    let matches = match val {
+                                        redis::Value::BulkString(v) => v == module_name.as_bytes(),
+                                        redis::Value::SimpleString(s) => s == module_name,
+                                        _ => false,
+                                    };
+                                    if matches {
+                                        return true;
                                     }
-                                } else {
-                                    // Skip the value for other keys
-                                    iter.next();
                                 }
+                            } else {
+                                // Skip the value for other keys
+                                iter.next();
                             }
                         }
                     }
@@ -233,18 +313,10 @@ impl TestRedisServer {
 
 impl Drop for TestRedisServer {
     fn drop(&mut self) {
-        if let Some(mut process) = self.process.take() {
-            // Try graceful shutdown first
-            let _ = Command::new("redis-cli")
-                .args(["-p", &self.port.to_string(), "SHUTDOWN", "NOSAVE"])
+        if let Some(container_name) = self.container_name.take() {
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
                 .output();
-
-            // Wait a bit for graceful shutdown
-            thread::sleep(Duration::from_millis(500));
-
-            // Force kill if still running
-            let _ = process.kill();
-            let _ = process.wait();
         }
     }
 }
@@ -1392,4 +1464,669 @@ fn test_infrastructure_works() {
     let mut ctx = ctx.unwrap();
     let pong: RedisResult<String> = redis::cmd("PING").query(ctx.conn());
     assert_eq!(pong.unwrap(), "PONG");
+}
+
+// ============================================================================
+// RDF.QUERY E2E Tests - Arithmetic & NOT IN (#65, #66)
+// ============================================================================
+
+mod rdf_query_arithmetic {
+    use super::*;
+
+    /// Insert test data and return the graph key used
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_arithmetic_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/1> <http://example.org/name> "Alice" .
+<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/1> <http://example.org/score> "85"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/2> <http://example.org/name> "Bob" .
+<http://example.org/person/2> <http://example.org/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://example.org/score> "92"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/3> <http://example.org/name> "Charlie" .
+<http://example.org/person/3> <http://example.org/age> "35"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://example.org/score> "78"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://example.org/status> "inactive" ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_addition_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "addition");
+
+        // SPARQL: Find persons where age + 10 > 40
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            ?s <http://example.org/age> ?age .
+            FILTER(?age + 10 > 40)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with addition filter should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        // Should return Charlie (35+10=45>40) and Alice (30+10=40, not >40)
+        assert!(
+            json.contains("Charlie"),
+            "Should find Charlie (age 35 + 10 > 40), got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_multiplication_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "multiplication");
+
+        // SPARQL: Find persons where score * 2 > 170
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            ?s <http://example.org/score> ?score .
+            FILTER(?score * 2 > 170)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with multiplication should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        // Bob has score 92*2=184>170, Alice has 85*2=170 (not >170)
+        assert!(
+            json.contains("Bob"),
+            "Should find Bob (score 92*2 > 170), got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_not_in_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "not_in");
+
+        // SPARQL: Find persons whose name is NOT IN ("Alice", "Charlie")
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(?name NOT IN ("Alice", "Charlie"))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with NOT IN should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Bob"),
+            "Should find Bob (not in Alice/Charlie), got: {}",
+            json
+        );
+        assert!(
+            !json.contains("Alice"),
+            "Should NOT find Alice, got: {}",
+            json
+        );
+    }
+}
+
+// ============================================================================
+// RDF.QUERY E2E Tests - String & Type-Checking Functions (#73, #74)
+// ============================================================================
+
+mod rdf_query_string_functions {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_strings_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/1> <http://example.org/name> "Alice Smith" .
+<http://example.org/person/1> <http://example.org/label> "Hello World"@en .
+<http://example.org/person/2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/2> <http://example.org/name> "Bob Jones" .
+<http://example.org/person/2> <http://example.org/label> "Bonjour"@fr .
+<http://example.org/person/3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+<http://example.org/person/3> <http://example.org/name> "Charlie Brown" .
+<http://example.org/person/3> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_substr() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "substr");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(SUBSTR(?name, 1, 5) = "Alice")
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with SUBSTR should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice"),
+            "Should find Alice Smith, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_concat() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "concat");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(CONTAINS(CONCAT(?name, "!"), "Alice"))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with CONCAT should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_replace() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "replace");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER(REPLACE(?name, "Smith", "Johnson") = "Alice Johnson")
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with REPLACE should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice"),
+            "Should find Alice Smith via REPLACE, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_lang_filter() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "lang");
+
+        let sparql = r#"SELECT ?label WHERE {
+            ?s <http://example.org/label> ?label .
+            FILTER(LANG(?label) = "en")
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with LANG filter should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Hello World"),
+            "Should find English label, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_is_literal() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "is_literal");
+
+        let sparql = r#"SELECT ?o WHERE {
+            ?s ?p ?o .
+            FILTER(isLiteral(?o))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with isLiteral should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_is_iri() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "is_iri");
+
+        let sparql = r#"SELECT ?o WHERE {
+            ?s ?p ?o .
+            FILTER(isIRI(?o))
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with isIRI should succeed: {:?}",
+            result.err()
+        );
+    }
+}
+
+// ============================================================================
+// RDF.QUERY E2E Tests - EXISTS / NOT EXISTS (#67)
+// ============================================================================
+
+mod rdf_query_exists {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_exists_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "Alice" .
+<http://example.org/person/1> <http://example.org/email> "alice@example.org" .
+<http://example.org/person/2> <http://example.org/name> "Bob" .
+<http://example.org/person/3> <http://example.org/name> "Charlie" .
+<http://example.org/person/3> <http://example.org/email> "charlie@example.org" ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_filter_exists() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "exists");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER EXISTS { ?s <http://example.org/email> ?email }
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with EXISTS should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice") && json.contains("Charlie"),
+            "Should find Alice and Charlie (both have email), got: {}",
+            json
+        );
+        assert!(
+            !json.contains("Bob"),
+            "Should NOT find Bob (no email), got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_filter_not_exists() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "not_exists");
+
+        let sparql = r#"SELECT ?name WHERE {
+            ?s <http://example.org/name> ?name .
+            FILTER NOT EXISTS { ?s <http://example.org/email> ?email }
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with NOT EXISTS should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Bob"),
+            "Should find Bob (no email), got: {}",
+            json
+        );
+        assert!(
+            !json.contains("Alice"),
+            "Should NOT find Alice (has email), got: {}",
+            json
+        );
+    }
+}
+
+// ============================================================================
+// RDF.QUERY E2E Tests - BIND / Extend (#69)
+// ============================================================================
+
+mod rdf_query_bind {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_bind_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "alice" .
+<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://example.org/name> "bob" .
+<http://example.org/person/2> <http://example.org/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_bind_ucase() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "ucase");
+
+        let sparql = r#"SELECT ?name ?upper WHERE {
+            ?s <http://example.org/name> ?name .
+            BIND(UCASE(?name) AS ?upper)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with BIND(UCASE) should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("ALICE"),
+            "Expected UCASE transformation to produce ALICE, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_bind_str_function() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "str");
+
+        let sparql = r#"SELECT ?s ?label WHERE {
+            ?s <http://example.org/name> ?name .
+            BIND(STR(?name) AS ?label)
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with BIND(STR) should succeed: {:?}",
+            result.err()
+        );
+    }
+}
+
+// ============================================================================
+// RDF.QUERY E2E Tests - VALUES Inline Data (#70)
+// ============================================================================
+
+mod rdf_query_values {
+    use super::*;
+
+    fn setup_test_data(ctx: &mut TestContext, suffix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let graph_key = format!("test_query_values_{suffix}_{nanos}");
+        let ntriples = r#"<http://example.org/person/1> <http://example.org/name> "Alice" .
+<http://example.org/person/1> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/2> <http://example.org/name> "Bob" .
+<http://example.org/person/2> <http://example.org/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/person/3> <http://example.org/name> "Charlie" .
+<http://example.org/person/3> <http://example.org/age> "35"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
+
+        let result: RedisResult<redis::Value> = redis::cmd("RDF.INSERT")
+            .arg(&graph_key)
+            .arg(ntriples)
+            .arg("FORMAT")
+            .arg("ntriples")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.INSERT setup should succeed: {:?}",
+            result.err()
+        );
+        graph_key
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_values_single_variable() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "single");
+
+        let sparql = r#"SELECT ?name WHERE {
+            VALUES ?s { <http://example.org/person/1> <http://example.org/person/3> }
+            ?s <http://example.org/name> ?name .
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with VALUES should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice") && json.contains("Charlie"),
+            "Should find Alice and Charlie, got: {}",
+            json
+        );
+        assert!(!json.contains("Bob"), "Should NOT find Bob, got: {}", json);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_query_values_multi_variable() {
+        let mut ctx = TestContext::new().expect("Failed to create test context");
+        let graph_key = setup_test_data(&mut ctx, "multi");
+
+        let sparql = r#"SELECT ?name ?age WHERE {
+            VALUES (?name ?age) { ("Alice" "30") ("Charlie" "35") }
+            ?s <http://example.org/name> ?name .
+            ?s <http://example.org/age> ?age .
+        }"#;
+
+        let result: RedisResult<String> = redis::cmd("RDF.QUERY")
+            .arg(&graph_key)
+            .arg(sparql)
+            .arg("FORMAT")
+            .arg("json")
+            .query(ctx.conn());
+
+        assert!(
+            result.is_ok(),
+            "RDF.QUERY with multi-variable VALUES should succeed: {:?}",
+            result.err()
+        );
+        let json = result.unwrap();
+        assert!(
+            json.contains("Alice") || json.contains("Charlie"),
+            "Should find Alice or Charlie, got: {}",
+            json
+        );
+    }
+}
+
+/// Coverage smoke test that avoids external FalkorDB runtime dependencies.
+#[test]
+#[ignore]
+fn test_module_binary_exists_for_coverage() {
+    let module_path = get_module_path();
+    assert!(
+        module_path.exists(),
+        "Expected compiled module binary at {:?}. Run 'cargo build -p falkorsemantic-module' first.",
+        module_path
+    );
 }

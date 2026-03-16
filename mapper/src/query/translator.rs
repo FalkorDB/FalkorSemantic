@@ -120,11 +120,7 @@ impl SparqlToCypher {
         for (match_parts, where_parts) in &processed_branches {
             let mut cypher = String::new();
 
-            let match_clause = if match_parts.is_empty() {
-                "MATCH (n)".to_string()
-            } else {
-                format!("MATCH {}", match_parts.join(", "))
-            };
+            let match_clause = Self::build_match_clause(match_parts);
             cypher.push_str(&match_clause);
 
             if !where_parts.is_empty() {
@@ -228,15 +224,43 @@ impl SparqlToCypher {
             &mut bound_vars,
         )?;
 
-        let match_clause = if match_parts.is_empty() {
-            "MATCH (n)".to_string() // Fallback for empty patterns
-        } else {
-            format!("MATCH {}", match_parts.join(", "))
-        };
+        let match_clause = Self::build_match_clause(&match_parts);
 
         let where_clause = where_parts.join(" AND ");
 
         Ok((match_clause, where_clause, bound_vars))
+    }
+
+    /// Build a MATCH clause from parts, properly separating OPTIONAL MATCH and
+    /// WITH clauses from regular MATCH patterns.
+    fn build_match_clause(match_parts: &[String]) -> String {
+        if match_parts.is_empty() {
+            return "MATCH (n)".to_string();
+        }
+
+        let mut clauses = Vec::new();
+        let mut current_patterns = Vec::new();
+
+        for part in match_parts {
+            if part.starts_with("OPTIONAL MATCH")
+                || part.starts_with("WITH ")
+                || part.starts_with("UNWIND ")
+            {
+                if !current_patterns.is_empty() {
+                    clauses.push(format!("MATCH {}", current_patterns.join(", ")));
+                    current_patterns.clear();
+                }
+                clauses.push(part.clone());
+            } else {
+                current_patterns.push(part.clone());
+            }
+        }
+
+        if !current_patterns.is_empty() {
+            clauses.push(format!("MATCH {}", current_patterns.join(", ")));
+        }
+
+        clauses.join("\n")
     }
 
     /// Process a spargebra graph pattern recursively
@@ -301,11 +325,24 @@ impl SparqlToCypher {
             GP::Extend {
                 inner,
                 variable,
-                expression: _,
+                expression,
             } => {
                 self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
+                let expr_str = self.translate_expression(expression)?.ok_or_else(|| {
+                    MapperError::InvalidTransformation(format!(
+                        "Unsupported expression in BIND: {:?}",
+                        expression
+                    ))
+                })?;
+                let var_name = variable.as_str();
+                // Use WITH * only when there are prior patterns to carry forward
+                let has_prior_patterns = !match_parts.is_empty();
+                if has_prior_patterns {
+                    match_parts.push(format!("WITH *, {expr_str} AS {var_name}"));
+                } else {
+                    match_parts.push(format!("WITH {expr_str} AS {var_name}"));
+                }
                 bound_vars.insert(Variable::from(variable.clone()));
-                // BIND becomes WITH ... AS in Cypher
             }
             GP::OrderBy { inner, .. } | GP::Distinct { inner } | GP::Reduced { inner } => {
                 self.process_pattern(inner, match_parts, where_parts, bound_vars)?;
@@ -328,11 +365,66 @@ impl SparqlToCypher {
             }
             GP::Values {
                 variables,
-                bindings: _,
+                bindings,
             } => {
-                // VALUES clause - translate to WHERE ... IN ...
                 for var in variables {
                     bound_vars.insert(Variable::from(var.clone()));
+                }
+
+                if variables.len() == 1 && !bindings.is_empty() {
+                    // Single variable: WHERE var.uri/value IN ['v1', 'v2', ...]
+                    let var_name = variables[0].as_str();
+                    let terms: Vec<&spargebra::term::GroundTerm> = bindings
+                        .iter()
+                        .filter_map(|row| row.first().and_then(|v| v.as_ref()))
+                        .collect();
+                    if !terms.is_empty() {
+                        let all_iris = terms
+                            .iter()
+                            .all(|t| matches!(t, spargebra::term::GroundTerm::NamedNode(_)));
+                        let prop = if all_iris { "uri" } else { "value" };
+                        let values: Vec<String> = terms
+                            .iter()
+                            .map(|term| self.ground_term_to_cypher(term))
+                            .collect();
+                        where_parts.push(format!("{var_name}.{prop} IN [{}]", values.join(", ")));
+                    }
+                } else if variables.len() > 1 && !bindings.is_empty() {
+                    // Multi variable: UNWIND [{x: 'v1', y: 'v2'}, ...] AS _values
+                    let rows: Vec<String> = bindings
+                        .iter()
+                        .map(|row| {
+                            let fields: Vec<String> = variables
+                                .iter()
+                                .zip(row.iter())
+                                .filter_map(|(var, val)| {
+                                    val.as_ref().map(|term| {
+                                        format!(
+                                            "{}: {}",
+                                            var.as_str(),
+                                            self.ground_term_to_cypher(term)
+                                        )
+                                    })
+                                })
+                                .collect();
+                            format!("{{{}}}", fields.join(", "))
+                        })
+                        .collect();
+                    match_parts.push(format!("UNWIND [{}] AS _values", rows.join(", ")));
+                    for (i, var) in variables.iter().enumerate() {
+                        let name = var.as_str();
+                        let first_term = bindings
+                            .iter()
+                            .find_map(|row| row.get(i).and_then(|v| v.as_ref()));
+                        let prop = if first_term
+                            .is_some_and(|t| matches!(t, spargebra::term::GroundTerm::NamedNode(_)))
+                        {
+                            "uri"
+                        } else {
+                            "value"
+                        };
+                        where_parts.push(format!("{name}.{prop} = _values.{name}"));
+                    }
                 }
             }
             GP::Service { .. } => {
@@ -570,7 +662,24 @@ impl SparqlToCypher {
             E::Variable(v) => Some(v.as_str().to_string()),
             E::Literal(lit) => {
                 let value = lit.value();
-                Some(format!("'{}'", escape_cypher_string(value)))
+                let dt = lit.datatype();
+                // Render numeric and boolean literals unquoted for valid Cypher arithmetic
+                if dt == oxrdf::vocab::xsd::INTEGER
+                    || dt == oxrdf::vocab::xsd::DECIMAL
+                    || dt == oxrdf::vocab::xsd::DOUBLE
+                    || dt == oxrdf::vocab::xsd::FLOAT
+                    || dt == oxrdf::vocab::xsd::BOOLEAN
+                    || dt == oxrdf::vocab::xsd::NON_NEGATIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::POSITIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::NEGATIVE_INTEGER
+                    || dt == oxrdf::vocab::xsd::NON_POSITIVE_INTEGER
+                {
+                    Some(value.to_string())
+                } else if dt == oxrdf::vocab::xsd::DATE {
+                    Some(format!("date('{}')", escape_cypher_string(value)))
+                } else {
+                    Some(format!("'{}'", escape_cypher_string(value)))
+                }
             }
             E::NamedNode(node) => Some(format!("'{}'", escape_cypher_string(node.as_str()))),
             E::Bound(v) => Some(format!("{} IS NOT NULL", v.as_str())),
@@ -636,6 +745,50 @@ impl SparqlToCypher {
                             None
                         }
                     }
+                    F::SubStr => {
+                        // SPARQL SUBSTR is 1-indexed, Cypher substring is 0-indexed
+                        match arg_strs.len() {
+                            2 => Some(format!("substring({}, {} - 1)", arg_strs[0], arg_strs[1])),
+                            3.. => Some(format!(
+                                "substring({}, {} - 1, {})",
+                                arg_strs[0], arg_strs[1], arg_strs[2]
+                            )),
+                            _ => None,
+                        }
+                    }
+                    F::Concat => {
+                        if arg_strs.is_empty() {
+                            None
+                        } else {
+                            Some(format!("({})", arg_strs.join(" + ")))
+                        }
+                    }
+                    F::Replace => {
+                        // SPARQL REPLACE has 3 args (str, pattern, replacement)
+                        // 4th arg (flags) is not supported in Cypher
+                        if arg_strs.len() == 3 {
+                            Some(format!(
+                                "replace({}, {}, {})",
+                                arg_strs[0], arg_strs[1], arg_strs[2]
+                            ))
+                        } else {
+                            None
+                        }
+                    }
+                    F::Lang => arg_strs
+                        .first()
+                        .map(|a| format!("coalesce({a}.language, '')")),
+                    F::Datatype => arg_strs.first().map(|a| format!("{a}.datatype")),
+                    F::IsIri => arg_strs.first().map(|a| {
+                        format!("({a}.uri IS NOT NULL AND coalesce({a}.isBlank, false) = false)")
+                    }),
+                    F::IsBlank => arg_strs
+                        .first()
+                        .map(|a| format!("({a}.uri IS NOT NULL AND {a}.isBlank = true)")),
+                    F::IsLiteral => arg_strs.first().map(|a| format!("{a}.value IS NOT NULL")),
+                    F::IsNumeric => arg_strs
+                        .first()
+                        .map(|a| format!("toFloat({a}.value) IS NOT NULL")),
                     F::Abs => arg_strs.first().map(|a| format!("abs({a})")),
                     F::Ceil => arg_strs.first().map(|a| format!("ceil({a})")),
                     F::Floor => arg_strs.first().map(|a| format!("floor({a})")),
@@ -656,7 +809,62 @@ impl SparqlToCypher {
                     _ => None,
                 }
             }
-            _ => None, // Unsupported expression (Add, Subtract, Multiply, Divide, Exists, etc.)
+            E::Add(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} + {r})")),
+                    _ => None,
+                }
+            }
+            E::Subtract(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} - {r})")),
+                    _ => None,
+                }
+            }
+            E::Multiply(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} * {r})")),
+                    _ => None,
+                }
+            }
+            E::Divide(left, right) => {
+                let l = self.translate_expression(left)?;
+                let r = self.translate_expression(right)?;
+                match (l, r) {
+                    (Some(l), Some(r)) => Some(format!("({l} / {r})")),
+                    _ => None,
+                }
+            }
+            E::UnaryPlus(inner) => self.translate_expression(inner)?,
+            E::UnaryMinus(inner) => {
+                let i = self.translate_expression(inner)?;
+                i.map(|i| format!("-({i})"))
+            }
+            E::Exists(pattern) => {
+                let mut match_parts = Vec::new();
+                let mut where_parts = Vec::new();
+                let mut bound_vars = HashSet::new();
+                self.process_pattern(pattern, &mut match_parts, &mut where_parts, &mut bound_vars)?;
+                if match_parts.is_empty() {
+                    None
+                } else {
+                    let match_str = format!("MATCH {}", match_parts.join(", "));
+                    if where_parts.is_empty() {
+                        Some(format!("EXISTS {{ {match_str} }}"))
+                    } else {
+                        Some(format!(
+                            "EXISTS {{ {match_str} WHERE {} }}",
+                            where_parts.join(" AND ")
+                        ))
+                    }
+                }
+            }
         };
 
         Ok(result)
@@ -709,6 +917,17 @@ impl SparqlToCypher {
         let count = *self.var_counter.borrow();
         *self.var_counter.borrow_mut() += 1;
         format!("{prefix}_{count}")
+    }
+
+    /// Convert a spargebra GroundTerm to a Cypher literal string
+    fn ground_term_to_cypher(&self, term: &spargebra::term::GroundTerm) -> String {
+        use spargebra::term::GroundTerm;
+        match term {
+            GroundTerm::NamedNode(n) => format!("'{}'", escape_cypher_string(n.as_str())),
+            GroundTerm::Literal(lit) => format!("'{}'", escape_cypher_string(lit.value())),
+            #[allow(unreachable_patterns)]
+            _ => "'?'".to_string(),
+        }
     }
 }
 
@@ -1402,7 +1621,39 @@ mod tests {
              VALUES ?s { <http://example.org/a> <http://example.org/b> } \
              ?s ?p ?o }",
         );
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "VALUES failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".uri IN ["),
+            "Single-variable VALUES with IRIs should use .uri IN, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_values_multi_variable() {
+        let result = translate(
+            "SELECT ?name ?age WHERE { \
+             VALUES (?name ?age) { (\"Alice\" \"30\") (\"Bob\" \"25\") } \
+             ?s <http://example.org/name> ?name . \
+             ?s <http://example.org/age> ?age }",
+        );
+        assert!(
+            result.is_ok(),
+            "Multi-variable VALUES failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("UNWIND"),
+            "Multi-variable VALUES should use UNWIND, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("_values.name") && cypher.query.contains("_values.age"),
+            "Should compare against _values fields, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
@@ -1422,9 +1673,81 @@ mod tests {
              ?s <http://example.org/name> ?name . \
              BIND(ucase(?name) AS ?upper) }",
         );
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "BIND failed: {:?}", result.err());
         let cypher = result.unwrap();
         assert!(cypher.variables.contains(&"upper".to_string()));
+        assert!(
+            cypher.query.contains("WITH *,") || cypher.query.contains("WITH * ,"),
+            "BIND should produce WITH *, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("AS upper"),
+            "BIND should produce AS upper, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("toUpper("),
+            "BIND(ucase(...)) should translate to toUpper, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_bind_simple_expression() {
+        let result = translate(
+            "SELECT ?s ?label WHERE { \
+             ?s <http://example.org/name> ?name . \
+             BIND(str(?name) AS ?label) }",
+        );
+        assert!(
+            result.is_ok(),
+            "BIND simple expression failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("WITH *"),
+            "Should contain WITH *, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("AS label"),
+            "Should contain AS label, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_bind_variable_in_projection() {
+        let result = translate(
+            "SELECT ?s ?upper WHERE { \
+             ?s <http://example.org/name> ?name . \
+             BIND(ucase(?name) AS ?upper) }",
+        );
+        assert!(result.is_ok());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.variables.contains(&"upper".to_string()),
+            "Bound variable should appear in projection"
+        );
+    }
+
+    #[test]
+    fn test_bind_without_preceding_match() {
+        let result = translate("SELECT ?x WHERE { BIND(42 AS ?x) }");
+        assert!(result.is_ok(), "BIND-only failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            !cypher.query.contains("WITH *"),
+            "BIND-only should not use WITH *, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("WITH") && cypher.query.contains("AS x"),
+            "Should contain WITH ... AS x, got: {}",
+            cypher.query
+        );
     }
 
     #[test]
@@ -1434,5 +1757,306 @@ mod tests {
         let cypher = result.unwrap();
         assert!(cypher.query.contains("LIMIT 10"));
         assert!(cypher.query.contains("SKIP 5"));
+    }
+
+    // --- Arithmetic expression tests (#65) ---
+
+    #[test]
+    fn test_arithmetic_addition() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . ?s <http://example.org/b> ?b . FILTER(?a + ?b > 10) }",
+        );
+        assert!(result.is_ok(), "Addition failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains('+'),
+            "Should contain +, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_subtraction() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . ?s <http://example.org/b> ?b . FILTER(?a - ?b < 5) }",
+        );
+        assert!(result.is_ok(), "Subtraction failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(" - "),
+            "Should contain subtraction operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_multiplication() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a * 2 > 100) }");
+        assert!(result.is_ok(), "Multiplication failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(" * "),
+            "Should contain multiplication operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_division() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(?a / 2 < 50) }");
+        assert!(result.is_ok(), "Division failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(" / "),
+            "Should contain division operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_nested() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/a> ?a . ?s <http://example.org/b> ?b . FILTER((?a + ?b) * 2 > 10) }",
+        );
+        assert!(
+            result.is_ok(),
+            "Nested arithmetic failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains('+'),
+            "Should contain +, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains('*'),
+            "Should contain *, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_unary_minus() {
+        let result =
+            translate("SELECT ?s WHERE { ?s <http://example.org/a> ?a . FILTER(-?a > 0) }");
+        assert!(result.is_ok(), "Unary minus failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("-("),
+            "Should contain negation, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- NOT IN expression test (#66) ---
+
+    #[test]
+    fn test_not_in_expression() {
+        let result = translate(
+            "SELECT ?s ?type WHERE { ?s <http://example.org/type> ?type . \
+             FILTER(?type NOT IN (\"A\", \"B\")) }",
+        );
+        assert!(result.is_ok(), "NOT IN failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("NOT ("),
+            "Should contain NOT applied to expression, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains(" IN ["),
+            "Should contain IN list expression, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- String function tests (#73) ---
+
+    #[test]
+    fn test_substr_two_args() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . FILTER(SUBSTR(?name, 1) = \"A\") }",
+        );
+        assert!(result.is_ok(), "SUBSTR(2 args) failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("substring(") && cypher.query.contains("- 1"),
+            "Should contain substring with 1-indexed adjustment (- 1), got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_substr_three_args() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . FILTER(SUBSTR(?name, 1, 5) = \"Alice\") }",
+        );
+        assert!(result.is_ok(), "SUBSTR(3 args) failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("substring(") && cypher.query.contains("- 1"),
+            "Should contain substring with 1-indexed adjustment (- 1), got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_concat_function() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/first> ?first . ?s <http://example.org/last> ?last . \
+             FILTER(CONCAT(?first, ?last) = \"JohnDoe\") }",
+        );
+        assert!(result.is_ok(), "CONCAT failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains('+'),
+            "CONCAT should use + operator, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_replace_function() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . \
+             FILTER(REPLACE(?name, \"old\", \"new\") = \"new\") }",
+        );
+        assert!(result.is_ok(), "REPLACE failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("replace("),
+            "Should contain replace, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_lang_function() {
+        let result = translate(
+            "SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name . FILTER(LANG(?name) = \"en\") }",
+        );
+        assert!(result.is_ok(), "LANG failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("coalesce(") && cypher.query.contains(".language"),
+            "Should contain coalesce(...language, ''), got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_datatype_function() {
+        let result = translate(
+            "SELECT ?s ?age WHERE { ?s <http://example.org/age> ?age . \
+             FILTER(DATATYPE(?age) = <http://www.w3.org/2001/XMLSchema#integer>) }",
+        );
+        assert!(result.is_ok(), "DATATYPE failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".datatype"),
+            "Should contain .datatype, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- Type-checking function tests (#74) ---
+
+    #[test]
+    fn test_is_iri() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isIRI(?o)) }");
+        assert!(result.is_ok(), "isIRI failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".uri IS NOT NULL")
+                && cypher.query.contains("isBlank")
+                && cypher.query.contains("false"),
+            "Should check uri IS NOT NULL and isBlank = false, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_is_blank() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isBlank(?o)) }");
+        assert!(result.is_ok(), "isBlank failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains(".uri IS NOT NULL") && cypher.query.contains("isBlank = true"),
+            "Should check uri IS NOT NULL and isBlank = true, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_is_literal() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isLiteral(?o)) }");
+        assert!(result.is_ok(), "isLiteral failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("value IS NOT NULL"),
+            "Should contain value IS NOT NULL, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_is_numeric() {
+        let result = translate("SELECT ?s ?o WHERE { ?s ?p ?o . FILTER(isNumeric(?o)) }");
+        assert!(result.is_ok(), "isNumeric failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("toFloat(") && cypher.query.contains("IS NOT NULL"),
+            "Should contain toFloat(...) IS NOT NULL, got: {}",
+            cypher.query
+        );
+    }
+
+    // --- EXISTS / NOT EXISTS tests (#67) ---
+
+    #[test]
+    fn test_filter_exists() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/name> ?name . \
+             FILTER EXISTS { ?s <http://example.org/email> ?email } }",
+        );
+        assert!(result.is_ok(), "FILTER EXISTS failed: {:?}", result.err());
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("EXISTS {") && cypher.query.contains("MATCH"),
+            "Should contain EXISTS {{ MATCH ..., got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("example.org/email"),
+            "EXISTS body should reference the inner predicate, got: {}",
+            cypher.query
+        );
+    }
+
+    #[test]
+    fn test_filter_not_exists() {
+        let result = translate(
+            "SELECT ?s WHERE { ?s <http://example.org/name> ?name . \
+             FILTER NOT EXISTS { ?s <http://example.org/deleted> ?d } }",
+        );
+        assert!(
+            result.is_ok(),
+            "FILTER NOT EXISTS failed: {:?}",
+            result.err()
+        );
+        let cypher = result.unwrap();
+        assert!(
+            cypher.query.contains("NOT (EXISTS {"),
+            "Should contain NOT (EXISTS {{, got: {}",
+            cypher.query
+        );
+        assert!(
+            cypher.query.contains("example.org/deleted"),
+            "NOT EXISTS body should reference the inner predicate, got: {}",
+            cypher.query
+        );
     }
 }
