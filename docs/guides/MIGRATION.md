@@ -52,7 +52,7 @@ curl -X POST http://localhost:3030/dataset/query \
 redis-cli RDF.GRAPH CREATE myknowledge
 
 # Bulk import
-redis-cli RDF.BULK_INSERT myknowledge ntriples /path/to/export.nt BATCH 50000
+redis-cli RDF.BULK_INSERT myknowledge /path/to/export.nt FORMAT ntriples BATCH 50000
 ```
 
 ### Query Migration
@@ -95,7 +95,7 @@ curl -X POST "http://localhost:8890/sparql" \
 
 ```bash
 redis-cli RDF.GRAPH CREATE mygraph
-redis-cli RDF.BULK_INSERT mygraph ntriples /path/to/export.nt BATCH 50000
+redis-cli RDF.BULK_INSERT mygraph /path/to/export.nt FORMAT ntriples BATCH 50000
 ```
 
 ### Query Migration
@@ -132,7 +132,7 @@ curl -X GET "http://localhost:7200/repositories/myrepo/statements?context=<http:
 
 ```bash
 redis-cli RDF.GRAPH CREATE myrepo
-redis-cli RDF.BULK_INSERT myrepo ntriples /path/to/export.nt BATCH 50000
+redis-cli RDF.BULK_INSERT myrepo /path/to/export.nt FORMAT ntriples BATCH 50000
 ```
 
 ### Query Migration
@@ -172,7 +172,7 @@ aws s3 cp s3://my-bucket/exports/export.nt /path/to/export.nt
 
 # Import
 redis-cli RDF.GRAPH CREATE neptune_migrated
-redis-cli RDF.BULK_INSERT neptune_migrated ntriples /path/to/export.nt BATCH 50000
+redis-cli RDF.BULK_INSERT neptune_migrated /path/to/export.nt FORMAT ntriples BATCH 50000
 ```
 
 ### Query Migration
@@ -206,7 +206,7 @@ curl -X POST "http://localhost:9999/blazegraph/sparql" \
 
 ```bash
 redis-cli RDF.GRAPH CREATE blazegraph_migrated
-redis-cli RDF.BULK_INSERT blazegraph_migrated ntriples /path/to/export.nt BATCH 50000
+redis-cli RDF.BULK_INSERT blazegraph_migrated /path/to/export.nt FORMAT ntriples BATCH 50000
 ```
 
 ### Query Migration
@@ -223,13 +223,13 @@ redis-cli RDF.BULK_INSERT blazegraph_migrated ntriples /path/to/export.nt BATCH 
 ### N-Triples (.nt)
 
 ```bash
-redis-cli RDF.BULK_INSERT mygraph ntriples /path/to/data.nt BATCH 50000
+redis-cli RDF.BULK_INSERT mygraph /path/to/data.nt FORMAT ntriples BATCH 50000
 ```
 
 ### N-Quads (.nq)
 
 ```bash
-redis-cli RDF.BULK_INSERT mygraph nquads /path/to/data.nq BATCH 50000
+redis-cli RDF.BULK_INSERT mygraph /path/to/data.nq FORMAT nquads BATCH 50000
 ```
 
 ### Turtle (.ttl)
@@ -240,7 +240,7 @@ redis-cli RDF.INSERT mygraph FORMAT turtle "$(cat /path/to/data.ttl)"
 
 # Large files - convert to N-Triples first
 rapper -i turtle -o ntriples data.ttl > data.nt
-redis-cli RDF.BULK_INSERT mygraph ntriples /path/to/data.nt BATCH 50000
+redis-cli RDF.BULK_INSERT mygraph /path/to/data.nt FORMAT ntriples BATCH 50000
 ```
 
 ### RDF/XML (.rdf, .owl)
@@ -248,7 +248,7 @@ redis-cli RDF.BULK_INSERT mygraph ntriples /path/to/data.nt BATCH 50000
 ```bash
 # Convert to N-Triples using rapper (part of Raptor)
 rapper -i rdfxml -o ntriples data.rdf > data.nt
-redis-cli RDF.BULK_INSERT mygraph ntriples /path/to/data.nt BATCH 50000
+redis-cli RDF.BULK_INSERT mygraph /path/to/data.nt FORMAT ntriples BATCH 50000
 ```
 
 ### JSON-LD (.jsonld)
@@ -259,7 +259,7 @@ redis-cli RDF.INSERT mygraph FORMAT jsonld "$(cat /path/to/data.jsonld)"
 
 # Large files - convert to N-Triples
 jsonld normalize data.jsonld | jsonld flatten | jsonld toRdf > data.nt
-redis-cli RDF.BULK_INSERT mygraph ntriples /path/to/data.nt BATCH 50000
+redis-cli RDF.BULK_INSERT mygraph /path/to/data.nt FORMAT ntriples BATCH 50000
 ```
 
 ## Data Validation
@@ -282,10 +282,10 @@ grep -c "^#" data.nt      # Comments
 
 ```bash
 # Count triples in graph
-redis-cli RDF.SPARQL mygraph 'SELECT (COUNT(*) AS ?count) WHERE { ?s ?p ?o }'
+redis-cli RDF.QUERY mygraph 'SELECT (COUNT(*) AS ?count) WHERE { ?s ?p ?o }'
 
 # Check for expected entities
-redis-cli RDF.SPARQL mygraph '
+redis-cli RDF.QUERY mygraph '
   SELECT ?type (COUNT(?s) AS ?count)
   WHERE { ?s a ?type }
   GROUP BY ?type
@@ -294,7 +294,7 @@ redis-cli RDF.SPARQL mygraph '
 '
 
 # Verify specific resources exist
-redis-cli RDF.SPARQL mygraph '
+redis-cli RDF.QUERY mygraph '
   ASK { <http://example.org/important-entity> ?p ?o }
 '
 ```
@@ -311,7 +311,7 @@ curl -X POST "http://source:8890/sparql" \
   > source_results.json
 
 # FalkorSemantic
-redis-cli RDF.SPARQL mygraph '
+redis-cli RDF.QUERY mygraph '
   SELECT ?type (COUNT(*) AS ?c)
   WHERE { ?s a ?type }
   GROUP BY ?type
@@ -353,7 +353,7 @@ split -l 10000000 large_export.nt chunk_
 
 # Import chunks
 for chunk in chunk_*; do
-  redis-cli RDF.BULK_INSERT mygraph ntriples /path/to/$chunk BATCH 100000
+  redis-cli RDF.BULK_INSERT mygraph /path/to/$chunk FORMAT ntriples BATCH 100000
 done
 ```
 

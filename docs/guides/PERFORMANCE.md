@@ -149,7 +149,7 @@ redis-cli BGREWRITEAOF
 # Test different batch sizes
 for batch in 10000 50000 100000 200000; do
   echo "Testing batch size: $batch"
-  time redis-cli RDF.BULK_INSERT testgraph ntriples sample.nt BATCH $batch
+  time redis-cli RDF.BULK_INSERT testgraph sample.nt FORMAT ntriples BATCH $batch
   redis-cli RDF.GRAPH DROP testgraph
 done
 ```
@@ -179,7 +179,7 @@ split -l 10000000 huge_dataset.nt chunk_
 
 # Import chunks (sequentially - Redis is single-threaded for writes)
 for chunk in chunk_*; do
-  redis-cli RDF.BULK_INSERT graph ntriples $chunk BATCH 100000
+  redis-cli RDF.BULK_INSERT graph $chunk FORMAT ntriples BATCH 100000
 done
 ```
 
@@ -432,7 +432,7 @@ time redis-cli RDF.INSERT testgraph "$(cat sample_1000.ttl)"
 
 # Query benchmark
 redis-benchmark -n 10000 -c 50 \
-  RDF.SPARQL testgraph "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10"
+  RDF.QUERY testgraph "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10"
 ```
 
 ### Baseline Performance

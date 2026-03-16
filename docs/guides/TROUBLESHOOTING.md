@@ -202,14 +202,14 @@ redis-cli CONFIG SET maxmemory 16gb
 
 2. **Use smaller batch sizes:**
 ```bash
-redis-cli RDF.BULK_INSERT graph ntriples data.nt BATCH 10000
+redis-cli RDF.BULK_INSERT graph data.nt FORMAT ntriples BATCH 10000
 ```
 
 3. **Split the import:**
 ```bash
 split -l 1000000 large.nt chunk_
 for f in chunk_*; do
-  redis-cli RDF.BULK_INSERT graph ntriples $f BATCH 50000
+  redis-cli RDF.BULK_INSERT graph $f FORMAT ntriples BATCH 50000
 done
 ```
 
@@ -253,7 +253,7 @@ SELECT ?s WHERE ?s ?p ?o
 
 1. **Check data exists:**
 ```bash
-redis-cli RDF.SPARQL graph 'SELECT * WHERE { ?s ?p ?o } LIMIT 5'
+redis-cli RDF.QUERY graph 'SELECT * WHERE { ?s ?p ?o } LIMIT 5'
 ```
 
 2. **Check prefixes match:**
@@ -286,7 +286,7 @@ ERR Query timeout after 30000ms
 
 1. **Increase timeout:**
 ```bash
-redis-cli RDF.SPARQL graph 'SELECT ...' TIMEOUT 120000
+redis-cli RDF.QUERY graph 'SELECT ...' TIMEOUT 120000
 ```
 
 2. **Add LIMIT:**
@@ -404,7 +404,7 @@ active-defrag-threshold-upper 100
 1. **Use bulk insert:**
 ```bash
 # Instead of many RDF.INSERT calls
-redis-cli RDF.BULK_INSERT graph ntriples data.nt BATCH 50000
+redis-cli RDF.BULK_INSERT graph data.nt FORMAT ntriples BATCH 50000
 ```
 
 2. **Disable persistence during import:**
@@ -471,13 +471,13 @@ LIMIT 100
 wc -l data.nt
 
 # Count triples in graph
-redis-cli RDF.SPARQL graph 'SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }'
+redis-cli RDF.QUERY graph 'SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }'
 ```
 
 2. **Check for parse errors:**
 ```bash
 # Import returns error count
-redis-cli RDF.BULK_INSERT graph ntriples data.nt
+redis-cli RDF.BULK_INSERT graph data.nt FORMAT ntriples
 # Returns: [total, inserted, errors]
 ```
 
@@ -553,7 +553,6 @@ redis-cli INFO memory
 
 # Graph info
 redis-cli RDF.GRAPH LIST
-redis-cli RDF.GRAPH STATS yourGraph
 ```
 
 ### Log Analysis

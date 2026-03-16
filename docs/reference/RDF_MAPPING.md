@@ -8,9 +8,9 @@ FalkorSemantic bridges the RDF/SPARQL world with FalkorDB's property graph model
 |-------------|------------------------|
 | Subject (IRI) | Node with `:Resource` label |
 | Subject (Blank Node) | Node with `:BlankNode` label |
-| Predicate | Edge with predicate metadata |
+| Predicate (IRI-to-IRI) | Edge with local name as label |
 | Object (IRI) | Node with `:Resource` label |
-| Object (Literal) | `:Literal` node connected via edge |
+| Object (Literal) | Property on subject node |
 | rdf:type | Additional node label |
 | Named Graph | Graph isolation via FalkorDB graph key |
 
@@ -43,14 +43,13 @@ _:person1 foaf:name "Unknown Person" .
 
 **Cypher:**
 ```cypher
-MERGE (s:BlankNode {uri: '_:person1', isBlank: true})
-MERGE (l:Literal {value: 'Unknown Person', datatype: 'http://www.w3.org/2001/XMLSchema#string'})
-MERGE (s)-[:name{predicate: 'http://xmlns.com/foaf/0.1/name', value: 'Unknown Person'}]->(l)
+MERGE (s:BlankNode {uri: '_:person1'}) SET s.isBlank = true
+SET s.`foaf:name` = 'Unknown Person'
 ```
 
-### Literals as Nodes
+### Literals as Properties
 
-Literals are stored as `:Literal` nodes connected to the subject via edges. The edge contains the predicate URI and value metadata:
+Literals are stored as properties on the subject node:
 
 **RDF (Turtle):**
 ```turtle
@@ -61,29 +60,27 @@ ex:alice foaf:name "Alice" ;
 **Cypher:**
 ```cypher
 MERGE (alice:Resource {uri: 'http://example.org/alice'})
-MERGE (name:Literal {value: 'Alice', datatype: 'http://www.w3.org/2001/XMLSchema#string'})
-MERGE (alice)-[:name{predicate: 'http://xmlns.com/foaf/0.1/name', value: 'Alice'}]->(name)
-MERGE (age:Literal {value: 30, datatype: 'http://www.w3.org/2001/XMLSchema#integer'})
-MERGE (alice)-[:age{predicate: 'http://xmlns.com/foaf/0.1/age', value: 30}]->(age)
+SET alice.`foaf:name` = 'Alice'
+SET alice.`foaf:age` = 30
 ```
 
 This approach:
-- Preserves full RDF semantics (multi-valued properties, datatype information)
-- Enables efficient SPARQL query translation
-- Supports language-tagged literals
+- Enables efficient property lookups
+- Preserves datatype information via Cypher types
+- Supports language-tagged literals via property naming
 
 ### Typed Literals
 
-Datatype information is preserved in Literal nodes:
+Datatype information is used for Cypher value types:
 
 | XSD Type | Cypher Value Type |
 |----------|-------------------|
 | `xsd:string` | String |
-| `xsd:integer` | Integer |
-| `xsd:decimal` | Float |
-| `xsd:float` | Float |
-| `xsd:double` | Float |
-| `xsd:boolean` | Boolean |
+| `xsd:integer` | Integer (unquoted) |
+| `xsd:decimal` | Float (unquoted) |
+| `xsd:float` | Float (unquoted) |
+| `xsd:double` | Float (unquoted) |
+| `xsd:boolean` | Boolean (unquoted) |
 | `xsd:dateTime` | String (ISO 8601) |
 | `xsd:date` | Date (using `date()` function) |
 
@@ -98,19 +95,16 @@ ex:university ex:established "1995-10-01"^^xsd:date .
 **Cypher:**
 ```cypher
 MERGE (p:Resource {uri: 'http://example.org/product'})
-MERGE (price:Literal {value: 29.99, datatype: 'http://www.w3.org/2001/XMLSchema#decimal'})
-MERGE (p)-[:price{predicate: 'http://example.org/price', value: 29.99}]->(price)
-MERGE (inStock:Literal {value: true, datatype: 'http://www.w3.org/2001/XMLSchema#boolean'})
-MERGE (p)-[:inStock{predicate: 'http://example.org/inStock', value: true}]->(inStock)
-MERGE (qty:Literal {value: 100, datatype: 'http://www.w3.org/2001/XMLSchema#integer'})
-MERGE (p)-[:quantity{predicate: 'http://example.org/quantity', value: 100}]->(qty)
+SET p.`ex:price` = 29.99
+SET p.`ex:inStock` = true
+SET p.`ex:quantity` = 100
 MERGE (uni:Resource {uri: 'http://example.org/university'})
-SET uni.established = date('1995-10-01')
+SET uni.`ex:established` = date('1995-10-01')
 ```
 
 ### Language-Tagged Literals
 
-Language tags are preserved in Literal nodes:
+Language tags are preserved as separate properties:
 
 **RDF:**
 ```turtle
@@ -122,12 +116,9 @@ ex:paris rdfs:label "Paris"@en ;
 **Cypher:**
 ```cypher
 MERGE (paris:Resource {uri: 'http://example.org/paris'})
-MERGE (l1:Literal {value: 'Paris', datatype: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString', language: 'en'})
-MERGE (paris)-[:label{predicate: 'http://www.w3.org/2000/01/rdf-schema#label', value: 'Paris', language: 'en'}]->(l1)
-MERGE (l2:Literal {value: 'Paris', language: 'fr'})
-MERGE (paris)-[:label{predicate: 'http://www.w3.org/2000/01/rdf-schema#label', value: 'Paris', language: 'fr'}]->(l2)
-MERGE (l3:Literal {value: 'パリ', language: 'ja'})
-MERGE (paris)-[:label{predicate: 'http://www.w3.org/2000/01/rdf-schema#label', value: 'パリ', language: 'ja'}]->(l3)
+SET paris.`rdfs:label@en` = 'Paris'
+SET paris.`rdfs:label@fr` = 'Paris'
+SET paris.`rdfs:label@ja` = 'パリ'
 ```
 
 ### rdf:type Mapping
@@ -312,9 +303,11 @@ WHERE person.`rdfs:label` IS NOT NULL
 RETURN person.`rdfs:label` AS name
 ```
 
-### Property Path Translation
+### Property Path Translation (Planned)
 
-| SPARQL Path | Cypher Pattern |
+> **Note:** Property paths are parsed but currently simplified to a generic traversal pattern. Full path semantics are planned.
+
+| SPARQL Path | Planned Cypher Pattern |
 |-------------|----------------|
 | `foaf:knows/foaf:name` | `(a)-[:knows]->(b) WHERE b.\`foaf:name\`` |
 | `foaf:knows*` | `(a)-[:knows*0..]->(b)` |
@@ -337,7 +330,9 @@ MATCH (alice:Resource {uri: 'http://example.org/alice'})-[:knows*1..]->(ancestor
 RETURN DISTINCT ancestor.uri AS ancestor
 ```
 
-### Aggregation
+### Aggregation (Planned)
+
+> **Note:** Aggregate translation is not yet implemented. The example below shows planned behavior.
 
 **SPARQL:**
 ```sparql
@@ -383,7 +378,7 @@ The prefix `foaf:name` is expanded to `http://xmlns.com/foaf/0.1/name` for match
 | Label | Description |
 |-------|-------------|
 | `:Resource` | All IRI-identified nodes |
-| `:BNode` | Blank nodes |
+| `:BlankNode` | Blank nodes |
 | Custom labels | From `rdf:type` local names |
 
 ### Properties
@@ -405,7 +400,7 @@ For optimal query performance, create indexes:
 CREATE INDEX ON :Resource(uri)
 
 // Index on blank node IDs
-CREATE INDEX ON :BNode(id)
+CREATE INDEX ON :BlankNode(id)
 
 // Index on common properties
 CREATE INDEX ON :Resource(`foaf:name`)

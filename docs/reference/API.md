@@ -10,9 +10,8 @@ Complete API documentation for FalkorSemantic Redis commands.
 | [RDF.INSERT](#rdfinsert) | Insert RDF triples |
 | [RDF.BULK_INSERT](#rdfbulk_insert) | Bulk import RDF data |
 | [RDF.NAMESPACES](#rdfnamespaces) | Manage namespace prefixes |
-| [RDF.SPARQL](#rdfsparql) | Execute SPARQL queries |
+| [RDF.QUERY](#rdfquery) | Execute SPARQL queries |
 | [RDF.DELETE](#rdfdelete) | Delete triples |
-| [RDF.EXPORT](#rdfexport) | Export graph as RDF |
 
 ---
 
@@ -136,36 +135,6 @@ RDF.GRAPH CLEAR temp_graph
 
 ---
 
-### RDF.GRAPH STATS
-
-Get detailed graph statistics.
-
-**Syntax:**
-```
-RDF.GRAPH STATS <graph_name>
-```
-
-**Return Value:**
-- Array of key-value pairs with statistics
-
-**Example:**
-```
-RDF.GRAPH STATS mykg
-→ 1) "nodes"
-   2) (integer) 1500
-   3) "edges"
-   4) (integer) 3200
-   5) "labels"
-   6) 1) "Resource"
-      2) "Person"
-      3) "Organization"
-   7) "relationship_types"
-   8) 1) "knows"
-      2) "worksFor"
-```
-
----
-
 ## RDF.INSERT
 
 Insert RDF data into a graph.
@@ -189,7 +158,7 @@ RDF.INSERT <graph_key> <data> [FORMAT <format>] [ATOMIC]
 | `turtle` | Turtle format | text/turtle |
 | `ntriples` | N-Triples | application/n-triples |
 | `nquads` | N-Quads | application/n-quads |
-| `jsonld` | JSON-LD | application/ld+json |
+| `jsonld` | JSON-LD (not yet implemented in module) | application/ld+json |
 
 If FORMAT is omitted, auto-detection is used based on content.
 
@@ -237,16 +206,19 @@ Bulk import RDF data from a file.
 
 **Syntax:**
 ```
-RDF.BULK_INSERT <graph_key> <format> <file_path> [BATCH <size>]
+RDF.BULK_INSERT <graph_key> <file_path> [FORMAT <format>] [BATCH <size>] [SKIP <lines>] [MAXERRORS <count>] [STOPONERROR]
 ```
 
 **Parameters:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | graph_key | String | Yes | Target graph |
-| format | String | Yes | File format |
 | file_path | String | Yes | Path to file |
-| BATCH | Integer | No | Batch size (default: 10000) |
+| FORMAT | String | No | File format (auto-detected if omitted) |
+| BATCH | Integer | No | Batch size (default: 1000) |
+| SKIP | Integer | No | Lines to skip |
+| MAXERRORS | Integer | No | Max errors before stopping |
+| STOPONERROR | Flag | No | Stop on first error |
 
 **Return Value:**
 - Array: `[total_triples, batches_processed, errors]`
@@ -258,7 +230,7 @@ RDF.BULK_INSERT <graph_key> <format> <file_path> [BATCH <size>]
 
 **Example:**
 ```
-RDF.BULK_INSERT mykg ntriples /data/dbpedia.nt BATCH 50000
+RDF.BULK_INSERT mykg /data/dbpedia.nt FORMAT ntriples BATCH 50000
 → 1) (integer) 5000000
    2) (integer) 100
    3) (integer) 0
@@ -347,13 +319,13 @@ RDF.NAMESPACES mykg REMOVE temp
 
 ---
 
-## RDF.SPARQL
+## RDF.QUERY
 
 Execute a SPARQL query.
 
 **Syntax:**
 ```
-RDF.SPARQL <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
+RDF.QUERY <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
 ```
 
 **Parameters:**
@@ -371,8 +343,6 @@ RDF.SPARQL <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
 | `xml` | application/sparql-results+xml | SELECT, ASK |
 | `csv` | text/csv | SELECT |
 | `tsv` | text/tab-separated-values | SELECT |
-| `turtle` | text/turtle | CONSTRUCT, DESCRIBE |
-| `ntriples` | application/n-triples | CONSTRUCT, DESCRIBE |
 
 **Return Value:**
 - String containing query results in specified format
@@ -386,26 +356,19 @@ RDF.SPARQL <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
 
 SELECT query:
 ```
-RDF.SPARQL mykg 'PREFIX foaf: <http://xmlns.com/foaf/0.1/> SELECT ?name WHERE { ?p foaf:name ?name }'
+RDF.QUERY mykg 'PREFIX foaf: <http://xmlns.com/foaf/0.1/> SELECT ?name WHERE { ?p foaf:name ?name }'
 → {"head":{"vars":["name"]},"results":{"bindings":[{"name":{"type":"literal","value":"Alice"}}]}}
 ```
 
 ASK query:
 ```
-RDF.SPARQL mykg 'ASK { ?s ?p ?o }'
+RDF.QUERY mykg 'ASK { ?s ?p ?o }'
 → {"boolean":true}
-```
-
-CONSTRUCT query:
-```
-RDF.SPARQL mykg 'CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }' FORMAT turtle
-→ @prefix ex: <http://example.org/> .
-  ex:alice ex:knows ex:bob .
 ```
 
 With timeout:
 ```
-RDF.SPARQL mykg 'SELECT * WHERE { ?s ?p ?o }' TIMEOUT 5000
+RDF.QUERY mykg 'SELECT * WHERE { ?s ?p ?o }' TIMEOUT 5000
 ```
 
 **Time Complexity:** O(varies) depending on query complexity
@@ -418,7 +381,7 @@ Delete triples matching a pattern.
 
 **Syntax:**
 ```
-RDF.DELETE <graph_key> <subject> <predicate> <object>
+RDF.DELETE <graph_key> <subject> <predicate> <object> [GRAPH <named_graph>] [ORPHANS]
 ```
 
 **Parameters:**
@@ -428,6 +391,8 @@ RDF.DELETE <graph_key> <subject> <predicate> <object>
 | subject | String | Subject URI or `*` wildcard |
 | predicate | String | Predicate URI or `*` wildcard |
 | object | String | Object (URI/literal) or `*` wildcard |
+| GRAPH | String | Named graph filter |
+| ORPHANS | Flag | Also delete orphaned nodes |
 
 **Return Value:**
 - Integer: number of triples deleted
@@ -439,48 +404,6 @@ RDF.DELETE mykg '<http://example.org/alice>' '*' '*'
 ```
 
 **Time Complexity:** O(M) where M is matching triples
-
----
-
-## RDF.EXPORT
-
-Export graph data in RDF format.
-
-**Syntax:**
-```
-RDF.EXPORT <graph_key> <format> [GRAPH <named_graph>]
-```
-
-**Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| graph_key | String | Yes | Graph to export |
-| format | String | Yes | Output format |
-| GRAPH | String | No | Named graph filter |
-
-**Formats:**
-| Format | Description |
-|--------|-------------|
-| `ntriples` | N-Triples |
-| `nquads` | N-Quads (with named graphs) |
-| `turtle` | Turtle |
-| `trig` | TriG (Turtle with named graphs) |
-| `jsonld` | JSON-LD |
-
-**Return Value:**
-- String containing RDF data
-
-**Example:**
-```
-RDF.EXPORT mykg turtle
-→ @prefix foaf: <http://xmlns.com/foaf/0.1/> .
-  @prefix ex: <http://example.org/> .
-  
-  ex:alice foaf:name "Alice" ;
-           foaf:knows ex:bob .
-```
-
-**Time Complexity:** O(T) where T is number of triples
 
 ---
 
