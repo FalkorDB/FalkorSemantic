@@ -1,15 +1,15 @@
 # SPARQL Feature Support Matrix
 
-FalkorSemantic implements SPARQL 1.1 Query Language. This document details the supported features.
+FalkorSemantic implements a subset of SPARQL 1.1 Query Language. This document details the current feature support status.
 
 ## Query Forms
 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | SELECT | ✅ Full | Variable projection, DISTINCT, REDUCED |
-| CONSTRUCT | ✅ Full | Template-based graph construction |
+| CONSTRUCT | ❌ | Not yet supported |
 | ASK | ✅ Full | Boolean existence queries |
-| DESCRIBE | ✅ Full | Concise Bounded Description (CBD) |
+| DESCRIBE | ❌ | Not yet supported |
 
 ## Graph Patterns
 
@@ -45,7 +45,7 @@ FalkorSemantic implements SPARQL 1.1 Query Language. This document details the s
 |---------|--------|---------|
 | VALUES (inline) | ✅ | `VALUES ?x { 1 2 3 }` |
 | VALUES (multi-var) | ✅ | `VALUES (?x ?y) { (1 2) (3 4) }` |
-| UNDEF in VALUES | ✅ | `VALUES ?x { 1 UNDEF 3 }` |
+| UNDEF in VALUES | 🚧 | `VALUES ?x { 1 UNDEF 3 }` — not verified |
 
 ### Other Patterns
 
@@ -53,44 +53,24 @@ FalkorSemantic implements SPARQL 1.1 Query Language. This document details the s
 |---------|--------|---------|
 | BIND | ✅ | `BIND (?a + ?b AS ?sum)` |
 | SERVICE | ❌ | Federated queries not supported |
-| GRAPH (named) | ✅ | `GRAPH ?g { ?s ?p ?o }` |
+| GRAPH (named) | 🚧 | Pattern traversed but no graph scoping |
 
 ## Property Paths
 
-| Path Type | Syntax | Status | Example |
-|-----------|--------|--------|---------|
-| Sequence | `a/b` | ✅ | `foaf:knows/foaf:name` |
-| Alternative | `a\|b` | ✅ | `foaf:name\|rdfs:label` |
-| Inverse | `^a` | ✅ | `^foaf:knows` |
-| Zero-or-one | `a?` | ✅ | `foaf:knows?` |
-| Zero-or-more | `a*` | ✅ | `foaf:knows*` |
-| One-or-more | `a+` | ✅ | `foaf:knows+` |
-| Negated set | `!a` | ✅ | `!(rdf:type\|rdfs:label)` |
-| Fixed length | `{n}` | ✅ | `foaf:knows{3}` |
-| Range | `{n,m}` | ✅ | `foaf:knows{1,5}` |
-| Unbounded range | `{n,}` | ✅ | `foaf:knows{2,}` |
+> **Note:** All property paths are parsed but simplified to a generic traversal pattern. Full path semantics planned.
 
-### Property Path Examples
-
-```sparql
-# Find all people within 3 hops
-SELECT ?person ?connected
-WHERE {
-  ?person foaf:knows{1,3} ?connected .
-}
-
-# Find any label (name, title, or rdfs:label)
-SELECT ?thing ?label
-WHERE {
-  ?thing (foaf:name|dc:title|rdfs:label) ?label .
-}
-
-# Inverse relationship - who knows Alice?
-SELECT ?knower
-WHERE {
-  <http://example.org/alice> ^foaf:knows ?knower .
-}
-```
+| Path Type | Syntax | Status | Notes |
+|-----------|--------|--------|-------|
+| Sequence | `a/b` | 🚧 | Parsed but simplified |
+| Alternative | `a\|b` | 🚧 | Parsed but simplified |
+| Inverse | `^a` | 🚧 | Parsed but simplified |
+| Zero-or-one | `a?` | 🚧 | Parsed but simplified |
+| Zero-or-more | `a*` | 🚧 | Parsed but simplified |
+| One-or-more | `a+` | 🚧 | Parsed but simplified |
+| Negated set | `!a` | 🚧 | Parsed but simplified |
+| Fixed length | `{n}` | 🚧 | Parsed but simplified |
+| Range | `{n,m}` | 🚧 | Parsed but simplified |
+| Unbounded range | `{n,}` | 🚧 | Parsed but simplified |
 
 ## Solution Modifiers
 
@@ -101,8 +81,8 @@ WHERE {
 | ORDER BY | ✅ | ASC, DESC, multiple keys |
 | LIMIT | ✅ | Limit result count |
 | OFFSET | ✅ | Skip results |
-| GROUP BY | ✅ | Aggregate grouping |
-| HAVING | ✅ | Group filter |
+| GROUP BY | 🚧 | Pattern traversed but no aggregate projection |
+| HAVING | 🚧 | Not translated |
 
 ### Examples
 
@@ -113,40 +93,21 @@ WHERE { ?s ?p ?o }
 ORDER BY ?s
 LIMIT 100
 OFFSET 200
-
-# Aggregation with filtering
-SELECT ?class (COUNT(?instance) AS ?count)
-WHERE { ?instance a ?class }
-GROUP BY ?class
-HAVING (COUNT(?instance) > 10)
-ORDER BY DESC(?count)
 ```
 
 ## Aggregates
 
+> **Note:** Aggregate functions are parsed but not yet translated to Cypher.
+
 | Function | Status | Notes |
 |----------|--------|-------|
-| COUNT | ✅ | `COUNT(*)`, `COUNT(?var)`, `COUNT(DISTINCT ?var)` |
-| SUM | ✅ | Numeric sum |
-| AVG | ✅ | Numeric average |
-| MIN | ✅ | Minimum value |
-| MAX | ✅ | Maximum value |
-| GROUP_CONCAT | ✅ | String concatenation with separator |
-| SAMPLE | ✅ | Arbitrary value from group |
-
-### Aggregate Examples
-
-```sparql
-# Count by type
-SELECT ?type (COUNT(*) AS ?count)
-WHERE { ?s a ?type }
-GROUP BY ?type
-
-# Concatenate names
-SELECT ?group (GROUP_CONCAT(?name; separator=", ") AS ?members)
-WHERE { ?person foaf:member ?group ; foaf:name ?name }
-GROUP BY ?group
-```
+| COUNT | 🚧 | Not translated to Cypher |
+| SUM | 🚧 | Not translated to Cypher |
+| AVG | 🚧 | Not translated to Cypher |
+| MIN | 🚧 | Not translated to Cypher |
+| MAX | 🚧 | Not translated to Cypher |
+| GROUP_CONCAT | 🚧 | Not translated to Cypher |
+| SAMPLE | 🚧 | Not translated to Cypher |
 
 ## Built-in Functions
 
@@ -154,15 +115,15 @@ GROUP BY ?group
 
 | Function | Status | Description |
 |----------|--------|-------------|
-| STR | ✅ | Convert to string |
-| LANG | ✅ | Get language tag |
-| DATATYPE | ✅ | Get datatype IRI |
-| IRI / URI | ✅ | Construct IRI |
-| BNODE | ✅ | Construct blank node |
-| STRDT | ✅ | String with datatype |
-| STRLANG | ✅ | String with language |
-| UUID | ✅ | Generate UUID IRI |
-| STRUUID | ✅ | Generate UUID string |
+| STR | ✅ | Convert to string (mapped to `toString()`) |
+| LANG | ✅ | Get language tag (mapped to `.language` property) |
+| DATATYPE | ✅ | Get datatype IRI (mapped to `.datatype` property) |
+| IRI / URI | ❌ | Not implemented |
+| BNODE | ❌ | Not implemented |
+| STRDT | ❌ | Not implemented |
+| STRLANG | ❌ | Not implemented |
+| UUID | ❌ | Not implemented |
+| STRUUID | ❌ | Not implemented |
 
 ### Term Tests
 
@@ -186,13 +147,13 @@ GROUP BY ?group
 | STRSTARTS | ✅ | String starts with |
 | STRENDS | ✅ | String ends with |
 | CONTAINS | ✅ | String contains |
-| STRBEFORE | ✅ | String before match |
-| STRAFTER | ✅ | String after match |
-| ENCODE_FOR_URI | ✅ | URI encode |
+| STRBEFORE | ❌ | Not implemented |
+| STRAFTER | ❌ | Not implemented |
+| ENCODE_FOR_URI | ❌ | Not implemented |
 | CONCAT | ✅ | String concatenation |
 | REPLACE | ✅ | Regex replace |
 | REGEX | ✅ | Regex match |
-| langMatches | ✅ | Language tag matching |
+| langMatches | ❌ | Not implemented |
 
 ### Numeric Functions
 
@@ -202,31 +163,31 @@ GROUP BY ?group
 | ROUND | ✅ | Round to nearest |
 | CEIL | ✅ | Ceiling |
 | FLOOR | ✅ | Floor |
-| RAND | ✅ | Random number |
+| RAND | ❌ | Not implemented |
 
 ### Date/Time Functions
 
 | Function | Status | Description |
 |----------|--------|-------------|
-| NOW | ✅ | Current datetime |
-| YEAR | ✅ | Extract year |
-| MONTH | ✅ | Extract month |
-| DAY | ✅ | Extract day |
-| HOURS | ✅ | Extract hours |
-| MINUTES | ✅ | Extract minutes |
-| SECONDS | ✅ | Extract seconds |
-| TIMEZONE | ✅ | Get timezone |
-| TZ | ✅ | Timezone as string |
+| NOW | ❌ | Not implemented |
+| YEAR | ❌ | Not implemented |
+| MONTH | ❌ | Not implemented |
+| DAY | ❌ | Not implemented |
+| HOURS | ❌ | Not implemented |
+| MINUTES | ❌ | Not implemented |
+| SECONDS | ❌ | Not implemented |
+| TIMEZONE | ❌ | Not implemented |
+| TZ | ❌ | Not implemented |
 
 ### Hash Functions
 
 | Function | Status | Description |
 |----------|--------|-------------|
-| MD5 | ✅ | MD5 hash |
-| SHA1 | ✅ | SHA-1 hash |
-| SHA256 | ✅ | SHA-256 hash |
-| SHA384 | ✅ | SHA-384 hash |
-| SHA512 | ✅ | SHA-512 hash |
+| MD5 | ❌ | Not implemented |
+| SHA1 | ❌ | Not implemented |
+| SHA256 | ❌ | Not implemented |
+| SHA384 | ❌ | Not implemented |
+| SHA512 | ❌ | Not implemented |
 
 ### Conditional Functions
 
@@ -237,7 +198,7 @@ GROUP BY ?group
 | EXISTS | ✅ | Pattern existence |
 | NOT EXISTS | ✅ | Pattern non-existence |
 | IN | ✅ | `?x IN (1, 2, 3)` |
-| NOT IN | ✅ | `?x NOT IN (1, 2, 3)` |
+| NOT IN | 🚧 | Not implemented |
 
 ## Operators
 
@@ -271,66 +232,31 @@ GROUP BY ?group
 
 ## Subqueries
 
+> **Note:** Subqueries are flattened instead of nested. Full subquery support planned.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
-| SELECT subqueries | ✅ | Full support |
-| Correlated subqueries | ✅ | Variables from outer scope |
-| Nested subqueries | ✅ | Multiple levels |
-
-### Subquery Example
-
-```sparql
-SELECT ?person ?name ?maxAge
-WHERE {
-  ?person foaf:name ?name .
-  {
-    SELECT (MAX(?age) AS ?maxAge)
-    WHERE { ?p foaf:age ?age }
-  }
-  ?person foaf:age ?maxAge .
-}
-```
+| SELECT subqueries | 🚧 | Flattened; full subquery support planned |
+| Correlated subqueries | 🚧 | Flattened; full subquery support planned |
+| Nested subqueries | 🚧 | Flattened; full subquery support planned |
 
 ## Named Graphs
 
+> **Note:** GRAPH pattern is traversed but no graph scoping is applied. FROM/FROM NAMED are not translated.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
-| GRAPH clause | ✅ | Query specific graph |
-| FROM | ✅ | Default graph |
-| FROM NAMED | ✅ | Named graph dataset |
-| Graph variable | ✅ | `GRAPH ?g { ... }` |
-
-### Named Graph Examples
-
-```sparql
-# Query specific graph
-SELECT ?s ?p ?o
-FROM <http://example.org/graph1>
-WHERE { ?s ?p ?o }
-
-# Query across named graphs
-SELECT ?g ?s ?p ?o
-WHERE {
-  GRAPH ?g { ?s ?p ?o }
-}
-
-# Combine default and named graphs
-SELECT ?s ?p ?o
-FROM <http://example.org/default>
-FROM NAMED <http://example.org/named1>
-FROM NAMED <http://example.org/named2>
-WHERE {
-  ?s ?p ?o .
-  GRAPH <http://example.org/named1> {
-    ?s ?p2 ?o2
-  }
-}
-```
+| GRAPH clause | 🚧 | Pattern traversed but no graph scoping |
+| FROM | 🚧 | Not translated |
+| FROM NAMED | 🚧 | Not translated |
+| Graph variable | 🚧 | Pattern traversed but no graph scoping |
 
 ## Features Not Supported
 
 | Feature | Status | Notes |
 |---------|--------|-------|
+| CONSTRUCT | ❌ | Not yet supported |
+| DESCRIBE | ❌ | Not yet supported |
 | SERVICE | ❌ | Federated queries |
 | LOAD | ❌ | Use RDF.INSERT instead |
 | CLEAR | ❌ | Use RDF.GRAPH CLEAR instead |
@@ -394,6 +320,6 @@ LIMIT 1000
 
 ## See Also
 
-- [Command Reference](COMMANDS.md) - RDF.SPARQL command details
+- [Command Reference](COMMANDS.md) - RDF.QUERY command details
 - [RDF Mapping](RDF_MAPPING.md) - How queries map to Cypher
 - [Performance Guide](../guides/PERFORMANCE.md) - Query optimization
