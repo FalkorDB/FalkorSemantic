@@ -198,7 +198,7 @@ OFFSET 200
 | EXISTS | ✅ | Pattern existence |
 | NOT EXISTS | ✅ | Pattern non-existence |
 | IN | ✅ | `?x IN (1, 2, 3)` |
-| NOT IN | 🚧 | Not implemented |
+| NOT IN | ✅ | `NOT (?x IN (...))` |
 
 ## Operators
 

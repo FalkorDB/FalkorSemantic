@@ -225,15 +225,17 @@ RDF.BULK_INSERT <graph_key> <file_path> [FORMAT <format>] [BATCH <size>] [SKIP <
 
 ### Returns
 
-Array: `[total_triples, batches_processed, errors]`
+Array: `[triples_parsed, statements_executed, errors, batches_processed, last_successful_line]`
 
 ### Example
 
 ```bash
 redis-cli RDF.BULK_INSERT dbpedia /data/dbpedia-persons.nt FORMAT ntriples BATCH 50000
 # 1) (integer) 5000000
-# 2) (integer) 100
+# 2) (integer) 5000000
 # 3) (integer) 0
+# 4) (integer) 100
+# 5) (integer) 5000000
 ```
 
 ---
@@ -328,7 +330,7 @@ Execute SPARQL queries.
 
 ### Syntax
 
-```
+```bash
 RDF.QUERY <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
 ```
 

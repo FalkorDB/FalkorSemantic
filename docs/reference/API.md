@@ -221,7 +221,7 @@ RDF.BULK_INSERT <graph_key> <file_path> [FORMAT <format>] [BATCH <size>] [SKIP <
 | STOPONERROR | Flag | No | Stop on first error |
 
 **Return Value:**
-- Array: `[total_triples, batches_processed, errors]`
+- Array: `[triples_parsed, statements_executed, errors, batches_processed, last_successful_line]`
 
 **Errors:**
 - `ERR File not found: path` - File doesn't exist
@@ -232,8 +232,10 @@ RDF.BULK_INSERT <graph_key> <file_path> [FORMAT <format>] [BATCH <size>] [SKIP <
 ```
 RDF.BULK_INSERT mykg /data/dbpedia.nt FORMAT ntriples BATCH 50000
 → 1) (integer) 5000000
-   2) (integer) 100
+   2) (integer) 5000000
    3) (integer) 0
+   4) (integer) 100
+   5) (integer) 5000000
 ```
 
 **Time Complexity:** O(T) where T is number of triples

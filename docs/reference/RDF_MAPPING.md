@@ -8,7 +8,7 @@ FalkorSemantic bridges the RDF/SPARQL world with FalkorDB's property graph model
 |-------------|------------------------|
 | Subject (IRI) | Node with `:Resource` label |
 | Subject (Blank Node) | Node with `:BlankNode` label |
-| Predicate (IRI-to-IRI) | Edge with local name as label |
+| Predicate (IRI-to-IRI) | Edge with local name as label and full IRI in `predicate` property |
 | Object (IRI) | Node with `:Resource` label |
 | Object (Literal) | Property on subject node |
 | rdf:type | Additional node label |
@@ -44,7 +44,7 @@ _:person1 foaf:name "Unknown Person" .
 **Cypher:**
 ```cypher
 MERGE (s:BlankNode {uri: '_:person1'}) SET s.isBlank = true
-SET s.`foaf:name` = 'Unknown Person'
+SET s.name = 'Unknown Person'
 ```
 
 ### Literals as Properties
@@ -60,14 +60,13 @@ ex:alice foaf:name "Alice" ;
 **Cypher:**
 ```cypher
 MERGE (alice:Resource {uri: 'http://example.org/alice'})
-SET alice.`foaf:name` = 'Alice'
-SET alice.`foaf:age` = 30
+SET alice.name = 'Alice'
+SET alice.age = 30
 ```
 
 This approach:
 - Enables efficient property lookups
 - Preserves datatype information via Cypher types
-- Supports language-tagged literals via property naming
 
 ### Typed Literals
 
@@ -95,16 +94,16 @@ ex:university ex:established "1995-10-01"^^xsd:date .
 **Cypher:**
 ```cypher
 MERGE (p:Resource {uri: 'http://example.org/product'})
-SET p.`ex:price` = 29.99
-SET p.`ex:inStock` = true
-SET p.`ex:quantity` = 100
+SET p.price = 29.99
+SET p.inStock = true
+SET p.quantity = 100
 MERGE (uni:Resource {uri: 'http://example.org/university'})
-SET uni.`ex:established` = date('1995-10-01')
+SET uni.established = date('1995-10-01')
 ```
 
 ### Language-Tagged Literals
 
-Language tags are preserved as separate properties:
+> **Note:** Language tags are not currently preserved. All language-tagged literals are stored using the predicate local name as the property key; the language tag is dropped.
 
 **RDF:**
 ```turtle
@@ -113,13 +112,13 @@ ex:paris rdfs:label "Paris"@en ;
          rdfs:label "パリ"@ja .
 ```
 
-**Cypher:**
+**Cypher (current behavior):**
 ```cypher
 MERGE (paris:Resource {uri: 'http://example.org/paris'})
-SET paris.`rdfs:label@en` = 'Paris'
-SET paris.`rdfs:label@fr` = 'Paris'
-SET paris.`rdfs:label@ja` = 'パリ'
+SET paris.label = 'パリ'
 ```
+
+Only the last value written for a given property key is retained.
 
 ### rdf:type Mapping
 
@@ -385,11 +384,9 @@ The prefix `foaf:name` is expanded to `http://xmlns.com/foaf/0.1/name` for match
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `uri` | String | Full IRI for resources |
-| `id` | String | Blank node identifier |
-| `{prefix}:{localname}` | Various | Literal values |
-| `{prefix}:{localname}@{lang}` | String | Language-tagged values |
-| `rdf:type` | Array | Type IRIs |
+| `uri` | String | Full IRI for resources, blank node identifier for blank nodes |
+| `isBlank` | Boolean | Whether the node is a blank node |
+| `{localname}` | Various | Literal values (predicate local name) |
 
 ### Indexes
 
@@ -399,12 +396,12 @@ For optimal query performance, create indexes:
 // Index on resource URIs (critical)
 CREATE INDEX ON :Resource(uri)
 
-// Index on blank node IDs
-CREATE INDEX ON :BlankNode(id)
+// Index on blank node URIs
+CREATE INDEX ON :BlankNode(uri)
 
 // Index on common properties
-CREATE INDEX ON :Resource(`foaf:name`)
-CREATE INDEX ON :Resource(`rdfs:label`)
+CREATE INDEX ON :Resource(name)
+CREATE INDEX ON :Resource(label)
 ```
 
 ## Limitations
