@@ -11,8 +11,9 @@
 //! # Build the module
 //! cargo build -p falkorsemantic-module
 //!
-//! # Start Redis with the module (in another terminal)
-//! redis-server --loadmodule ./target/debug/libfalkorsemantic_module.so --port 6399
+//! # Start FalkorDB with the FalkorSemantic module (in another terminal)
+//! docker run --rm -p 6399:6379 -v "$(pwd)/target:/target" falkordb/falkordb:v4.16.7 \
+//!   --loadmodule /target/debug/libfalkorsemantic_module.so
 //!
 //! # Run the tests
 //! TEST_REDIS_PORT=6399 cargo test --test e2e -- --test-threads=1
@@ -30,10 +31,9 @@
 //! ```
 
 use std::env;
-use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
@@ -55,22 +55,46 @@ fn get_test_port() -> u16 {
 
 /// Get the path to the compiled module
 fn get_module_path() -> PathBuf {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let path = PathBuf::from(manifest_dir);
+    let manifest_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
+    let workspace_dir = manifest_dir
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| manifest_dir.clone());
 
-    // Try debug first, then release
-    let debug_path = path.join("target/debug/libfalkorsemantic_module.so");
-    if debug_path.exists() {
-        return debug_path;
+    let mut target_dirs = Vec::new();
+    if let Ok(target_dir) = env::var("CARGO_TARGET_DIR") {
+        let target_dir = PathBuf::from(target_dir);
+        if target_dir.is_absolute() {
+            target_dirs.push(target_dir);
+        } else {
+            target_dirs.push(workspace_dir.join(&target_dir));
+            target_dirs.push(manifest_dir.join(&target_dir));
+        }
     }
 
-    let release_path = path.join("target/release/libfalkorsemantic_module.so");
-    if release_path.exists() {
-        return release_path;
+    target_dirs.push(workspace_dir.join("target"));
+    target_dirs.push(workspace_dir.join("target/llvm-cov-target"));
+    target_dirs.push(manifest_dir.join("target"));
+    target_dirs.push(manifest_dir.join("target/llvm-cov-target"));
+
+    // Try debug first, then release.
+    for target_dir in &target_dirs {
+        let debug_path = target_dir.join("debug/libfalkorsemantic_module.so");
+        if debug_path.exists() {
+            return debug_path;
+        }
     }
 
-    // Return debug path anyway - will fail with helpful message
-    debug_path
+    for target_dir in &target_dirs {
+        let release_path = target_dir.join("release/libfalkorsemantic_module.so");
+        if release_path.exists() {
+            return release_path;
+        }
+    }
+
+    // Return a likely debug path for a helpful error message.
+    workspace_dir.join("target/debug/libfalkorsemantic_module.so")
 }
 
 /// Check if Redis is available on the test port
@@ -94,26 +118,26 @@ fn wait_for_redis(port: u16, timeout: Duration) -> bool {
 
 /// Managed Redis server for testing
 struct TestRedisServer {
-    process: Option<Child>,
+    container_name: Option<String>,
     port: u16,
 }
 
 impl TestRedisServer {
-    /// Start a new Redis server with the FalkorSemantic module
+    /// Start a new FalkorDB container with the FalkorSemantic module.
     fn start() -> Result<Self, String> {
         let port = get_test_port();
 
         // Check if Redis is already running on this port
         if redis_is_available(port) {
-            // Verify it has our module loaded
-            if Self::verify_module_loaded(port) {
+            // Verify required modules are loaded.
+            if Self::verify_required_modules_loaded(port) {
                 return Ok(Self {
-                    process: None,
+                    container_name: None,
                     port,
                 });
             } else {
                 return Err(format!(
-                    "Redis is running on port {} but FalkorSemantic module is not loaded",
+                    "Redis is running on port {} but required modules (falkordb + falkorsemantic) are not loaded",
                     port
                 ));
             }
@@ -127,55 +151,103 @@ impl TestRedisServer {
             ));
         }
 
-        // Start Redis with the module
-        let mut child = Command::new("redis-server")
+        let module_dir = module_path
+            .parent()
+            .ok_or_else(|| format!("Invalid module path: {:?}", module_path))?;
+        let module_file = module_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("Invalid module file name: {:?}", module_path))?;
+        let container_name = format!("falkorsemantic-e2e-{}", port);
+
+        // Clean up any stale container with the same name.
+        let _ = Command::new("docker")
+            .args(["rm", "-f", &container_name])
+            .output();
+
+        // Start FalkorDB with the semantic module loaded.
+        let output = Command::new("docker")
             .args([
-                "--port",
-                &port.to_string(),
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                &container_name,
+                "-p",
+                &format!("{}:6379", port),
+                "-v",
+                &format!("{}:/target", module_dir.display()),
+                "falkordb/falkordb:v4.16.7",
                 "--loadmodule",
-                module_path.to_str().unwrap(),
-                "--daemonize",
-                "no",
+                &format!("/target/{}", module_file),
                 "--loglevel",
                 "warning",
                 "--save",
-                "", // Disable RDB persistence
+                "",
                 "--appendonly",
-                "no", // Disable AOF persistence
+                "no",
             ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start redis-server: {}", e))?;
+            .output()
+            .map_err(|e| format!("Failed to start FalkorDB container: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(format!(
+                "Failed to start FalkorDB container with Docker: {}",
+                stderr.trim()
+            ));
+        }
 
         // Wait for Redis to start
         if !wait_for_redis(port, REDIS_STARTUP_TIMEOUT) {
-            // Try to get error output
-            if let Some(stderr) = child.stderr.take() {
-                let reader = BufReader::new(stderr);
-                let errors: Vec<String> = reader.lines().take(10).filter_map(|l| l.ok()).collect();
-                child.kill().ok();
-                return Err(format!(
-                    "Redis failed to start within {:?}. Errors:\n{}",
-                    REDIS_STARTUP_TIMEOUT,
-                    errors.join("\n")
-                ));
-            }
-            child.kill().ok();
+            let logs = Command::new("docker")
+                .args(["logs", &container_name])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_else(|| "<failed to collect container logs>".to_string());
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
+                .output();
             return Err(format!(
-                "Redis failed to start within {:?}",
-                REDIS_STARTUP_TIMEOUT
+                "Redis failed to start within {:?}. Docker logs:\n{}",
+                REDIS_STARTUP_TIMEOUT, logs
+            ));
+        }
+
+        if !Self::verify_required_modules_loaded(port) {
+            let logs = Command::new("docker")
+                .args(["logs", &container_name])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_else(|| "<failed to collect container logs>".to_string());
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
+                .output();
+            return Err(format!(
+                "Container started on port {} but required modules were not loaded. Docker logs:\n{}",
+                port, logs
             ));
         }
 
         Ok(Self {
-            process: Some(child),
+            container_name: Some(container_name),
             port,
         })
     }
 
     /// Verify that the FalkorSemantic module is loaded
     fn verify_module_loaded(port: u16) -> bool {
+        Self::module_loaded(port, "falkorsemantic")
+    }
+
+    /// Verify that both FalkorDB and FalkorSemantic modules are loaded.
+    fn verify_required_modules_loaded(port: u16) -> bool {
+        Self::module_loaded(port, "falkordb") && Self::module_loaded(port, "falkorsemantic")
+    }
+
+    fn module_loaded(port: u16, module_name: &str) -> bool {
         let client = match redis::Client::open(format!("redis://127.0.0.1:{}/", port)) {
             Ok(c) => c,
             Err(_) => return false,
@@ -195,17 +267,25 @@ impl TestRedisServer {
                         // Check each field pair for "name" -> "falkorsemantic"
                         let mut iter = fields.iter();
                         while let Some(key) = iter.next() {
-                            if let redis::Value::BulkString(k) = key {
-                                if k == b"name" {
-                                    if let Some(redis::Value::BulkString(v)) = iter.next() {
-                                        if v == b"falkorsemantic" {
-                                            return true;
-                                        }
+                            let is_name_key = match key {
+                                redis::Value::BulkString(k) => k == b"name",
+                                redis::Value::SimpleString(s) => s == "name",
+                                _ => false,
+                            };
+                            if is_name_key {
+                                if let Some(val) = iter.next() {
+                                    let matches = match val {
+                                        redis::Value::BulkString(v) => v == module_name.as_bytes(),
+                                        redis::Value::SimpleString(s) => s == module_name,
+                                        _ => false,
+                                    };
+                                    if matches {
+                                        return true;
                                     }
-                                } else {
-                                    // Skip the value for other keys
-                                    iter.next();
                                 }
+                            } else {
+                                // Skip the value for other keys
+                                iter.next();
                             }
                         }
                     }
@@ -233,18 +313,10 @@ impl TestRedisServer {
 
 impl Drop for TestRedisServer {
     fn drop(&mut self) {
-        if let Some(mut process) = self.process.take() {
-            // Try graceful shutdown first
-            let _ = Command::new("redis-cli")
-                .args(["-p", &self.port.to_string(), "SHUTDOWN", "NOSAVE"])
+        if let Some(container_name) = self.container_name.take() {
+            let _ = Command::new("docker")
+                .args(["stop", &container_name])
                 .output();
-
-            // Wait a bit for graceful shutdown
-            thread::sleep(Duration::from_millis(500));
-
-            // Force kill if still running
-            let _ = process.kill();
-            let _ = process.wait();
         }
     }
 }
@@ -2045,4 +2117,16 @@ mod rdf_query_values {
             json
         );
     }
+}
+
+/// Coverage smoke test that avoids external FalkorDB runtime dependencies.
+#[test]
+#[ignore]
+fn test_module_binary_exists_for_coverage() {
+    let module_path = get_module_path();
+    assert!(
+        module_path.exists(),
+        "Expected compiled module binary at {:?}. Run 'cargo build -p falkorsemantic-module' first.",
+        module_path
+    );
 }
