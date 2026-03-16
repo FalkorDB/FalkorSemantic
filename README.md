@@ -25,7 +25,7 @@ The project is organized as a Cargo workspace with four main crates:
 - **`storage`**: Dictionary and namespace storage for efficient IRI handling
 - **`module`**: Redis module that exposes RDF/SPARQL commands
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                   Redis Module API                   │
 │         (RDF.INSERT, RDF.QUERY, etc.)                │
@@ -170,7 +170,7 @@ RDF.BULK_INSERT dbpedia /data/dbpedia.nt FORMAT ntriples BATCH 50000
 
 Execute a SPARQL query.
 
-```
+```text
 RDF.QUERY <graph> <query> [FORMAT <format>] [TIMEOUT <ms>]
 ```
 
