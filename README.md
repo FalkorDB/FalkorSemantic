@@ -12,7 +12,7 @@ FalkorSemantic is a Redis module that enables semantic web data processing with 
 
 - **RDF Data Support**: Store and manage RDF triples in FalkorDB's graph engine
 - **SPARQL Queries**: Query your data using the standard semantic web query language
-- **Multiple Formats**: Import RDF in Turtle, N-Triples, N-Quads, and TriG
+- **Multiple Formats**: Import RDF in Turtle, N-Triples, N-Quads, and TriG (named graph information in N-Quads is not yet persisted)
 - **High Performance**: Leverage FalkorDB's speed for semantic workloads
 - **Standards Compliant**: SPARQL 1.1 query support
 
@@ -20,7 +20,7 @@ FalkorSemantic is a Redis module that enables semantic web data processing with 
 
 The project is organized as a Cargo workspace with four main crates:
 
-- **`parser`**: Parses RDF formats (Turtle, N-Triples, TriG) and SPARQL queries
+- **`parser`**: Parses RDF formats (Turtle, N-Triples, N-Quads, TriG) and SPARQL queries
 - **`mapper`**: Maps RDF triples to FalkorDB graph structures and translates SPARQL to Cypher
 - **`storage`**: Dictionary and namespace storage for efficient IRI handling
 - **`module`**: Redis module that exposes RDF/SPARQL commands
@@ -131,6 +131,7 @@ RDF.INSERT <graph> <data> [FORMAT <format>] [ATOMIC]
 | Argument | Description |
 |----------|-------------|
 | `graph` | Name of the target graph |
+| `format` | Input format: `turtle`, `ntriples`, `nquads`, `trig`. Note: `nquads` is accepted but named graph information is currently discarded during insert |
 | `data` | RDF data as a string |
 | `FORMAT` | Optional format: `turtle`, `ntriples`, `nquads`, `trig` (auto-detected if omitted) |
 | `ATOMIC` | Optional flag to execute all inserts as a single transaction |
