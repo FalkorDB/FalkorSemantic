@@ -13,7 +13,7 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 authors = ["FalkorDB Team"]
-license = "MIT"
+license = "AGPL-3.0"
 repository = "https://github.com/FalkorDB/FalkorSemantic"
 rust-version = "1.75"
 
