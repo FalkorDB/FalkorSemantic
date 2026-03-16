@@ -398,5 +398,5 @@ FalkorSemantic/
 
 ---
 
-*Last Updated: 2024-03-16*
+*Last Updated: 2026-03-16*
 *For detailed API documentation, see inline code comments or run `make docs`*
