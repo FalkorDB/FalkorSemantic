@@ -122,8 +122,29 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
+      - name: Install Redis
+        run: sudo apt-get update && sudo apt-get install -y redis-server
+
+      - name: Run workspace coverage (non-e2e)
+        run: |
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --workspace \
+            --exclude falkorsemantic-module \
+            --exclude falkorsemantic-e2e-tests \
+            --no-report
+
+      - name: Build Redis module for e2e tests
+        run: cargo build --package falkorsemantic-module --target-dir target/llvm-cov-target
+
+      - name: Run e2e coverage smoke test
+        run: |
+          cargo llvm-cov --package falkorsemantic-e2e-tests \
+            --test e2e \
+            --no-report \
+            -- test_module_binary_exists_for_coverage --ignored --test-threads=1
+
       - name: Generate coverage report
-        run: cargo llvm-cov --workspace --exclude falkorsemantic-module --lcov --output-path lcov.info
+        run: cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
