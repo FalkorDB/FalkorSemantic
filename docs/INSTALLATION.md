@@ -131,7 +131,7 @@ cargo build --package falkorsemantic-module
 cargo build --release --package falkorsemantic-module
 
 # Build with specific features
-cargo build --release --package falkorsemantic-module --features "json-ld"
+cargo build --release --package falkorsemantic-module
 
 # Cross-compile for different architecture
 cargo build --release --target x86_64-unknown-linux-musl
@@ -155,9 +155,7 @@ Add to `redis.conf`:
 # FalkorSemantic Module
 loadmodule /path/to/libfalkorsemantic_module.so
 
-# Optional: Module-specific settings
-# falkorsemantic.batch_size 10000
-# falkorsemantic.query_timeout 30000
+# Optional: Module-specific settings (not yet configurable at runtime)
 ```
 
 Start Redis:

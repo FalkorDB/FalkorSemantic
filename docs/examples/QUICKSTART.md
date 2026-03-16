@@ -35,7 +35,7 @@ ex:bob a foaf:Person ;
 '
 
 # Query it
-RDF.SPARQL hello '
+RDF.QUERY hello '
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name
 WHERE { ?person foaf:name ?name }
@@ -70,7 +70,7 @@ sn:charlie a foaf:Person ;
 '
 
 # Find friends of friends
-RDF.SPARQL social '
+RDF.QUERY social '
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT DISTINCT ?fof ?name
 WHERE {
@@ -81,7 +81,7 @@ WHERE {
 '
 
 # Find people with shared interests
-RDF.SPARQL social '
+RDF.QUERY social '
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?person1 ?person2 ?sharedInterest
 WHERE {
@@ -132,7 +132,7 @@ ex:mouse1 a schema:Product ;
 '
 
 # Find products on sale
-RDF.SPARQL products '
+RDF.QUERY products '
 PREFIX schema: <http://schema.org/>
 SELECT ?name ?originalPrice ?salePrice ?savings
 WHERE {
@@ -148,7 +148,7 @@ ORDER BY DESC(?savings)
 '
 
 # Find accessories for a product
-RDF.SPARQL products '
+RDF.QUERY products '
 PREFIX schema: <http://schema.org/>
 SELECT ?productName ?accessoryName ?accessoryPrice
 WHERE {
@@ -201,7 +201,7 @@ ex:charlie a foaf:Person ;
 '
 
 # Find all people in engineering (including sub-units)
-RDF.SPARQL org '
+RDF.QUERY org '
 PREFIX org: <http://www.w3.org/ns/org#>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?unit
@@ -213,7 +213,7 @@ WHERE {
 '
 
 # Find reporting structure
-RDF.SPARQL org '
+RDF.QUERY org '
 PREFIX org: <http://www.w3.org/ns/org#>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?employee ?manager
@@ -263,8 +263,8 @@ ex:paper4 a bibo:AcademicArticle ;
     dc:references ex:paper1, ex:paper2, ex:paper3 .
 '
 
-# Find most cited papers
-RDF.SPARQL citations '
+# Find most cited papers (requires aggregate support - planned)
+RDF.QUERY citations '
 PREFIX bibo: <http://purl.org/ontology/bibo/>
 PREFIX dc: <http://purl.org/dc/terms/>
 SELECT ?title (COUNT(?citing) AS ?citations)
@@ -278,7 +278,7 @@ LIMIT 10
 '
 
 # Find citation chains
-RDF.SPARQL citations '
+RDF.QUERY citations '
 PREFIX dc: <http://purl.org/dc/terms/>
 SELECT ?original ?citing
 WHERE {
@@ -313,7 +313,7 @@ ex:france a ex:Country ;
 '
 
 # Query with linked data context
-RDF.SPARQL integrated '
+RDF.QUERY integrated '
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX dbp: <http://dbpedia.org/resource/>
 PREFIX ex: <http://example.org/>
@@ -352,7 +352,7 @@ foaf:name owl:equivalentProperty schema:name .
 '
 
 # Query across schemas
-RDF.SPARQL integrated '
+RDF.QUERY integrated '
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX schema: <http://schema.org/>
 SELECT ?person ?name
@@ -367,6 +367,8 @@ WHERE {
 ## Analytics Queries
 
 ### Aggregation Examples
+
+> **Note:** Aggregates (COUNT, SUM, AVG, etc.) and GROUP BY/HAVING are not yet fully translated to Cypher. The examples below show planned SPARQL support.
 
 ```bash
 RDF.GRAPH CREATE analytics
@@ -387,7 +389,7 @@ ex:charlie ex:name "Charlie" ; ex:tier "Gold" .
 '
 
 # Customer spending summary
-RDF.SPARQL analytics '
+RDF.QUERY analytics '
 PREFIX ex: <http://example.org/>
 SELECT ?name (SUM(?amount) AS ?total) (AVG(?amount) AS ?avg) (COUNT(?order) AS ?orders)
 WHERE {
@@ -400,7 +402,7 @@ ORDER BY DESC(?total)
 '
 
 # Spending by tier
-RDF.SPARQL analytics '
+RDF.QUERY analytics '
 PREFIX ex: <http://example.org/>
 SELECT ?tier (SUM(?amount) AS ?totalSpend) (COUNT(DISTINCT ?customer) AS ?customers)
 WHERE {
@@ -412,7 +414,7 @@ GROUP BY ?tier
 '
 
 # Top spenders (HAVING example)
-RDF.SPARQL analytics '
+RDF.QUERY analytics '
 PREFIX ex: <http://example.org/>
 SELECT ?name (SUM(?amount) AS ?total)
 WHERE {
@@ -476,6 +478,8 @@ WHERE {
 
 ### CONSTRUCT for Data Transformation
 
+> **Note:** CONSTRUCT queries are not yet supported. This is a planned feature.
+
 ```sparql
 # Transform schema
 PREFIX schema: <http://schema.org/>
@@ -493,6 +497,8 @@ WHERE {
 ```
 
 ### Subqueries
+
+> **Note:** Subqueries are currently flattened instead of nested. Complex subqueries may not produce expected results.
 
 ```sparql
 # Find people with above-average connections
@@ -530,6 +536,8 @@ WHERE {
 ```
 
 ### Property Paths
+
+> **Note:** Property paths are parsed but currently simplified to a generic traversal pattern. Full path semantics are planned.
 
 ```sparql
 # All ancestors (transitive)
@@ -570,7 +578,7 @@ r.execute_command('RDF.INSERT', 'mykg', '''
 ''')
 
 # Query
-result = r.execute_command('RDF.SPARQL', 'mykg', '''
+result = r.execute_command('RDF.QUERY', 'mykg', '''
     PREFIX ex: <http://example.org/>
     SELECT ?name ?age
     WHERE { ?person ex:name ?name ; ex:age ?age }
@@ -596,7 +604,7 @@ await client.sendCommand(['RDF.INSERT', 'mykg', `
 `]);
 
 // Query
-const result = await client.sendCommand(['RDF.SPARQL', 'mykg', `
+const result = await client.sendCommand(['RDF.QUERY', 'mykg', `
   PREFIX ex: <http://example.org/>
   SELECT ?name ?age WHERE { ?person ex:name ?name ; ex:age ?age }
 `]);
@@ -620,7 +628,7 @@ jedis.sendCommand(() -> "RDF.INSERT".getBytes(), "mykg",
     "@prefix ex: <http://example.org/> . ex:alice ex:name \"Alice\" .");
 
 // Query
-Object result = jedis.sendCommand(() -> "RDF.SPARQL".getBytes(), "mykg",
+Object result = jedis.sendCommand(() -> "RDF.QUERY".getBytes(), "mykg",
     "PREFIX ex: <http://example.org/> SELECT ?name WHERE { ?s ex:name ?name }");
 
 JSONObject json = new JSONObject(result.toString());
