@@ -12,7 +12,7 @@ FalkorSemantic is a Redis module that enables semantic web data processing with 
 
 - **RDF Data Support**: Store and manage RDF triples in FalkorDB's graph engine
 - **SPARQL Queries**: Query your data using the standard semantic web query language
-- **Multiple Formats**: Import/export RDF in Turtle, N-Triples, JSON-LD, and N-Quads
+- **Multiple Formats**: Import RDF in Turtle, N-Triples, N-Quads, and TriG
 - **High Performance**: Leverage FalkorDB's speed for semantic workloads
 - **Standards Compliant**: SPARQL 1.1 query support
 
@@ -20,7 +20,7 @@ FalkorSemantic is a Redis module that enables semantic web data processing with 
 
 The project is organized as a Cargo workspace with four main crates:
 
-- **`parser`**: Parses RDF formats (Turtle, N-Triples, JSON-LD) and SPARQL queries
+- **`parser`**: Parses RDF formats (Turtle, N-Triples, TriG) and SPARQL queries
 - **`mapper`**: Maps RDF triples to FalkorDB graph structures and translates SPARQL to Cypher
 - **`storage`**: Dictionary and namespace storage for efficient IRI handling
 - **`module`**: Redis module that exposes RDF/SPARQL commands
@@ -28,13 +28,14 @@ The project is organized as a Cargo workspace with four main crates:
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   Redis Module API                   │
-│         (RDF.INSERT, RDF.SPARQL, etc.)              │
+│         (RDF.INSERT, RDF.QUERY, etc.)                │
 ├─────────────────────────────────────────────────────┤
 │  ┌─────────────────┐    ┌─────────────────────────┐ │
 │  │     Parser      │    │        Mapper           │ │
 │  │  ├─ RDF         │    │  ├─ RDF → Graph         │ │
 │  │  │  (Turtle,    │    │  └─ SPARQL → Cypher     │ │
-│  │  │   N-Triples) │    │                         │ │
+│  │  │   N-Triples, │    │                         │ │
+│  │  │   TriG)      │    │                         │ │
 │  │  └─ SPARQL      │    │                         │ │
 │  └────────┬────────┘    └───────────┬─────────────┘ │
 │           └──────────────┬──────────┘               │
@@ -95,8 +96,8 @@ redis-server --loadmodule ./target/release/libfalkorsemantic_module.so
 # Connect to Redis
 redis-cli
 
-# Insert RDF data in Turtle format
-RDF.INSERT mykg turtle '
+# Insert RDF data (format is auto-detected, or specify with FORMAT)
+RDF.INSERT mykg '
   @prefix ex: <http://example.org/> .
   @prefix foaf: <http://xmlns.com/foaf/0.1/> .
   
@@ -106,7 +107,7 @@ RDF.INSERT mykg turtle '
 '
 
 # Query with SPARQL
-RDF.SPARQL mykg '
+RDF.QUERY mykg '
   PREFIX foaf: <http://xmlns.com/foaf/0.1/>
   SELECT ?name ?friendName
   WHERE {
@@ -124,18 +125,19 @@ RDF.SPARQL mykg '
 Insert RDF triples into a graph.
 
 ```
-RDF.INSERT <graph> <format> <data>
+RDF.INSERT <graph> <data> [FORMAT <format>] [ATOMIC]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `graph` | Name of the target graph |
-| `format` | Input format: `turtle`, `ntriples`, `jsonld`, `nquads` |
 | `data` | RDF data as a string |
+| `FORMAT` | Optional format: `turtle`, `ntriples`, `nquads`, `trig` (auto-detected if omitted) |
+| `ATOMIC` | Optional flag to execute all inserts as a single transaction |
 
 **Example:**
 ```bash
-RDF.INSERT mykg ntriples '
+RDF.INSERT mykg '
 <http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
 <http://example.org/alice> <http://xmlns.com/foaf/0.1/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
 '
@@ -146,20 +148,30 @@ RDF.INSERT mykg ntriples '
 Bulk insert RDF data from a file.
 
 ```
-RDF.BULK_INSERT <graph> <format> <file_path> [BATCH <size>]
+RDF.BULK_INSERT <graph> <file_path> [FORMAT <format>] [BATCH <size>] [SKIP <lines>] [MAXERRORS <count>] [STOPONERROR]
 ```
+
+| Argument | Description |
+|----------|-------------|
+| `graph` | Name of the target graph |
+| `file_path` | Path to the RDF file |
+| `FORMAT` | Optional format (auto-detected from extension if omitted) |
+| `BATCH` | Batch size for processing (default: 1000) |
+| `SKIP` | Number of lines to skip (for recovery from partial failures) |
+| `MAXERRORS` | Maximum errors before stopping (default: unlimited) |
+| `STOPONERROR` | Stop on first error instead of continuing |
 
 **Example:**
 ```bash
-RDF.BULK_INSERT dbpedia ntriples /data/dbpedia.nt BATCH 50000
+RDF.BULK_INSERT dbpedia /data/dbpedia.nt FORMAT ntriples BATCH 50000
 ```
 
-### RDF.SPARQL
+### RDF.QUERY
 
 Execute a SPARQL query.
 
 ```
-RDF.SPARQL <graph> <query> [FORMAT <format>] [TIMEOUT <ms>]
+RDF.QUERY <graph> <query> [FORMAT <format>] [TIMEOUT <ms>]
 ```
 
 | Argument | Description |
@@ -171,7 +183,7 @@ RDF.SPARQL <graph> <query> [FORMAT <format>] [TIMEOUT <ms>]
 
 **Example:**
 ```bash
-RDF.SPARQL mykg '
+RDF.QUERY mykg '
   PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
   SELECT ?class (COUNT(?s) AS ?count)
   WHERE { ?s rdf:type ?class }
@@ -186,21 +198,25 @@ RDF.SPARQL mykg '
 Delete triples matching a pattern. Use `*` as a wildcard.
 
 ```
-RDF.DELETE <graph> <subject> <predicate> <object>
+RDF.DELETE <graph> <subject> <predicate> <object> [GRAPH <named_graph>] [ORPHANS]
 ```
+
+| Argument | Description |
+|----------|-------------|
+| `graph` | Name of the target graph |
+| `subject` | Subject IRI, blank node, or `*` wildcard |
+| `predicate` | Predicate IRI or `*` wildcard |
+| `object` | Object IRI, literal, or `*` wildcard |
+| `GRAPH` | Optional: scope deletion to a specific named graph |
+| `ORPHANS` | Optional: also delete nodes that become orphaned |
 
 **Example:**
 ```bash
 # Delete all triples about alice
 RDF.DELETE mykg "<http://example.org/alice>" "*" "*"
-```
 
-### RDF.EXPORT
-
-Export graph data in RDF format.
-
-```
-RDF.EXPORT <graph> <format>
+# Delete and clean up orphaned nodes
+RDF.DELETE mykg "<http://example.org/alice>" "*" "*" ORPHANS
 ```
 
 ### RDF.NAMESPACES
@@ -222,7 +238,6 @@ RDF.GRAPH LIST
 RDF.GRAPH CREATE <graph>
 RDF.GRAPH DROP <graph>
 RDF.GRAPH CLEAR <graph>
-RDF.GRAPH STATS <graph>
 ```
 
 ## SPARQL Support
@@ -245,10 +260,10 @@ RDF.GRAPH STATS <graph>
 | UNION | ✅ | Top-level UNION with DISTINCT support |
 | MINUS | ✅ | |
 | FILTER | ✅ | See supported functions below |
-| BIND | 🚧 | Variable tracked, expression ignored ([#69](https://github.com/FalkorDB/FalkorSemantic/issues/69)) |
-| VALUES | 🚧 | Variables tracked, bindings ignored ([#70](https://github.com/FalkorDB/FalkorSemantic/issues/70)) |
+| BIND | ✅ | Variable tracked via Extend pattern |
+| VALUES | ✅ | Single-variable and multi-variable support |
 | Subqueries | 🚧 | Flattened instead of nested ([#78](https://github.com/FalkorDB/FalkorSemantic/issues/78)) |
-| Named Graphs (GRAPH) | 🚧 | Parsed but not translated |
+| Named Graphs (GRAPH) | 🚧 | Parsed but inner pattern translated without graph scoping |
 
 ### Property Paths
 
@@ -269,19 +284,20 @@ Property paths are parsed but currently simplified to a generic traversal patter
 |---------|--------|-------|
 | Comparison (=, !=, <, >, <=, >=) | ✅ | |
 | Logical (&&, \|\|, !) | ✅ | |
-| Arithmetic (+, -, *, /) | 🚧 | Planned ([#65](https://github.com/FalkorDB/FalkorSemantic/issues/65)) |
+| Arithmetic (+, -, *, /) | ✅ | Including unary plus/minus |
 | `STR`, `IRI`, `BNODE` | ✅ | |
 | `BOUND`, `IF`, `COALESCE` | ✅ | |
 | `STRLEN`, `UCASE`, `LCASE` | ✅ | |
 | `STRSTARTS`, `STRENDS`, `CONTAINS` | ✅ | |
 | `REGEX` | ✅ | |
-| `SUBSTR`, `CONCAT`, `REPLACE` | 🚧 | Planned ([#73](https://github.com/FalkorDB/FalkorSemantic/issues/73)) |
-| `LANG`, `DATATYPE` | 🚧 | Planned ([#73](https://github.com/FalkorDB/FalkorSemantic/issues/73)) |
-| `isIRI`, `isBlank`, `isLiteral`, `isNumeric` | 🚧 | Planned ([#74](https://github.com/FalkorDB/FalkorSemantic/issues/74)) |
-| `EXISTS` / `NOT EXISTS` | 🚧 | Planned ([#67](https://github.com/FalkorDB/FalkorSemantic/issues/67)) |
+| `SUBSTR`, `CONCAT`, `REPLACE` | ✅ | |
+| `LANG`, `DATATYPE` | ✅ | |
+| `isIRI`, `isBlank`, `isLiteral`, `isNumeric` | ✅ | |
+| `ABS`, `CEIL`, `FLOOR`, `ROUND` | ✅ | |
+| `EXISTS` / `NOT EXISTS` | ✅ | |
 | `IN` / `NOT IN` | ✅ / 🚧 | NOT IN planned ([#66](https://github.com/FalkorDB/FalkorSemantic/issues/66)) |
 | Aggregates (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`) | 🚧 | Planned ([#71](https://github.com/FalkorDB/FalkorSemantic/issues/71)) |
-| `GROUP BY` / `HAVING` | 🚧 | Planned ([#72](https://github.com/FalkorDB/FalkorSemantic/issues/72)) |
+| `GROUP BY` / `HAVING` | 🚧 | Pattern traversed, no aggregate translation ([#72](https://github.com/FalkorDB/FalkorSemantic/issues/72)) |
 
 ## RDF to Graph Mapping
 
@@ -311,14 +327,6 @@ CREATE (alice:Resource:Person {uri: 'http://example.org/alice', 'foaf:name': 'Al
 CREATE (bob:Resource {uri: 'http://example.org/bob'})
 CREATE (alice)-[:knows]->(bob)
 ```
-
-## Configuration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `FALKORSEMANTIC.BATCH_SIZE` | 10000 | Default batch size for bulk operations |
-| `FALKORSEMANTIC.QUERY_TIMEOUT` | 30000 | Default query timeout (ms) |
-| `FALKORSEMANTIC.CACHE_SIZE` | 10000 | IRI dictionary cache size |
 
 ## Development
 
@@ -367,24 +375,26 @@ FalkorSemantic/
 │   ├── src/
 │   │   ├── rdf/        # RDF data types and parsers
 │   │   │   ├── jsonld/ # JSON-LD parser (expansion, compaction, framing)
+│   │   │   ├── serializer/ # RDF serialization
 │   │   │   └── ...     # IRIs, literals, triples, namespaces
-│   │   └── sparql/     # SPARQL query parser
+│   │   ├── sparql/     # SPARQL query parser
+│   │   ├── formats/    # Format readers (N-Triples, TriG, Turtle)
+│   │   ├── results/    # SPARQL result serializers (JSON, XML, CSV, TSV)
+│   │   └── export/     # RDF export utilities
 │   └── Cargo.toml
 ├── mapper/              # Graph mapping and query translation
 │   ├── src/
-│   │   ├── rdf/        # RDF to FalkorDB mapping
-│   │   └── sparql/     # SPARQL to Cypher translation
+│   │   ├── graph/      # RDF to FalkorDB graph mapping
+│   │   └── query/      # SPARQL to Cypher translation
 │   └── Cargo.toml
-├── storage/             # Storage utilities
-│   ├── src/
-│   │   ├── dictionary/ # IRI dictionary for efficient storage
-│   │   └── namespace/  # Namespace prefix management
+├── storage/             # Storage utilities (dictionary, namespace, cache)
 │   └── Cargo.toml
 ├── module/              # Redis module implementation
 │   ├── src/
 │   │   └── commands/   # RDF.* command handlers
 │   └── Cargo.toml
 ├── tests-e2e/           # End-to-end tests
+├── tests-compliance/    # SPARQL compliance tests
 ├── scripts/             # Utility scripts
 ├── .github/workflows/   # CI/CD pipelines
 ├── docker-compose.yml   # Development environment
@@ -402,13 +412,13 @@ import json
 r = redis.Redis(host='localhost', port=6379)
 
 # Insert data
-r.execute_command('RDF.INSERT', 'mykg', 'turtle', '''
+r.execute_command('RDF.INSERT', 'mykg', '''
     @prefix ex: <http://example.org/> .
     ex:product1 ex:name "Widget" ; ex:price 29.99 .
 ''')
 
 # Query
-result = r.execute_command('RDF.SPARQL', 'mykg', '''
+result = r.execute_command('RDF.QUERY', 'mykg', '''
     PREFIX ex: <http://example.org/>
     SELECT ?name ?price WHERE {
         ?product ex:name ?name ; ex:price ?price .
@@ -425,13 +435,13 @@ import { createClient } from 'redis';
 const client = createClient();
 await client.connect();
 
-await client.sendCommand(['RDF.INSERT', 'mykg', 'turtle', `
+await client.sendCommand(['RDF.INSERT', 'mykg', `
   @prefix schema: <http://schema.org/> .
   <http://example.org/event1> a schema:Event ;
     schema:name "Tech Conference" .
 `]);
 
-const result = await client.sendCommand(['RDF.SPARQL', 'mykg', `
+const result = await client.sendCommand(['RDF.QUERY', 'mykg', `
   PREFIX schema: <http://schema.org/>
   SELECT ?name WHERE { ?e schema:name ?name }
 `]);
@@ -441,13 +451,14 @@ console.log(JSON.parse(result));
 ## Roadmap
 
 - [x] Project structure and CI/CD
-- [ ] RDF parser implementation (Turtle, N-Triples)
-- [ ] RDF to graph mapping
-- [ ] SPARQL parser integration
-- [ ] SPARQL to Cypher translation
-- [ ] Core Redis commands (INSERT, SPARQL, DELETE)
-- [x] JSON-LD support
-- [ ] Property paths
+- [x] RDF parser implementation (Turtle, N-Triples, N-Quads, TriG)
+- [x] RDF to graph mapping
+- [x] SPARQL parser integration
+- [x] SPARQL to Cypher translation
+- [x] Core Redis commands (INSERT, QUERY, DELETE)
+- [ ] JSON-LD support (parser exists, module integration pending)
+- [ ] Property paths (parsed, full semantics planned)
+- [ ] Aggregates and GROUP BY
 - [ ] Performance optimization
 - [ ] SPARQL UPDATE support
 - [ ] RDFS inference
@@ -463,11 +474,11 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
-- Built with [redis-module-rs](https://github.com/RedisLabsModules/redismodule-rs)
+- Built with [redis-module](https://crates.io/crates/redis-module)
 - Designed to work with [FalkorDB](https://github.com/FalkorDB/FalkorDB)
 - SPARQL parsing via [spargebra](https://crates.io/crates/spargebra)
 - RDF parsing via [rio](https://crates.io/crates/rio_turtle)
