@@ -275,9 +275,7 @@ impl TestRedisServer {
                             if is_name_key {
                                 if let Some(val) = iter.next() {
                                     let matches = match val {
-                                        redis::Value::BulkString(v) => {
-                                            v == module_name.as_bytes()
-                                        }
+                                        redis::Value::BulkString(v) => v == module_name.as_bytes(),
                                         redis::Value::SimpleString(s) => s == module_name,
                                         _ => false,
                                     };
