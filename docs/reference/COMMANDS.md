@@ -8,9 +8,8 @@ Complete reference for all FalkorSemantic Redis commands.
 - [RDF.INSERT](#rdfinsert) - Insert RDF data
 - [RDF.BULK_INSERT](#rdfbulk_insert) - Bulk import
 - [RDF.NAMESPACES](#rdfnamespaces) - Namespace management
-- [RDF.SPARQL](#rdfsparql) - SPARQL queries
+- [RDF.QUERY](#rdfquery) - SPARQL queries
 - [RDF.DELETE](#rdfdelete) - Delete triples
-- [RDF.EXPORT](#rdfexport) - Export graph data
 
 ---
 
@@ -107,16 +106,6 @@ redis-cli RDF.GRAPH CLEAR knowledge_base
 # 2) (integer) 3200
 ```
 
-#### STATS
-
-Get detailed statistics about a graph.
-
-```
-RDF.GRAPH STATS <graph_name>
-```
-
-**Returns:** Detailed statistics including node counts, edge counts, labels, and relationship types.
-
 ---
 
 ## RDF.INSERT
@@ -145,7 +134,7 @@ RDF.INSERT <graph_key> <data> [FORMAT <format>] [ATOMIC]
 | `turtle` | Turtle format | `@prefix`, `@base`, or `;` predicates |
 | `ntriples` | N-Triples | Lines ending with ` .` |
 | `nquads` | N-Quads | Lines with 4 elements ending with ` .` |
-| `jsonld` | JSON-LD | Starts with `{` or `[` |
+| `jsonld` | JSON-LD (not yet implemented) | Starts with `{` or `[` |
 
 ### Returns
 
@@ -179,7 +168,9 @@ redis-cli RDF.INSERT mykg FORMAT ntriples '
 '
 ```
 
-#### JSON-LD Insert
+#### JSON-LD Insert (not yet supported)
+
+> **Note:** JSON-LD format is detected but not yet supported. The following example will return a parse error.
 
 ```bash
 redis-cli RDF.INSERT mykg FORMAT jsonld '{
@@ -217,7 +208,7 @@ Bulk import RDF data from a file or large dataset.
 ### Syntax
 
 ```
-RDF.BULK_INSERT <graph_key> <format> <file_path> [BATCH <size>]
+RDF.BULK_INSERT <graph_key> <file_path> [FORMAT <format>] [BATCH <size>] [SKIP <lines>] [MAXERRORS <count>] [STOPONERROR]
 ```
 
 ### Arguments
@@ -225,9 +216,12 @@ RDF.BULK_INSERT <graph_key> <format> <file_path> [BATCH <size>]
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `graph_key` | Yes | Target graph name |
-| `format` | Yes | Input format |
 | `file_path` | Yes | Path to RDF file |
-| `BATCH` | No | Batch size (default: 10000) |
+| `FORMAT` | No | Input format (auto-detected from extension if omitted) |
+| `BATCH` | No | Batch size (default: 1000) |
+| `SKIP` | No | Lines to skip for recovery |
+| `MAXERRORS` | No | Max errors before stopping |
+| `STOPONERROR` | No | Stop on first error |
 
 ### Returns
 
@@ -236,7 +230,7 @@ Array: `[total_triples, batches_processed, errors]`
 ### Example
 
 ```bash
-redis-cli RDF.BULK_INSERT dbpedia ntriples /data/dbpedia-persons.nt BATCH 50000
+redis-cli RDF.BULK_INSERT dbpedia /data/dbpedia-persons.nt FORMAT ntriples BATCH 50000
 # 1) (integer) 5000000
 # 2) (integer) 100
 # 3) (integer) 0
@@ -328,14 +322,14 @@ These prefixes are automatically available:
 
 ---
 
-## RDF.SPARQL
+## RDF.QUERY
 
 Execute SPARQL queries.
 
 ### Syntax
 
 ```
-RDF.SPARQL <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
+RDF.QUERY <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
 ```
 
 ### Arguments
@@ -355,7 +349,6 @@ RDF.SPARQL <graph_key> <query> [FORMAT <format>] [TIMEOUT <ms>]
 | `xml` | application/sparql-results+xml | SELECT, ASK |
 | `csv` | text/csv | SELECT |
 | `tsv` | text/tab-separated-values | SELECT |
-| `turtle` | text/turtle | CONSTRUCT, DESCRIBE |
 
 ### Returns
 
@@ -366,7 +359,7 @@ Query results in the specified format.
 #### SELECT Query
 
 ```bash
-redis-cli RDF.SPARQL mykg '
+redis-cli RDF.QUERY mykg '
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?age
 WHERE {
@@ -394,7 +387,7 @@ LIMIT 10
 #### ASK Query
 
 ```bash
-redis-cli RDF.SPARQL mykg '
+redis-cli RDF.QUERY mykg '
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 ASK { ?person foaf:name "Alice" }
 '
@@ -405,39 +398,10 @@ ASK { ?person foaf:name "Alice" }
 {"boolean": true}
 ```
 
-#### CONSTRUCT Query
-
-```bash
-redis-cli RDF.SPARQL mykg '
-PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-PREFIX ex: <http://example.org/>
-CONSTRUCT {
-  ?person ex:displayName ?name
-}
-WHERE {
-  ?person foaf:name ?name
-}
-' FORMAT turtle
-```
-
-**Result:**
-```turtle
-<http://example.org/alice> <http://example.org/displayName> "Alice" .
-<http://example.org/bob> <http://example.org/displayName> "Bob" .
-```
-
-#### DESCRIBE Query
-
-```bash
-redis-cli RDF.SPARQL mykg '
-DESCRIBE <http://example.org/alice>
-' FORMAT turtle
-```
-
 #### Query with Timeout
 
 ```bash
-redis-cli RDF.SPARQL mykg '
+redis-cli RDF.QUERY mykg '
 SELECT ?s ?p ?o WHERE { ?s ?p ?o }
 ' TIMEOUT 5000
 ```
@@ -451,7 +415,7 @@ Delete triples matching a pattern.
 ### Syntax
 
 ```
-RDF.DELETE <graph_key> <subject> <predicate> <object>
+RDF.DELETE <graph_key> <subject> <predicate> <object> [GRAPH <named_graph>] [ORPHANS]
 ```
 
 ### Arguments
@@ -464,6 +428,8 @@ Use `*` as a wildcard for any component.
 | `subject` | Yes | Subject URI or `*` |
 | `predicate` | Yes | Predicate URI or `*` |
 | `object` | Yes | Object (URI/literal) or `*` |
+| `GRAPH` | No | Delete from a specific named graph |
+| `ORPHANS` | No | Also delete orphaned nodes |
 
 ### Returns
 
@@ -490,89 +456,6 @@ redis-cli RDF.DELETE mykg '<http://example.org/alice>' '*' '*'
 ```bash
 redis-cli RDF.DELETE mykg '*' '<http://example.org/deprecated>' '*'
 # (integer) 12
-```
-
----
-
-## RDF.EXPORT
-
-Export graph data in RDF format.
-
-### Syntax
-
-```
-RDF.EXPORT <graph_key> <format> [GRAPH <named_graph>]
-```
-
-### Arguments
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `graph_key` | Yes | Graph to export |
-| `format` | Yes | Output format |
-| `GRAPH` | No | Export specific named graph |
-
-### Supported Formats
-
-| Format | Description |
-|--------|-------------|
-| `ntriples` | N-Triples (simple, streaming-friendly) |
-| `nquads` | N-Quads (with named graphs) |
-| `turtle` | Turtle (human-readable, with prefixes) |
-| `trig` | TriG (Turtle with named graphs) |
-| `jsonld` | JSON-LD |
-
-### Returns
-
-RDF data as string in the specified format.
-
-### Examples
-
-#### Export as N-Triples
-
-```bash
-redis-cli RDF.EXPORT mykg ntriples
-# <http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
-# <http://example.org/alice> <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> .
-# <http://example.org/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
-```
-
-#### Export as Turtle
-
-```bash
-redis-cli RDF.EXPORT mykg turtle
-# @prefix foaf: <http://xmlns.com/foaf/0.1/> .
-# @prefix ex: <http://example.org/> .
-#
-# ex:alice foaf:name "Alice" ;
-#          foaf:knows ex:bob .
-# ex:bob foaf:name "Bob" .
-```
-
-#### Export as JSON-LD
-
-```bash
-redis-cli RDF.EXPORT mykg jsonld
-```
-
-```json
-{
-  "@context": {
-    "foaf": "http://xmlns.com/foaf/0.1/",
-    "ex": "http://example.org/"
-  },
-  "@graph": [
-    {
-      "@id": "ex:alice",
-      "foaf:name": "Alice",
-      "foaf:knows": {"@id": "ex:bob"}
-    },
-    {
-      "@id": "ex:bob",
-      "foaf:name": "Bob"
-    }
-  ]
-}
 ```
 
 ---
