@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build arguments (declared globally so they're available to all stages)
-ARG RUST_VERSION=1.75
+ARG RUST_VERSION=1.88
 ARG FALKORDB_VERSION=v4.16.7
 
 # --- Stage 1: Build the FalkorSemantic module ---
