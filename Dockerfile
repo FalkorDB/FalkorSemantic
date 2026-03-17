@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# --- Stage 1: Build the FalkorSemantic module ---
+# Build arguments (declared globally so they're available to all stages)
 ARG RUST_VERSION=1.75
+ARG FALKORDB_VERSION=v4.16.7
+
+# --- Stage 1: Build the FalkorSemantic module ---
 FROM rust:${RUST_VERSION}-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,7 +42,6 @@ RUN cargo build --release --package falkorsemantic-module && \
     test -f target/release/libfalkorsemantic_module.so
 
 # --- Stage 2: Production runtime ---
-ARG FALKORDB_VERSION=v4.16.7
 FROM falkordb/falkordb:${FALKORDB_VERSION}
 
 LABEL org.opencontainers.image.title="FalkorSemantic" \
