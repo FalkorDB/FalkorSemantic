@@ -47,7 +47,6 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=sha,prefix=
 
       - name: Build and push
         uses: docker/build-push-action@v5
