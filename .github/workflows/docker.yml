@@ -66,7 +66,9 @@ jobs:
           docker build -t falkorsemantic:test .
 
           # Start container
-          docker run -d --name smoke-test -p 6379:6379 falkorsemantic:test
+          docker run -d --rm --name smoke-test -p 6379:6379 falkorsemantic:test
+          trap 'docker stop smoke-test 2>/dev/null || true' EXIT
+
           echo "Waiting for server to start..."
           for i in $(seq 1 30); do
             if docker exec smoke-test redis-cli ping 2>/dev/null | grep -q PONG; then
@@ -88,4 +90,3 @@ jobs:
           docker exec smoke-test redis-cli COMMAND INFO rdf.insert | grep -q "rdf.insert" || { echo "FAIL: rdf.insert command not found"; exit 1; }
 
           echo "Smoke test passed!"
-          docker stop smoke-test

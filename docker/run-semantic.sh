@@ -9,9 +9,7 @@ if [ "${BROWSER:-1}" -eq "1" ]; then
     fi
 fi
 
-if [ ! -d "${FALKORDB_DATA_PATH}" ]; then
-    mkdir "${FALKORDB_DATA_PATH}"
-fi
+mkdir -p "${FALKORDB_DATA_PATH}"
 
 SEMANTIC_MODULE="${FALKORDB_BIN_PATH}/falkorsemantic.so"
 
