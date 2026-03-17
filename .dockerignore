@@ -5,8 +5,8 @@ target/
 .github/
 docs/
 tests/
-tests-e2e/
-tests-compliance/
+tests-e2e/src/
+tests-compliance/src/
 docker-compose.yml
 Dockerfile.dev
 *.md

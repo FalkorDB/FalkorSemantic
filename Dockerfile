@@ -21,13 +21,17 @@ COPY parser/Cargo.toml parser/Cargo.toml
 COPY mapper/Cargo.toml mapper/Cargo.toml
 COPY storage/Cargo.toml storage/Cargo.toml
 COPY module/Cargo.toml module/Cargo.toml
+COPY tests-e2e/Cargo.toml tests-e2e/Cargo.toml
+COPY tests-compliance/Cargo.toml tests-compliance/Cargo.toml
 
 # Create dummy source files to pre-fetch and compile dependencies
-RUN mkdir -p parser/src mapper/src storage/src module/src && \
+RUN mkdir -p parser/src mapper/src storage/src module/src tests-e2e/src tests-compliance/src && \
     echo "pub fn _dummy() {}" > parser/src/lib.rs && \
     echo "pub fn _dummy() {}" > mapper/src/lib.rs && \
     echo "pub fn _dummy() {}" > storage/src/lib.rs && \
     echo "pub fn _dummy() {}" > module/src/lib.rs && \
+    echo "pub fn _dummy() {}" > tests-e2e/src/lib.rs && \
+    echo "pub fn _dummy() {}" > tests-compliance/src/lib.rs && \
     cargo build --release --package falkorsemantic-module 2>/dev/null || true && \
     rm -rf parser/src mapper/src storage/src module/src
 
