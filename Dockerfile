@@ -25,9 +25,11 @@ COPY module/ module/
 COPY tests-e2e/Cargo.toml tests-e2e/Cargo.toml
 COPY tests-compliance/Cargo.toml tests-compliance/Cargo.toml
 
-# Create dummy lib.rs for test crates (not built, but needed for workspace resolution)
+# Create dummy sources for test crates (not built, but needed for workspace resolution)
 RUN mkdir -p tests-e2e/src tests-compliance/src && \
     echo "pub fn _dummy() {}" > tests-e2e/src/lib.rs && \
+    echo "" > tests-e2e/src/e2e.rs && \
+    echo "" > tests-e2e/src/benchmarks.rs && \
     echo "pub fn _dummy() {}" > tests-compliance/src/lib.rs
 
 # Build the module

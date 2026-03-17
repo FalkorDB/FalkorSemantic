@@ -104,18 +104,19 @@ docker-stop:
 docker-test: docker-build
 	@echo "Starting container..."
 	@docker run -d --rm --name falkorsemantic-test -p 16379:6379 $(DOCKER_IMAGE):$(DOCKER_TAG)
-	@echo "Waiting for server..."
-	@for i in $$(seq 1 30); do \
+	@trap 'docker stop falkorsemantic-test 2>/dev/null || true' EXIT; \
+	echo "Waiting for server..."; \
+	for i in $$(seq 1 30); do \
 		if docker exec falkorsemantic-test redis-cli ping 2>/dev/null | grep -q PONG; then \
 			break; \
 		fi; \
 		sleep 1; \
-	done
-	@echo "Checking modules..."
-	@docker exec falkorsemantic-test redis-cli MODULE LIST
-	@docker exec falkorsemantic-test redis-cli COMMAND INFO rdf.insert
-	@echo "Smoke test passed!"
-	@docker stop falkorsemantic-test
+	done; \
+	echo "Checking modules..."; \
+	docker exec falkorsemantic-test redis-cli MODULE LIST | grep -qi graph || { echo "FAIL: FalkorDB module not loaded"; exit 1; }; \
+	docker exec falkorsemantic-test redis-cli MODULE LIST | grep -qi semantic || { echo "FAIL: FalkorSemantic module not loaded"; exit 1; }; \
+	docker exec falkorsemantic-test redis-cli COMMAND INFO rdf.insert | grep -q rdf.insert || { echo "FAIL: rdf.insert command not found"; exit 1; }; \
+	echo "Smoke test passed!"
 
 docker-push:
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
