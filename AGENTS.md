@@ -56,17 +56,17 @@ Code Quality:
   make audit          - Run security audit
   make check          - Run fmt-check + lint + test (combined)
 
-Development:
-  make dev-up         - Start development environment (Docker)
-  make dev-down       - Stop development environment
-  make dev-logs       - View development logs
-  make dev-restart    - Full dev cycle (down + module build + up)
+Docker:
   make clean          - Clean build artifacts
+  make docker-build   - Build production Docker image
+  make docker-run     - Run FalkorSemantic container (port 6379)
+  make docker-stop    - Stop FalkorSemantic container
+  make docker-test    - Build and smoke-test Docker image
+  make docker-push    - Push image to Docker Hub
 
 Utilities:
   make install-tools  - Install cargo-watch, cargo-audit, cargo-expand, rustfmt, clippy
   make redis-cli      - Open Redis CLI (port 6379)
-  make falkordb-cli   - Open FalkorDB CLI (port 6380)
 
 Documentation:
   make docs           - Generate documentation
@@ -128,26 +128,22 @@ All commands are registered in `module/src/lib.rs` and implemented in `module/sr
 | rdf_graph.rs | 300+ | Graph lifecycle management |
 | utils.rs | 50+ | Helper utilities |
 
-## Docker Services
+## Docker Image
 
-Three services defined in `docker-compose.yml`:
+**Image**: `falkordb/falkorsemantic` (Docker Hub)
+**Base**: `falkordb/falkordb:v4.16.7`
+**Dockerfile**: Multi-stage build (Rust 1.88 builder + FalkorDB runtime)
+**Entrypoint**: `docker/run-semantic.sh` — loads FalkorDB module first, then FalkorSemantic (load order matters)
 
-1. **redis** (port 6379)
-   - Image: redis:7-alpine
-   - Loads FalkorSemantic module from `./target/release/libfalkorsemantic_module.so`
-   - Health check: redis-cli ping
-   - Volume: redis_data, module mount
+### Tags
+- `edge` — latest build from `main` branch
+- `x.y.z` / `x.y` — semver release tags
+- `latest` — most recent tagged release
 
-2. **falkordb** (port 6380)
-   - Image: falkordb/falkordb:latest
-   - Health check: redis-cli -p 6379 ping
-   - Volume: falkordb_data
-
-3. **dev** (development container)
-   - Builds from Dockerfile.dev
-   - Mounts workspace at /workspace
-   - Depends on: redis (healthy) + falkordb (healthy)
-   - Provides full Rust development environment
+### CI/CD
+- **Workflow**: `.github/workflows/docker.yml`
+- **Triggers**: push to `main` (→ `:edge`), semver tags (→ `:version`, `:latest`), PRs (smoke test only)
+- **Registry**: Docker Hub via `DOCKER_USERNAME` / `DOCKER_PASSWORD` secrets
 
 ## SPARQL to Cypher Translation
 
@@ -291,8 +287,9 @@ tests-compliance/     → W3C standards compliance testing
 FalkorSemantic/
 ├── Cargo.toml                 # Workspace configuration
 ├── Makefile                   # Development targets
-├── docker-compose.yml         # Dev environment
-├── Dockerfile.dev            # Development container
+├── Dockerfile                # Production Docker image (multi-stage)
+├── docker/
+│   └── run-semantic.sh       # Container entrypoint (loads both modules)
 ├── LICENSE                   # AGPL v3
 ├── README.md                 # Project overview
 ├── CHANGELOG.md              # Version history
@@ -358,7 +355,8 @@ FalkorSemantic/
 │
 ├── .github/
 │   └── workflows/
-│       └── ci.yml          # CI/CD pipeline
+│       ├── ci.yml          # CI/CD pipeline
+│       └── docker.yml      # Docker image build & publish
 │
 └── docs/                    # Documentation (generated)
 ```
@@ -398,5 +396,5 @@ FalkorSemantic/
 
 ---
 
-*Last Updated: 2026-03-16*
+*Last Updated: 2026-03-17*
 *For detailed API documentation, see inline code comments or run `make docs`*

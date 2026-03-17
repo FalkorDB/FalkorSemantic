@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt clean dev-up dev-down module install-tools audit \
+.PHONY: help build test lint fmt clean module install-tools audit \
 	docker-build docker-run docker-stop docker-test docker-push
 
 # Docker settings
@@ -25,13 +25,8 @@ help:
 	@echo "  make lint           - Run clippy linter"
 	@echo "  make audit          - Run security audit"
 	@echo ""
-	@echo "Development:"
-	@echo "  make dev-up         - Start development environment"
-	@echo "  make dev-down       - Stop development environment"
-	@echo "  make dev-logs       - View development logs"
-	@echo "  make clean          - Clean build artifacts"
-	@echo ""
 	@echo "Docker:"
+	@echo "  make clean          - Clean build artifacts"
 	@echo "  make docker-build   - Build production Docker image"
 	@echo "  make docker-run     - Run FalkorSemantic container"
 	@echo "  make docker-stop    - Stop FalkorSemantic container"
@@ -75,23 +70,6 @@ audit:
 
 check: fmt-check lint test
 
-# Development Environment
-dev-up:
-	docker-compose up -d
-	@echo "Waiting for services to be ready..."
-	@sleep 5
-	@echo "Services are running:"
-	@echo "  - Redis with FalkorSemantic: localhost:6379"
-	@echo "  - FalkorDB: localhost:6380"
-
-dev-down:
-	docker-compose down
-
-dev-logs:
-	docker-compose logs -f
-
-dev-restart: dev-down module dev-up
-
 # Cleaning
 clean:
 	cargo clean
@@ -105,9 +83,6 @@ install-tools:
 # Redis commands
 redis-cli:
 	redis-cli
-
-falkordb-cli:
-	redis-cli -p 6380
 
 # Documentation
 docs:
