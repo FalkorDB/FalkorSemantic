@@ -1,8 +1,8 @@
-.PHONY: help build test lint fmt clean dev-up dev-down module install-tools audit \
+.PHONY: help build test lint fmt clean module install-tools audit \
 	docker-build docker-run docker-stop docker-test docker-push
 
 # Docker settings
-DOCKER_IMAGE ?= ghcr.io/falkordb/falkorsemantic
+DOCKER_IMAGE ?= falkordb/falkorsemantic
 DOCKER_TAG ?= latest
 
 # Default target
@@ -25,13 +25,8 @@ help:
 	@echo "  make lint           - Run clippy linter"
 	@echo "  make audit          - Run security audit"
 	@echo ""
-	@echo "Development:"
-	@echo "  make dev-up         - Start development environment"
-	@echo "  make dev-down       - Stop development environment"
-	@echo "  make dev-logs       - View development logs"
-	@echo "  make clean          - Clean build artifacts"
-	@echo ""
 	@echo "Docker:"
+	@echo "  make clean          - Clean build artifacts"
 	@echo "  make docker-build   - Build production Docker image"
 	@echo "  make docker-run     - Run FalkorSemantic container"
 	@echo "  make docker-stop    - Stop FalkorSemantic container"
@@ -75,23 +70,6 @@ audit:
 
 check: fmt-check lint test
 
-# Development Environment
-dev-up:
-	docker-compose up -d
-	@echo "Waiting for services to be ready..."
-	@sleep 5
-	@echo "Services are running:"
-	@echo "  - Redis with FalkorSemantic: localhost:6379"
-	@echo "  - FalkorDB: localhost:6380"
-
-dev-down:
-	docker-compose down
-
-dev-logs:
-	docker-compose logs -f
-
-dev-restart: dev-down module dev-up
-
 # Cleaning
 clean:
 	cargo clean
@@ -105,9 +83,6 @@ install-tools:
 # Redis commands
 redis-cli:
 	redis-cli
-
-falkordb-cli:
-	redis-cli -p 6380
 
 # Documentation
 docs:
@@ -129,18 +104,19 @@ docker-stop:
 docker-test: docker-build
 	@echo "Starting container..."
 	@docker run -d --rm --name falkorsemantic-test -p 16379:6379 $(DOCKER_IMAGE):$(DOCKER_TAG)
-	@echo "Waiting for server..."
-	@for i in $$(seq 1 30); do \
+	@trap 'docker stop falkorsemantic-test 2>/dev/null || true' EXIT; \
+	echo "Waiting for server..."; \
+	for i in $$(seq 1 30); do \
 		if docker exec falkorsemantic-test redis-cli ping 2>/dev/null | grep -q PONG; then \
 			break; \
 		fi; \
 		sleep 1; \
-	done
-	@echo "Checking modules..."
-	@docker exec falkorsemantic-test redis-cli MODULE LIST
-	@docker exec falkorsemantic-test redis-cli COMMAND INFO rdf.insert
-	@echo "Smoke test passed!"
-	@docker stop falkorsemantic-test
+	done; \
+	echo "Checking modules..."; \
+	docker exec falkorsemantic-test redis-cli MODULE LIST | grep -qi graph || { echo "FAIL: FalkorDB module not loaded"; exit 1; }; \
+	docker exec falkorsemantic-test redis-cli MODULE LIST | grep -qi semantic || { echo "FAIL: FalkorSemantic module not loaded"; exit 1; }; \
+	docker exec falkorsemantic-test redis-cli COMMAND INFO rdf.insert | grep -q rdf.insert || { echo "FAIL: rdf.insert command not found"; exit 1; }; \
+	echo "Smoke test passed!"
 
 docker-push:
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)

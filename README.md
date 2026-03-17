@@ -51,44 +51,33 @@ The project is organized as a Cargo workspace with four main crates:
 
 ### Prerequisites
 
-- Rust 1.75 or later
-- Docker and Docker Compose (for development environment)
-- Redis CLI tools (optional, for testing)
+- Docker (recommended), or
+- Rust 1.88 or later (for building from source)
 
 ### Installation
 
-#### Using Docker Compose (Recommended)
+#### Using Docker (Recommended)
 
-1. Clone the repository:
+```bash
+docker run -d --name falkorsemantic -p 6379:6379 falkordb/falkorsemantic:edge
+```
+
+This gives you FalkorDB with full RDF/SPARQL support on `localhost:6379`.
+
+#### Building from Source
+
 ```bash
 git clone https://github.com/FalkorDB/FalkorSemantic.git
 cd FalkorSemantic
+make docker-build
+make docker-run
 ```
 
-2. Build the module:
+#### Building the Module Only
+
 ```bash
 cargo build --release --package falkorsemantic-module
-```
-
-3. Start the development environment:
-```bash
-docker-compose up -d
-```
-
-The services will be available at:
-- Redis with FalkorSemantic: `localhost:6379`
-- FalkorDB: `localhost:6380`
-
-#### Manual Installation
-
-1. Build the module:
-```bash
-cargo build --release --package falkorsemantic-module
-```
-
-2. Load the module in Redis:
-```bash
-redis-server --loadmodule ./target/release/libfalkorsemantic_module.so
+# Requires a running FalkorDB instance to load into
 ```
 
 ### Basic Usage
@@ -350,9 +339,10 @@ cargo build --release
 # Run unit tests
 cargo test --workspace --exclude falkorsemantic-module
 
-# Run integration tests (requires Docker environment)
-docker-compose up -d
+# Run integration tests (requires running FalkorSemantic container)
+make docker-run
 cargo test --test integration -- --ignored
+make docker-stop
 ```
 
 ### Code Quality
@@ -398,7 +388,8 @@ FalkorSemantic/
 ├── tests-compliance/    # SPARQL compliance tests
 ├── scripts/             # Utility scripts
 ├── .github/workflows/   # CI/CD pipelines
-├── docker-compose.yml   # Development environment
+├── Dockerfile           # Production Docker image
+├── docker/              # Docker entrypoint scripts
 └── Cargo.toml          # Workspace configuration
 ```
 
@@ -490,6 +481,20 @@ This project is licensed under the GNU Affero General Public License v3.0 - see 
 - **Discussions**: [GitHub Discussions](https://github.com/FalkorDB/FalkorSemantic/discussions)
 - **Documentation**: [Wiki](https://github.com/FalkorDB/FalkorSemantic/wiki)
 
+## Docker Image
+
+The production Docker image is published to Docker Hub as [`falkordb/falkorsemantic`](https://hub.docker.com/r/falkordb/falkorsemantic).
+
+| Tag | Description |
+|-----|-------------|
+| `edge` | Latest build from `main` branch |
+| `x.y.z` | Specific release version |
+| `latest` | Most recent tagged release |
+
+```bash
+docker run -d --name falkorsemantic -p 6379:6379 falkordb/falkorsemantic:edge
+```
+
 ## CI/CD
 
 The project uses GitHub Actions for continuous integration:
@@ -499,6 +504,6 @@ The project uses GitHub Actions for continuous integration:
 - ✅ Code formatting checks
 - ✅ Linting with Clippy
 - ✅ Security audits
-- ✅ Artifact building
+- ✅ Docker image build and publish
 
-See the [CI workflow](.github/workflows/ci.yml) for details.
+See the [CI workflow](.github/workflows/ci.yml) and [Docker workflow](.github/workflows/docker.yml) for details.
