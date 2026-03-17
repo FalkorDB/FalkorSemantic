@@ -61,7 +61,8 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           # Start container using the image loaded by buildx
-          docker run -d --rm --name smoke-test -p 6379:6379 ${{ env.IMAGE_NAME }}:edge
+          IMAGE_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
+          docker run -d --rm --name smoke-test -p 6379:6379 "$IMAGE_TAG"
           trap 'docker stop smoke-test 2>/dev/null || true' EXIT
 
           echo "Waiting for server to start..."
