@@ -39,7 +39,7 @@ services:
 
   # All-in-one FalkorSemantic container (FalkorDB + RDF/SPARQL)
   falkorsemantic:
-    image: ghcr.io/falkordb/falkorsemantic:latest
+    image: falkordb/falkorsemantic:latest
     # Or for local build:
     # build: .
     container_name: falkorsemantic-server

@@ -2,7 +2,7 @@
 	docker-build docker-run docker-stop docker-test docker-push
 
 # Docker settings
-DOCKER_IMAGE ?= ghcr.io/falkordb/falkorsemantic
+DOCKER_IMAGE ?= falkordb/falkorsemantic
 DOCKER_TAG ?= latest
 
 # Default target
