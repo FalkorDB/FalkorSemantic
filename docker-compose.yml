@@ -37,6 +37,24 @@ services:
       timeout: 3s
       retries: 5
 
+  # All-in-one FalkorSemantic container (FalkorDB + RDF/SPARQL)
+  falkorsemantic:
+    image: ghcr.io/falkordb/falkorsemantic:latest
+    # Or for local build:
+    # build: .
+    container_name: falkorsemantic-server
+    ports:
+      - "6381:6379"
+    volumes:
+      - falkorsemantic_data:/var/lib/falkordb/data
+    networks:
+      - falkorsemantic-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # Development container with all tools
   dev:
     build:
@@ -60,6 +78,7 @@ services:
 volumes:
   redis_data:
   falkordb_data:
+  falkorsemantic_data:
   cargo_cache:
   target_cache:
 
