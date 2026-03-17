@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     libssl-dev \
+    libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
