@@ -46,7 +46,7 @@ mockall = "0.14"
 json-ld = "0.21"
 rdf-types = "0.22"
 locspan = "0.9"
-iref = "3.2"
+iref = "4.0"
 static-iref = "3.0"
 contextual = "0.1"
 
