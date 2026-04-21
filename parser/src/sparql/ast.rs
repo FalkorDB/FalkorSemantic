@@ -325,8 +325,19 @@ impl From<spargebra::term::NamedNode> for NamedNode {
 pub enum TermPattern {
     Variable(Variable),
     NamedNode(NamedNode),
-    Literal(String),
+    Literal(LiteralPattern),
     BlankNode(String),
+}
+
+/// Literal metadata preserved from parsed SPARQL.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LiteralPattern {
+    /// Lexical form
+    pub value: String,
+    /// Datatype IRI for typed literals
+    pub datatype: Option<String>,
+    /// Language tag for language-tagged literals
+    pub language: Option<String>,
 }
 
 impl TermPattern {
