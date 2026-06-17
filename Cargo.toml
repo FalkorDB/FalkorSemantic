@@ -25,7 +25,7 @@ redis-module = "2.0"
 redis = "1.0"
 
 # Async runtime
-tokio = { version = "1.50", features = ["full"] }
+tokio = { version = "1.51", features = ["full"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
