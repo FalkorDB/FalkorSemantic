@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-redis = "1.0"
+redis = "1.2"
 anyhow = "1.0"
 
 [[test]]
