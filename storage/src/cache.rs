@@ -278,14 +278,9 @@ impl QueryPlanCache {
     pub fn get(&self, query: &str) -> Option<CachedPlan> {
         let hash = Self::hash_query(query);
         let normalized = Self::normalize_query(query);
-        self.cache.get(&hash).and_then(|plan| {
-            // Verify normalized query matches (handle hash collisions)
-            if plan.query == normalized {
-                Some(plan)
-            } else {
-                None
-            }
-        })
+        self.cache
+            .get(&hash)
+            .filter(|plan| plan.query == normalized)
     }
 
     /// Cache a query plan
