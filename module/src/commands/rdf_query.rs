@@ -12,8 +12,8 @@ use falkorsemantic_mapper::query::{
     SparqlToCypher,
 };
 use falkorsemantic_parser::results::{
-    ask_to_csv, ask_to_json, ask_to_tsv, ask_to_xml, select_to_csv, select_to_json, select_to_tsv,
-    select_to_xml,
+    ask_to_csv, ask_to_json, ask_to_tsv, ask_to_xml, construct_to_rdf_json, construct_to_turtle,
+    select_to_csv, select_to_json, select_to_tsv, select_to_xml,
 };
 use falkorsemantic_parser::SparqlParser;
 
@@ -29,6 +29,10 @@ pub enum OutputFormat {
     Csv,
     /// TSV Results Format
     Tsv,
+    /// Turtle (text/turtle) — for CONSTRUCT results
+    Turtle,
+    /// RDF/JSON (application/rdf+json) — for CONSTRUCT results
+    RdfJson,
 }
 
 impl OutputFormat {
@@ -39,6 +43,8 @@ impl OutputFormat {
             "xml" => Some(Self::Xml),
             "csv" => Some(Self::Csv),
             "tsv" => Some(Self::Tsv),
+            "turtle" | "ttl" => Some(Self::Turtle),
+            "rdf+json" | "rdfjson" => Some(Self::RdfJson),
             _ => None,
         }
     }
@@ -81,7 +87,7 @@ impl QueryArgs {
                     let fmt_str = args[i].to_string_lossy();
                     format = OutputFormat::from_str(&fmt_str).ok_or_else(|| {
                         RedisError::String(format!(
-                            "Unknown format '{fmt_str}'. Use: json, xml, csv, tsv"
+                            "Unknown format '{fmt_str}'. Use: json, xml, csv, tsv, turtle, rdf+json"
                         ))
                     })?;
                 }
@@ -313,6 +319,9 @@ fn format_select_results(
             .map_err(|e| RedisError::String(format!("CSV serialization error: {e}"))),
         OutputFormat::Tsv => select_to_tsv(results)
             .map_err(|e| RedisError::String(format!("TSV serialization error: {e}"))),
+        OutputFormat::Turtle | OutputFormat::RdfJson => Err(RedisError::String(
+            "FORMAT turtle/rdf+json is only supported for CONSTRUCT queries".into(),
+        )),
     }
 }
 
@@ -330,6 +339,35 @@ fn format_ask_results(
             .map_err(|e| RedisError::String(format!("CSV serialization error: {e}"))),
         OutputFormat::Tsv => ask_to_tsv(result)
             .map_err(|e| RedisError::String(format!("TSV serialization error: {e}"))),
+        OutputFormat::Turtle | OutputFormat::RdfJson => Err(RedisError::String(
+            "FORMAT turtle/rdf+json is only supported for CONSTRUCT queries".into(),
+        )),
+    }
+}
+
+/// Format CONSTRUCT results to string
+fn format_construct_results(
+    results: &falkorsemantic_parser::results::ConstructResults,
+    format: OutputFormat,
+) -> Result<String, RedisError> {
+    match format {
+        OutputFormat::Turtle => construct_to_turtle(results)
+            .map_err(|e| RedisError::String(format!("Turtle serialization error: {e}"))),
+        OutputFormat::RdfJson => construct_to_rdf_json(results)
+            .map_err(|e| RedisError::String(format!("RDF/JSON serialization error: {e}"))),
+        OutputFormat::Json | OutputFormat::Xml => Err(RedisError::String(
+            "Unsupported CONSTRUCT FORMAT: json/xml. Use FORMAT turtle or FORMAT rdf+json.".into(),
+        )),
+        OutputFormat::Csv | OutputFormat::Tsv => Err(RedisError::String(
+            "Unsupported CONSTRUCT FORMAT: csv/tsv. Use FORMAT turtle or FORMAT rdf+json.".into(),
+        )),
+    }
+}
+
+fn construct_format_or_default(format: OutputFormat) -> OutputFormat {
+    match format {
+        OutputFormat::Json => OutputFormat::Turtle,
+        other => other,
     }
 }
 
@@ -393,6 +431,11 @@ pub fn rdf_query(ctx: &Context, args: Vec<RedisString>) -> RedisResult {
             let formatted = format_ask_results(&result, query_args.format)?;
             Ok(RedisValue::BulkString(formatted))
         }
+        QueryResult::Construct(results) => {
+            let format = construct_format_or_default(query_args.format);
+            let formatted = format_construct_results(&results, format)?;
+            Ok(RedisValue::BulkString(formatted))
+        }
         QueryResult::Error(err) => Err(RedisError::String(format!("Query error: {err}"))),
     }
 }
@@ -408,11 +451,33 @@ mod tests {
         assert_eq!(OutputFormat::from_str("xml"), Some(OutputFormat::Xml));
         assert_eq!(OutputFormat::from_str("csv"), Some(OutputFormat::Csv));
         assert_eq!(OutputFormat::from_str("tsv"), Some(OutputFormat::Tsv));
+        assert_eq!(OutputFormat::from_str("turtle"), Some(OutputFormat::Turtle));
+        assert_eq!(OutputFormat::from_str("ttl"), Some(OutputFormat::Turtle));
+        assert_eq!(
+            OutputFormat::from_str("rdf+json"),
+            Some(OutputFormat::RdfJson)
+        );
+        assert_eq!(
+            OutputFormat::from_str("rdfjson"),
+            Some(OutputFormat::RdfJson)
+        );
         assert_eq!(OutputFormat::from_str("invalid"), None);
     }
 
     #[test]
     fn test_output_format_default() {
         assert_eq!(OutputFormat::default(), OutputFormat::Json);
+    }
+
+    #[test]
+    fn test_construct_format_default_from_json() {
+        assert_eq!(
+            construct_format_or_default(OutputFormat::Json),
+            OutputFormat::Turtle
+        );
+        assert_eq!(
+            construct_format_or_default(OutputFormat::RdfJson),
+            OutputFormat::RdfJson
+        );
     }
 }

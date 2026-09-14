@@ -35,8 +35,8 @@ mod prefixes;
 mod validation;
 
 pub use ast::{
-    AskQuery, ConstructQuery, DescribeQuery, Expression, GraphPattern, NamedNode, OrderCondition,
-    Query, QueryDataset, SelectQuery, TermPattern, TriplePattern, Variable,
+    AskQuery, ConstructQuery, DescribeQuery, Expression, GraphPattern, LiteralPattern, NamedNode,
+    OrderCondition, Query, QueryDataset, SelectQuery, TermPattern, TriplePattern, Variable,
 };
 pub use error::{SparqlError, SparqlErrorKind, SparqlResult};
 pub use parser::{parse_sparql, parse_sparql_with_base, QueryType, SparqlParser};
