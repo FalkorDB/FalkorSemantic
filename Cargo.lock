@@ -598,7 +598,7 @@ dependencies = [
  "log",
  "mockall",
  "oxiri",
- "rdf-types",
+ "rdf-types 1.0.0",
  "rio_api",
  "rio_turtle",
  "serde",
@@ -692,6 +692,19 @@ name = "futures-io"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
+
+[[package]]
+name = "futures-lite"
+version = "2.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
+dependencies = [
+ "fastrand",
+ "futures-core",
+ "futures-io",
+ "parking",
+ "pin-project-lite",
+]
 
 [[package]]
 name = "futures-macro"
@@ -1005,6 +1018,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "into-owned-trait"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6af8e21836513a074ff8338e53a54f3fb5f76684543b644d550c57a33b90c7c7"
+
+[[package]]
 name = "iref"
 version = "3.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1088,7 +1107,7 @@ dependencies = [
  "json-ld-syntax",
  "json-syntax",
  "locspan 0.8.2",
- "rdf-types",
+ "rdf-types 0.22.5",
  "thiserror 1.0.69",
 ]
 
@@ -1110,7 +1129,7 @@ dependencies = [
  "json-syntax",
  "langtag",
  "mown",
- "rdf-types",
+ "rdf-types 0.22.5",
  "thiserror 1.0.69",
 ]
 
@@ -1126,7 +1145,7 @@ dependencies = [
  "json-ld-core",
  "json-ld-syntax",
  "mown",
- "rdf-types",
+ "rdf-types 0.22.5",
  "thiserror 1.0.69",
 ]
 
@@ -1151,7 +1170,7 @@ dependencies = [
  "once_cell",
  "permutohedron",
  "pretty_dtoa",
- "rdf-types",
+ "rdf-types 0.22.5",
  "ryu-js",
  "smallvec",
  "static-iref",
@@ -1175,7 +1194,7 @@ dependencies = [
  "json-syntax",
  "langtag",
  "mown",
- "rdf-types",
+ "rdf-types 0.22.5",
  "thiserror 1.0.69",
 ]
 
@@ -1190,7 +1209,7 @@ dependencies = [
  "json-ld-core",
  "json-syntax",
  "linked-data",
- "rdf-types",
+ "rdf-types 0.22.5",
  "thiserror 1.0.69",
  "xsd-types",
 ]
@@ -1210,7 +1229,7 @@ dependencies = [
  "json-syntax",
  "langtag",
  "locspan 0.8.2",
- "rdf-types",
+ "rdf-types 0.22.5",
  "smallvec",
  "thiserror 1.0.69",
 ]
@@ -1360,7 +1379,7 @@ dependencies = [
  "iref",
  "json-syntax",
  "linked-data-derive",
- "rdf-types",
+ "rdf-types 0.22.5",
  "serde",
  "static-iref",
  "thiserror 1.0.69",
@@ -1667,6 +1686,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "parking"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1940,6 +1965,12 @@ checksum = "d20581732dd76fa913c7dff1a2412b714afe3573e94d41c34719de73337cc8ab"
 
 [[package]]
 name = "raw-btree"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a9a77e61cd9f37af08f952c1c072081563e129c0949ac4ede30f9e8b6b4b74f"
+
+[[package]]
+name = "raw-btree"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bd1f6fba6db8161b6818f9061152e751b4d6030b39b561bbbb0153b36a6cfc5"
@@ -1955,11 +1986,25 @@ dependencies = [
  "indexmap 2.13.0",
  "iref",
  "langtag",
- "raw-btree",
+ "raw-btree 0.3.3",
  "replace_with",
  "slab",
  "static-iref",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rdf-types"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edef8b7b6c1bc8d8e76c8e55b698503579e5306de937b4144d3ac7b80cf81ffb"
+dependencies = [
+ "educe 0.5.11",
+ "futures-lite",
+ "into-owned-trait",
+ "raw-btree 0.2.0",
+ "replace_with",
+ "slab",
 ]
 
 [[package]]
