@@ -5,9 +5,10 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use falkorsemantic_parser::results::{AskResult, Binding, SelectResults, Term};
+use falkorsemantic_parser::rdf::{BlankNode, Iri, Literal, Object, Subject, Triple};
+use falkorsemantic_parser::results::{AskResult, Binding, ConstructResults, SelectResults, Term};
 
-use super::translator::{CypherQuery, CypherQueryType};
+use super::translator::{CypherQuery, CypherQueryType, TemplateTerm};
 
 /// Configuration for query execution
 #[derive(Debug, Clone)]
@@ -66,6 +67,8 @@ pub enum QueryResult {
     Select(SelectResults),
     /// ASK query result
     Ask(AskResult),
+    /// CONSTRUCT query results (RDF triples)
+    Construct(ConstructResults),
     /// Error during execution
     Error(QueryError),
 }
@@ -270,6 +273,123 @@ impl ResultConverter {
         results
     }
 
+    /// Convert Cypher result to CONSTRUCT results by instantiating the template
+    ///
+    /// `row_offset` is used to generate unique blank-node IDs across calls.
+    #[must_use]
+    pub fn to_construct_results(
+        cypher_query: &CypherQuery,
+        cypher_result: CypherResult,
+        row_offset: usize,
+    ) -> ConstructResults {
+        let template = match &cypher_query.construct_template {
+            Some(t) => t,
+            None => return ConstructResults::new(),
+        };
+
+        let variables = &cypher_query.variables;
+        let mut results = ConstructResults::new();
+
+        for (row_idx, row) in cypher_result.rows.into_iter().enumerate() {
+            // Build variable → Term map for this row
+            let mut binding: HashMap<String, Term> = HashMap::new();
+            for (i, val) in row.into_iter().enumerate() {
+                if i < variables.len() {
+                    if let Some(term) = val.to_term() {
+                        binding.insert(variables[i].clone(), term);
+                    }
+                }
+            }
+
+            let global_row = row_offset + row_idx;
+
+            for tmpl in template {
+                let subj = Self::instantiate_subject(&tmpl.subject, &binding, global_row);
+                let pred = Self::instantiate_predicate(&tmpl.predicate, &binding, global_row);
+                let obj = Self::instantiate_object(&tmpl.object, &binding, global_row);
+
+                if let (Some(s), Some(p), Some(o)) = (subj, pred, obj) {
+                    results.add_triple(Triple::new(s, p, o));
+                }
+            }
+        }
+
+        results
+    }
+
+    /// Instantiate a subject term from a result binding
+    fn instantiate_subject(
+        term: &TemplateTerm,
+        binding: &HashMap<String, Term>,
+        row_id: usize,
+    ) -> Option<Subject> {
+        match term {
+            TemplateTerm::Bound(col) => match binding.get(col)? {
+                Term::Iri(iri) => Some(Subject::Iri(iri.clone())),
+                Term::BlankNode(bn) => Some(Subject::BlankNode(bn.clone())),
+                Term::Literal(_) => None, // literals cannot be subjects
+            },
+            TemplateTerm::ConstantIri(iri) => Some(Subject::Iri(Iri::new_unchecked(iri.clone()))),
+            TemplateTerm::BlankNode(label) => Some(Subject::BlankNode(BlankNode::new(format!(
+                "{label}_{row_id}"
+            )))),
+            TemplateTerm::ConstantLiteral { .. } => None, // literals cannot be subjects
+        }
+    }
+
+    /// Instantiate a predicate term from a result binding (must resolve to an IRI)
+    fn instantiate_predicate(
+        term: &TemplateTerm,
+        binding: &HashMap<String, Term>,
+        _row_id: usize,
+    ) -> Option<Iri> {
+        match term {
+            TemplateTerm::Bound(col) => match binding.get(col)? {
+                Term::Iri(iri) => Some(iri.clone()),
+                _ => None, // predicates must be IRIs
+            },
+            TemplateTerm::ConstantIri(iri) => Some(Iri::new_unchecked(iri.clone())),
+            _ => None,
+        }
+    }
+
+    /// Instantiate an object term from a result binding
+    fn instantiate_object(
+        term: &TemplateTerm,
+        binding: &HashMap<String, Term>,
+        row_id: usize,
+    ) -> Option<Object> {
+        match term {
+            TemplateTerm::Bound(col) => match binding.get(col)? {
+                Term::Iri(iri) => Some(Object::Iri(iri.clone())),
+                Term::BlankNode(bn) => Some(Object::BlankNode(bn.clone())),
+                Term::Literal(lit) => Some(Object::Literal(lit.clone())),
+            },
+            TemplateTerm::ConstantIri(iri) => Some(Object::Iri(Iri::new_unchecked(iri.clone()))),
+            TemplateTerm::ConstantLiteral {
+                value,
+                datatype,
+                language,
+            } => {
+                let literal = if let Some(lang) = language {
+                    Literal::with_language(value.clone(), lang.clone())
+                        .unwrap_or_else(|_| Literal::new(value.clone()))
+                } else if let Some(datatype) = datatype {
+                    match Iri::new(datatype.clone()) {
+                        Ok(iri) => Literal::with_datatype(value.clone(), iri),
+                        Err(_) => Literal::new(value.clone()),
+                    }
+                } else {
+                    Literal::new(value.clone())
+                };
+                Some(Object::Literal(literal))
+            }
+            TemplateTerm::BlankNode(label) => Some(Object::BlankNode(BlankNode::new(format!(
+                "{label}_{row_id}"
+            )))),
+        }
+    }
+
     /// Convert Cypher result to ASK result
     #[must_use]
     pub fn to_ask_result(cypher_result: CypherResult) -> AskResult {
@@ -356,12 +476,9 @@ impl<E: CypherExecutor> QueryExecutor<E> {
                         QueryResult::Ask(ask_result)
                     }
                     CypherQueryType::Construct => {
-                        // Not yet implemented
-                        QueryResult::Error(QueryError {
-                            message: "CONSTRUCT not yet implemented".into(),
-                            code: None,
-                            query: Some(cypher_query.query.clone()),
-                        })
+                        let construct_results =
+                            ResultConverter::to_construct_results(cypher_query, cypher_result, 0);
+                        QueryResult::Construct(construct_results)
                     }
                 }
             }
@@ -432,6 +549,7 @@ mod tests {
             query: "MATCH ...".to_string(),
             variables: vec!["s".to_string(), "p".to_string(), "o".to_string()],
             query_type: CypherQueryType::Select,
+            construct_template: None,
         };
 
         let cypher_result = CypherResult {
@@ -479,6 +597,7 @@ mod tests {
             query: "MATCH (s) RETURN s".to_string(),
             variables: vec!["s".to_string()],
             query_type: CypherQueryType::Select,
+            construct_template: None,
         };
 
         let result = query_executor.execute(&cypher_query);
@@ -493,5 +612,130 @@ mod tests {
 
         assert_eq!(config.timeout, Some(Duration::from_secs(60)));
         assert_eq!(config.max_results, Some(100));
+    }
+
+    #[test]
+    fn test_construct_results_with_constant_literal_datatype_and_blank_node() {
+        let cypher_query = CypherQuery {
+            query: "MATCH ...".to_string(),
+            variables: vec![],
+            query_type: CypherQueryType::Construct,
+            construct_template: Some(vec![crate::query::translator::TemplateTriple {
+                subject: TemplateTerm::BlankNode("b".to_string()),
+                predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                object: TemplateTerm::ConstantLiteral {
+                    value: "42".to_string(),
+                    datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+                    language: None,
+                },
+            }]),
+        };
+
+        let cypher_result = CypherResult {
+            columns: vec![],
+            rows: vec![vec![]],
+            stats: None,
+        };
+
+        let results = ResultConverter::to_construct_results(&cypher_query, cypher_result, 7);
+        assert_eq!(results.triples.len(), 1);
+        let triple = &results.triples[0];
+
+        match &triple.subject {
+            Subject::BlankNode(bn) => assert_eq!(bn.label(), "b_7"),
+            other => panic!("expected blank node subject, got: {other:?}"),
+        }
+        match &triple.object {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "42");
+                assert_eq!(
+                    lit.explicit_datatype().map(Iri::as_str),
+                    Some("http://www.w3.org/2001/XMLSchema#integer")
+                );
+            }
+            other => panic!("expected literal object, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_construct_results_invalid_datatype_falls_back_to_plain_literal() {
+        let cypher_query = CypherQuery {
+            query: "MATCH ...".to_string(),
+            variables: vec![],
+            query_type: CypherQueryType::Construct,
+            construct_template: Some(vec![crate::query::translator::TemplateTriple {
+                subject: TemplateTerm::ConstantIri("http://example.org/s".to_string()),
+                predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                object: TemplateTerm::ConstantLiteral {
+                    value: "hello".to_string(),
+                    datatype: Some("not a valid iri".to_string()),
+                    language: None,
+                },
+            }]),
+        };
+
+        let cypher_result = CypherResult {
+            columns: vec![],
+            rows: vec![vec![]],
+            stats: None,
+        };
+
+        let results = ResultConverter::to_construct_results(&cypher_query, cypher_result, 0);
+        assert_eq!(results.triples.len(), 1);
+        let triple = &results.triples[0];
+
+        match &triple.object {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "hello");
+                assert!(lit.is_plain());
+            }
+            other => panic!("expected literal object, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_construct_results_language_literal_and_bound_variable_paths() {
+        let cypher_query = CypherQuery {
+            query: "MATCH ...".to_string(),
+            variables: vec!["s".to_string()],
+            query_type: CypherQueryType::Construct,
+            construct_template: Some(vec![
+                crate::query::translator::TemplateTriple {
+                    subject: TemplateTerm::Bound("s".to_string()),
+                    predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                    object: TemplateTerm::ConstantLiteral {
+                        value: "bonjour".to_string(),
+                        datatype: None,
+                        language: Some("fr".to_string()),
+                    },
+                },
+                // Invalid subject type (literal bound to subject) should be skipped.
+                crate::query::translator::TemplateTriple {
+                    subject: TemplateTerm::Bound("lit".to_string()),
+                    predicate: TemplateTerm::ConstantIri("http://example.org/p".to_string()),
+                    object: TemplateTerm::ConstantIri("http://example.org/o".to_string()),
+                },
+            ]),
+        };
+
+        let cypher_result = CypherResult {
+            columns: vec!["s".to_string(), "lit".to_string()],
+            rows: vec![vec![
+                CypherValue::String("http://example.org/s1".to_string()),
+                CypherValue::String("plain literal".to_string()),
+            ]],
+            stats: None,
+        };
+
+        let results = ResultConverter::to_construct_results(&cypher_query, cypher_result, 0);
+        assert_eq!(results.triples.len(), 1);
+
+        match &results.triples[0].object {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "bonjour");
+                assert_eq!(lit.language().as_deref(), Some("fr"));
+            }
+            other => panic!("expected literal object, got: {other:?}"),
+        }
     }
 }

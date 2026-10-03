@@ -5,8 +5,8 @@
 use oxiri::Iri;
 
 use super::ast::{
-    AskQuery, ConstructQuery, DescribeQuery, Expression, GraphPattern, NamedNode, OrderCondition,
-    Query, QueryDataset, SelectQuery, TermPattern, TriplePattern, Variable,
+    AskQuery, ConstructQuery, DescribeQuery, Expression, GraphPattern, LiteralPattern, NamedNode,
+    OrderCondition, Query, QueryDataset, SelectQuery, TermPattern, TriplePattern, Variable,
 };
 use super::error::{SparqlError, SparqlResult};
 use super::prefixes::PrefixMap;
@@ -394,7 +394,22 @@ fn convert_term_pattern(tp: &spargebra::term::TermPattern) -> TermPattern {
         spargebra::term::TermPattern::BlankNode(b) => {
             TermPattern::BlankNode(b.as_str().to_string())
         }
-        spargebra::term::TermPattern::Literal(l) => TermPattern::Literal(l.to_string()),
+        spargebra::term::TermPattern::Literal(l) => {
+            let lexical = l.value().to_string();
+            let language = l.language().map(std::string::ToString::to_string);
+            let datatype = if language.is_none()
+                && l.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string"
+            {
+                Some(l.datatype().as_str().to_string())
+            } else {
+                None
+            };
+            TermPattern::Literal(LiteralPattern {
+                value: lexical,
+                datatype,
+                language,
+            })
+        }
     }
 }
 
@@ -529,6 +544,52 @@ mod tests {
         assert!(parsed.is_construct());
         let construct = parsed.as_construct().unwrap();
         assert_eq!(construct.template.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_construct_literal_metadata() {
+        let query = r#"CONSTRUCT { ?s <http://example.org/p> "42"^^<http://www.w3.org/2001/XMLSchema#integer> ; <http://example.org/label> "hello"@en } WHERE { ?s ?p ?o }"#;
+        let parsed = parse_sparql(query).unwrap();
+        let construct = parsed.as_construct().unwrap();
+        assert_eq!(construct.template.len(), 2);
+
+        match &construct.template[0].object {
+            TermPattern::Literal(lit) => {
+                assert_eq!(lit.value, "42");
+                assert_eq!(
+                    lit.datatype.as_deref(),
+                    Some("http://www.w3.org/2001/XMLSchema#integer")
+                );
+                assert!(lit.language.is_none());
+            }
+            other => panic!("Expected literal object in first template triple, got: {other:?}"),
+        }
+
+        match &construct.template[1].object {
+            TermPattern::Literal(lit) => {
+                assert_eq!(lit.value, "hello");
+                assert_eq!(lit.language.as_deref(), Some("en"));
+                assert!(lit.datatype.is_none());
+            }
+            other => panic!("Expected literal object in second template triple, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_construct_plain_string_literal_has_no_datatype_metadata() {
+        let query = r#"CONSTRUCT { ?s <http://example.org/label> "plain" } WHERE { ?s ?p ?o }"#;
+        let parsed = parse_sparql(query).unwrap();
+        let construct = parsed.as_construct().unwrap();
+        assert_eq!(construct.template.len(), 1);
+
+        match &construct.template[0].object {
+            TermPattern::Literal(lit) => {
+                assert_eq!(lit.value, "plain");
+                assert!(lit.datatype.is_none());
+                assert!(lit.language.is_none());
+            }
+            other => panic!("Expected literal object, got: {other:?}"),
+        }
     }
 
     #[test]
