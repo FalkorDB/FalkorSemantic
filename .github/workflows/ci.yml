@@ -118,7 +118,7 @@ jobs:
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908 # v2
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
         with:
           tool: cargo-llvm-cov
 
