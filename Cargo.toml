@@ -43,7 +43,7 @@ env_logger = "0.11"
 mockall = "0.15"
 
 # JSON-LD
-json-ld = "0.21"
+json-ld = "0.22"
 rdf-types = "0.22"
 locspan = "0.9"
 iref = "3.2"
